@@ -11,10 +11,10 @@ from workflow_factory import (
     list_runs,
     run_flow,
     save_flow,
-    save_lesson,
+    save_step,
 )
 
-from fake_desktop import FakeDesktop, button, lesson
+from fake_desktop import FakeDesktop, button, step
 
 
 def run_and_wait(server, flow_id, context=None):
@@ -26,11 +26,11 @@ def run_and_wait(server, flow_id, context=None):
         time.sleep(0.05)
 
 
-# --- lesson library ----------------------------------------------------------------------------
+# --- step library ----------------------------------------------------------------------------
 
 def test_the_library_shows_origin_state_and_the_numbers_behind_the_confidence(tmp_path):
-    save_lesson(tmp_path / "factory.db", lesson("open-menu", "Menu", origin="factory", factory_successes=50))
-    save_lesson(tmp_path / "user.db", lesson("save-file", "Save"))
+    save_step(tmp_path / "factory.db", step("open-menu", "Menu", origin="factory", factory_successes=50))
+    save_step(tmp_path / "user.db", step("save-file", "Save"))
     server = make_server(tmp_path)
     try:
         status, library, _ = call(server, "/api/library")
@@ -45,13 +45,13 @@ def test_the_library_shows_origin_state_and_the_numbers_behind_the_confidence(tm
     assert by_name["save-file"]["origin"] == "local" and by_name["save-file"]["confidence"] == 0.5
 
 
-def test_a_person_can_reject_a_lesson_and_restore_it_even_a_factory_one(tmp_path):
-    save_lesson(tmp_path / "factory.db", lesson("open-menu", "Menu", origin="factory"))
+def test_a_person_can_reject_a_step_and_restore_it_even_a_factory_one(tmp_path):
+    save_step(tmp_path / "factory.db", step("open-menu", "Menu", origin="factory"))
     server = make_server(tmp_path)
     try:
-        rejected = call(server, "/api/lessons/paint.exe/open-menu/reject", "POST", {})
+        rejected = call(server, "/api/steps/paint.exe/open-menu/reject", "POST", {})
         after_reject = {i["name"]: i["state"] for i in call(server, "/api/library")[1]}
-        restored = call(server, "/api/lessons/paint.exe/open-menu/restore", "POST", {})
+        restored = call(server, "/api/steps/paint.exe/open-menu/restore", "POST", {})
         after_restore = {i["name"]: i["state"] for i in call(server, "/api/library")[1]}
     finally:
         server.stop()
@@ -82,7 +82,7 @@ def test_the_consents_screen_lists_scopes_and_can_revoke_but_never_grant(tmp_pat
 # --- tutor queue ---------------------------------------------------------------------------------
 
 def test_the_queue_screen_lists_open_doubts_and_records_a_human_answer(tmp_path):
-    save_lesson(tmp_path / "user.db", lesson("open-menu", "Missing"))
+    save_step(tmp_path / "user.db", step("open-menu", "Missing"))
     run_flow(Flow(id="morning", nodes=[Node("a", "open-menu")]), desktop=FakeDesktop(controls=[button("Other")]),
              user_db=tmp_path / "user.db")
     server = make_server(tmp_path)
@@ -103,9 +103,9 @@ def test_the_queue_screen_lists_open_doubts_and_records_a_human_answer(tmp_path)
 # --- run history ---------------------------------------------------------------------------------
 
 def test_run_history_tells_what_ran_what_stopped_and_why_without_any_data_values(tmp_path):
-    save_lesson(tmp_path / "user.db", lesson("open-menu", "Alpha"))
-    save_lesson(tmp_path / "user.db", lesson("send", "Send", sensitive=Sensitivity.OUTWARD_ACTION))
-    save_lesson(tmp_path / "user.db", lesson("typer", "Alpha", action="type_value"))
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
+    save_step(tmp_path / "user.db", step("send", "Send", sensitive=Sensitivity.OUTWARD_ACTION))
+    save_step(tmp_path / "user.db", step("typer", "Alpha", action="type_value"))
     save_flow(tmp_path / "user.db", Flow(id="ok", nodes=[Node("a", "open-menu")]))
     save_flow(tmp_path / "user.db", Flow(id="stuck", nodes=[Node("a", "open-menu"), Node("s", "send")]))
     save_flow(tmp_path / "user.db", Flow(id="typing", nodes=[Node("t", "typer", inputs=(("text", "str"),))]))
@@ -130,7 +130,7 @@ def test_run_history_tells_what_ran_what_stopped_and_why_without_any_data_values
 
 
 def test_the_engine_records_one_history_row_per_executed_run(tmp_path):
-    save_lesson(tmp_path / "user.db", lesson("open-menu", "Alpha"))
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
     run_flow(Flow(id="f", nodes=[Node("a", "open-menu")]), desktop=FakeDesktop(controls=[button("Alpha")]),
              user_db=tmp_path / "user.db")
 
@@ -140,18 +140,18 @@ def test_the_engine_records_one_history_row_per_executed_run(tmp_path):
     assert run["nodes"] == [{"node_id": "a", "status": "done", "reason": None, "effect": "no_change"}]
 
 
-def test_rejecting_an_unknown_lesson_is_a_404(tmp_path):
+def test_rejecting_an_unknown_step_is_a_404(tmp_path):
     server = make_server(tmp_path)
     try:
-        status, body, _ = call(server, "/api/lessons/paint.exe/never-taught/reject", "POST", {})
+        status, body, _ = call(server, "/api/steps/paint.exe/never-taught/reject", "POST", {})
     finally:
         server.stop()
 
-    assert status == 404 and "no such lesson" in body["error"]
+    assert status == 404 and "no such step" in body["error"]
 
 
 def test_a_doubt_can_be_dismissed_from_the_queue_screen(tmp_path):
-    save_lesson(tmp_path / "user.db", lesson("open-menu", "Missing"))
+    save_step(tmp_path / "user.db", step("open-menu", "Missing"))
     run_flow(Flow(id="f", nodes=[Node("a", "open-menu")]), desktop=FakeDesktop(controls=[]),
              user_db=tmp_path / "user.db")
     server = make_server(tmp_path)
@@ -174,10 +174,10 @@ def test_revoking_with_an_incomplete_body_is_a_400_not_a_crash(tmp_path):
     assert status == 400
 
 
-def test_the_library_shows_to_revalidate_for_every_lesson_once_a_run_saw_a_newer_app_version(tmp_path):
-    save_lesson(tmp_path / "factory.db", lesson("open-menu", "Menu", origin="factory", version="1.0"))
-    save_lesson(tmp_path / "user.db", lesson("save-file", "Save", version="1.0"))
-    save_lesson(tmp_path / "user.db", lesson("other", "Other", version="2.0"))
+def test_the_library_shows_to_revalidate_for_every_step_once_a_run_saw_a_newer_app_version(tmp_path):
+    save_step(tmp_path / "factory.db", step("open-menu", "Menu", origin="factory", version="1.0"))
+    save_step(tmp_path / "user.db", step("save-file", "Save", version="1.0"))
+    save_step(tmp_path / "user.db", step("other", "Other", version="2.0"))
     run_flow(Flow(id="f", nodes=[Node("a", "other")]),
              desktop=FakeDesktop(controls=[button("Other")], version="2.0"), user_db=tmp_path / "user.db")
     server = make_server(tmp_path)
@@ -190,7 +190,7 @@ def test_the_library_shows_to_revalidate_for_every_lesson_once_a_run_saw_a_newer
 
 
 def test_a_human_answer_keeps_the_note_the_person_wrote(tmp_path):
-    save_lesson(tmp_path / "user.db", lesson("open-menu", "Missing"))
+    save_step(tmp_path / "user.db", step("open-menu", "Missing"))
     run_flow(Flow(id="f", nodes=[Node("a", "open-menu")]), desktop=FakeDesktop(controls=[]),
              user_db=tmp_path / "user.db")
     server = make_server(tmp_path)
@@ -206,7 +206,7 @@ def test_a_human_answer_keeps_the_note_the_person_wrote(tmp_path):
 def test_an_unexpected_failure_still_leaves_a_run_in_the_history_as_an_error(tmp_path):
     import pytest
 
-    save_lesson(tmp_path / "user.db", lesson("open-menu", "Alpha"))
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
 
     class Broken(FakeDesktop):
         def snapshot(self):

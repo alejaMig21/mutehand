@@ -7,7 +7,7 @@ from workflow_factory import (
     Node,
     emergency_stop,
     save_flow,
-    save_lesson,
+    save_step,
 )
 from workflow_factory.desktop import DesktopError
 from workflow_factory.queue import acquire_run_lock
@@ -22,12 +22,12 @@ from workflow_factory.workday import (
     write_report,
 )
 
-from fake_desktop import FakeDesktop, button, lesson
+from fake_desktop import FakeDesktop, button, step
 
 
-def setup(tmp_path, nodes=None, lessons=(("open-menu", "Alpha"), ("save-file", "Beta"))):
-    for name, control in lessons:
-        save_lesson(tmp_path / "user.db", lesson(name, control))
+def setup(tmp_path, nodes=None, steps=(("open-menu", "Alpha"), ("save-file", "Beta"))):
+    for name, control in steps:
+        save_step(tmp_path / "user.db", step(name, control))
     save_flow(tmp_path / "user.db", Flow(id="morning", nodes=nodes or [Node("a", "open-menu"), Node("b", "save-file")]))
     return tmp_path
 
@@ -120,8 +120,8 @@ def test_an_app_that_is_not_running_exits_four_and_leaves_an_error_report(tmp_pa
 
 
 def test_values_stay_out_of_the_report_unless_the_person_asks(tmp_path):
-    setup(tmp_path, nodes=[Node("t", "typer", inputs=(("text", "str"),))], lessons=(("typer", "Notes"),))
-    save_lesson(tmp_path / "user.db", lesson("typer", "Notes", action="type_value"))
+    setup(tmp_path, nodes=[Node("t", "typer", inputs=(("text", "str"),))], steps=(("typer", "Notes"),))
+    save_step(tmp_path / "user.db", step("typer", "Notes", action="type_value"))
     context = json.dumps({"text": "hunter2"})
 
     run(tmp_path, FakeDesktop(controls=[button("Notes")]), "--context", context)
@@ -136,7 +136,7 @@ def test_values_stay_out_of_the_report_unless_the_person_asks(tmp_path):
 def test_one_data_dir_flag_places_the_database_and_the_reports_together(tmp_path, capsys):
     folder = tmp_path / "data"
     folder.mkdir()
-    setup(folder)  # saves lessons and flow into folder/user.db
+    setup(folder)  # saves steps and flow into folder/user.db
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
 
     code = main(["--flow", "morning", "--app", "paint.exe", "--data-dir", str(folder), "--no-hotkey"],
@@ -185,8 +185,8 @@ def test_failures_before_the_flow_loads_still_leave_a_report_because_pythonw_has
 
 
 def test_typed_values_can_come_from_a_context_file_so_a_scheduled_command_needs_no_quotes(tmp_path):
-    setup(tmp_path, nodes=[Node("t", "typer", inputs=(("text", "str"),))], lessons=(("typer", "Notes"),))
-    save_lesson(tmp_path / "user.db", lesson("typer", "Notes", action="type_value"))
+    setup(tmp_path, nodes=[Node("t", "typer", inputs=(("text", "str"),))], steps=(("typer", "Notes"),))
+    save_step(tmp_path / "user.db", step("typer", "Notes", action="type_value"))
     values = tmp_path / "values.json"
     values.write_text(json.dumps({"text": "from a file"}), encoding="utf-8")
     desktop = FakeDesktop(controls=[button("Notes")])

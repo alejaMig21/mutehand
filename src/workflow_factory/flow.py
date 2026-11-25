@@ -28,13 +28,6 @@ from pathlib import Path
 from workflow_factory.consent import is_permitted
 from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.ladder import locate
-from workflow_factory.lessons import (
-    Status,
-    current_status,
-    find_lesson,
-    record_outcome,
-    revalidate_changed_versions,
-)
 from workflow_factory.queue import (
     Reason,
     acquire_run_lock,
@@ -46,6 +39,13 @@ from workflow_factory.queue import (
     release_run_lock,
     save_checkpoint,
 )
+from workflow_factory.steps import (
+    Status,
+    current_status,
+    find_step,
+    record_outcome,
+    revalidate_changed_versions,
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS node_results (
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS node_results (
 )
 """
 
-KINDS = ("lesson", "if", "join", "loop")
+KINDS = ("step", "if", "join", "loop")
 INPUT_TYPES = {"str": str, "int": int, "float": float, "bool": bool}
 MAX_LOOP_SECONDS = 8 * 3600
 MAX_PARALLEL_NODES = 4
@@ -94,8 +94,8 @@ class Effect(StrEnum):
 @dataclass(frozen=True)
 class Node:
     id: str
-    lesson: str = ""  # lesson and loop nodes: the lesson to replay
-    kind: str = "lesson"  # lesson | if | join | loop
+    step: str = ""  # step and loop nodes: the step to replay
+    kind: str = "step"  # step | if | join | loop
     inputs: tuple[tuple[str, str], ...] = ()  # (name, type) values the run context must hold
     on: str | None = None  # if: the node whose measured effect is tested
     equals: str | None = None
@@ -113,8 +113,8 @@ class Node:
         for name, type_name in self.inputs:
             if type_name not in INPUT_TYPES:
                 raise ValueError(f"input {name!r} has unknown type {type_name!r}")
-        if self.kind in ("lesson", "loop") and not self.lesson:
-            raise ValueError(f"a {self.kind} node needs a lesson")
+        if self.kind in ("step", "loop") and not self.step:
+            raise ValueError(f"a {self.kind} node needs a step")
         if self.kind == "if" and not (self.on and self.equals and self.then):
             raise ValueError("an if node needs on, equals and then")
         vocabulary = {effect.value for effect in Effect}
@@ -174,7 +174,7 @@ class Flow:
 class RunResult:
     effects: dict[str, Effect]
     blocked: dict[str, str]  # node id -> why it did not run (detailed reason)
-    statuses: dict[str, Status]  # node id -> lesson status after the run
+    statuses: dict[str, Status]  # node id -> step status after the run
     stopped: str | None = None  # first node that stopped and left a doubt
     waiting: bool = False  # the flow has an open doubt, so it did not run
     emergency: bool = False  # a human pressed the emergency stop; the checkpoint allows resuming
@@ -198,7 +198,7 @@ DOUBT_REASON = {
     "template_no_match": Reason.TEMPLATE_NO_MATCH,
     "missing_input": Reason.PRECONDITION_NOT_MET,
     "effect_mismatch": Reason.PRECONDITION_NOT_MET,
-    "lesson_missing": Reason.PRECONDITION_NOT_MET,
+    "step_missing": Reason.PRECONDITION_NOT_MET,
     "action_failed": Reason.PRECONDITION_NOT_MET,
     "wrong_window": Reason.PRECONDITION_NOT_MET,
     "user_active": Reason.PRECONDITION_NOT_MET,
@@ -226,16 +226,16 @@ class _State:
                    data["loops"], data["context"])
 
 
-def _gate(lesson, user_db, key, desktop):
+def _gate(step, user_db, key, desktop):
     """Why this node may not run, or the targets to act on when it may."""
-    status = current_status(user_db, lesson, key.version)
+    status = current_status(user_db, step, key.version)
     if status in (Status.REJECTED, Status.TO_REVALIDATE):
         return str(status), None
-    if not is_permitted(user_db, lesson):  # before any desktop call
+    if not is_permitted(user_db, step):  # before any desktop call
         return "no_consent", None
-    if lesson.frame and not lesson.frame.matches(desktop.frame(), lesson.mask):
+    if step.frame and not step.frame.matches(desktop.frame(), step.mask):
         return "out_of_frame", None
-    endpoints = [lesson.endpoint] + ([lesson.drag_to] if lesson.action == "drag" else [])
+    endpoints = [step.endpoint] + ([step.drag_to] if step.action == "drag" else [])
     targets = []
     for endpoint in endpoints:  # a drag needs both ends
         target, reason = locate(endpoint, desktop)
@@ -243,7 +243,7 @@ def _gate(lesson, user_db, key, desktop):
             return reason, None
         if not target.control.readable:  # unreadable means blocked, whatever the consent
             return "unreadable", None
-        if target.control.secure and lesson.action != "type_secret":  # password fields take secrets only
+        if target.control.secure and step.action != "type_secret":  # password fields take secrets only
             return "unreadable", None
         targets.append(target)
     return None, targets
@@ -257,9 +257,9 @@ def effect_of(before, after) -> Effect:
     return Effect.NO_CHANGE
 
 
-def _input_problem(node: Node, lesson, context: dict) -> str | None:
+def _input_problem(node: Node, step, context: dict) -> str | None:
     """A node does not start while a typed input is missing or of the wrong type."""
-    if lesson.action == "type_value" and not node.inputs:
+    if step.action == "type_value" and not node.inputs:
         return "missing_input"
     for name, type_name in node.inputs:
         if name not in context:
@@ -303,19 +303,19 @@ class _Run:
             save_checkpoint(self.user_db, self.flow.key, self.state.dump(), self.flow.definition)
 
     def attempt(self, node: Node):
-        """One replay of the node's lesson: (blocked reason or None, effect, lesson)."""
-        lesson = find_lesson(self.user_db, self.factory_db, self.key.process, node.lesson)
-        if lesson is None:  # a flow naming a lesson nobody taught: a doubt, not a crash
-            return "lesson_missing", None, None
-        lock = PHYSICAL_INPUT if node.exclusive_input or lesson.uses_physical_input else nullcontext()
+        """One replay of the node's step: (blocked reason or None, effect, step)."""
+        step = find_step(self.user_db, self.factory_db, self.key.process, node.step)
+        if step is None:  # a flow naming a step nobody taught: a doubt, not a crash
+            return "step_missing", None, None
+        lock = PHYSICAL_INPUT if node.exclusive_input or step.uses_physical_input else nullcontext()
         while True:
             with lock:
-                outcome = self._replay(node, lesson)
+                outcome = self._replay(node, step)
             if outcome is not _USER_ACTIVE:
                 return outcome
             # the person is using the PC: wait for idle with the lock free, then verify again
             if not self._wait_for_idle():
-                return "user_active", None, lesson
+                return "user_active", None, step
 
     def _user_active(self) -> bool:
         """Did the person touch mouse or keyboard since our last physical action?"""
@@ -335,29 +335,29 @@ class _Run:
         self.baseline = self.desktop.input_fingerprint()
         return True
 
-    def _replay(self, node: Node, lesson):
+    def _replay(self, node: Node, step):
         desktop = self.desktop
-        physical = node.exclusive_input or lesson.uses_physical_input
+        physical = node.exclusive_input or step.uses_physical_input
         if EMERGENCY_STOP.is_set():
             raise _EmergencyStop
-        reason = _input_problem(node, lesson, self.state.context)
+        reason = _input_problem(node, step, self.state.context)
         if reason is None:
-            reason, targets = _gate(lesson, self.user_db, self.key, desktop)
+            reason, targets = _gate(step, self.user_db, self.key, desktop)
         if reason:
-            return reason, None, lesson
+            return reason, None, step
         if physical and self._user_active():
             return _USER_ACTIVE
-        if lesson.action in KEY_ACTIONS and desktop.foreground_app().lower() != self.key.process:
-            return "wrong_window", None, lesson  # keys must never land in another app
+        if step.action in KEY_ACTIONS and desktop.foreground_app().lower() != self.key.process:
+            return "wrong_window", None, step  # keys must never land in another app
         if EMERGENCY_STOP.is_set():
             raise _EmergencyStop
         target = targets[0]
         before = set(desktop.snapshot())
-        if lesson.action == "type_secret":
-            desktop.type_secret(target.control, lesson.secret_ref)  # the value never enters the core
-        elif lesson.action == "type_value":
+        if step.action == "type_secret":
+            desktop.type_secret(target.control, step.secret_ref)  # the value never enters the core
+        elif step.action == "type_value":
             desktop.type_text(target.control, str(self.state.context[node.inputs[0][0]]))
-        elif lesson.action == "drag":
+        elif step.action == "drag":
             desktop.drag(target.control, target.point, targets[1].control, targets[1].point)
         elif target.point:
             desktop.click_at(target.control, *target.point)
@@ -367,10 +367,10 @@ class _Run:
             self.baseline = desktop.input_fingerprint()
         effect = effect_of(before, set(desktop.snapshot()))
         self.effects[node.id] = effect
-        if lesson.effect:  # nothing taught to compare against means nothing to count
-            self.statuses[node.id] = record_outcome(self.user_db, lesson, effect == lesson.effect)
+        if step.effect:  # nothing taught to compare against means nothing to count
+            self.statuses[node.id] = record_outcome(self.user_db, step, effect == step.effect)
         _store_effect(self.user_db, node.id, effect, desktop.now())
-        return None, effect, lesson
+        return None, effect, step
 
     def block(self, node: Node, reason: str) -> None:
         try:
@@ -381,7 +381,7 @@ class _Run:
             self.blocked[node.id] = reason
             self.node_status[node.id] = ("blocked", reason)
             self.progress(node.id, "blocked")
-            record_doubt(self.user_db, self.flow.key, node.id, node.lesson, DOUBT_REASON[reason], capture)
+            record_doubt(self.user_db, self.flow.key, node.id, node.step, DOUBT_REASON[reason], capture)
             self.save()
 
     def finish(self, node: Node) -> None:
@@ -392,7 +392,7 @@ class _Run:
             self.save()
 
 
-def _run_lesson(run: _Run, node: Node) -> None:
+def _run_step(run: _Run, node: Node) -> None:
     reason, effect, _ = run.attempt(node)
     if reason:
         run.block(node, reason)
@@ -418,13 +418,13 @@ def _run_loop(run: _Run, node: Node) -> None:
             node.id, {"iteration": 0, "failures": 0, "elapsed": 0.0, "effect": str(Effect.NO_CHANGE)})
     while progress["iteration"] < node.max_iterations and progress["elapsed"] < node.max_seconds:
         began = run.desktop.now()
-        reason, effect, lesson = run.attempt(node)  # preconditions are re-verified every iteration
+        reason, effect, step = run.attempt(node)  # preconditions are re-verified every iteration
         progress["elapsed"] += _seconds_between(began, run.desktop.now())  # time counts across stops
         wanted = reason is None and effect == node.stop_when_effect
         if reason is None:
             progress["iteration"] += 1
             progress["effect"] = str(effect)
-            if lesson.effect and effect != lesson.effect and not wanted:
+            if step.effect and effect != step.effect and not wanted:
                 reason = "effect_mismatch"
         progress["failures"] = progress["failures"] + 1 if reason else 0
         run.save()  # a checkpoint per iteration
@@ -490,7 +490,7 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress) -> RunRes
     run = _Run(flow, desktop, user_db, factory_db, state, progress)
     started_at = desktop.now()
     nodes = {node.id: node for node in flow.nodes}
-    runners = {"lesson": _run_lesson, "loop": _run_loop, "if": _run_if,
+    runners = {"step": _run_step, "loop": _run_loop, "if": _run_if,
                "join": lambda current, node: current.finish(node)}
     try:
         progressed = True

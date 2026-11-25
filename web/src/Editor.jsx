@@ -6,7 +6,7 @@ import { fromFlowJson, layout, nextNodeId, toFlowJson } from './flowjson.js'
 const INPUT_TYPES = ['str', 'int', 'float', 'bool']
 
 export default function Editor() {
-  const [lessons, setLessons] = useState([])
+  const [steps, setSteps] = useState([])
   const [flows, setFlows] = useState([])
   const [flowId, setFlowId] = useState('my-flow')
   const [appName, setAppName] = useState('mspaint.exe')
@@ -22,19 +22,19 @@ export default function Editor() {
   const refreshFlows = useCallback(() => api('/api/flows').then(setFlows).catch((e) => setError(e.message)), [])
 
   useEffect(() => {
-    api('/api/lessons').then(setLessons).catch((e) => setError(e.message))
+    api('/api/steps').then(setSteps).catch((e) => setError(e.message))
     refreshFlows()
   }, [refreshFlows])
 
   const onConnect = useCallback((connection) => setEdges((current) => addEdge(connection, current)), [setEdges])
 
-  function addLesson(lesson) {
+  function addStep(step) {
     setNodes((current) => [
       ...current,
       {
         id: nextNodeId(current),
         position: layout(current.length),
-        data: { label: lesson.name, lesson: lesson.name, inputs: [], exclusive_input: false },
+        data: { label: step.name, step: step.name, inputs: [], exclusive_input: false },
       },
     ])
   }
@@ -120,18 +120,18 @@ export default function Editor() {
   return (
     <div className="app">
       <div className="panel">
-        <h2>Lessons</h2>
-        {lessons.map((lesson) => (
+        <h2>Steps</h2>
+        {steps.map((step) => (
           <button
-            key={`${lesson.app}/${lesson.name}`}
-            className={`palette-item${lesson.sensitive ? ' sensitive' : ''}`}
-            data-testid={`palette-${lesson.name}`}
-            onClick={() => addLesson(lesson)}
+            key={`${step.app}/${step.name}`}
+            className={`palette-item${step.sensitive ? ' sensitive' : ''}`}
+            data-testid={`palette-${step.name}`}
+            onClick={() => addStep(step)}
           >
-            {lesson.name}{' '}
+            {step.name}{' '}
             <small>
-              {lesson.app} · {lesson.origin}
-              {lesson.sensitive ? ' · needs consent' : ''}
+              {step.app} · {step.origin}
+              {step.sensitive ? ' · needs consent' : ''}
             </small>
           </button>
         ))}
@@ -182,7 +182,7 @@ export default function Editor() {
         {selected && (
           <>
             <h2>Node {selected.id}</h2>
-            <div>Lesson: <b>{selected.data.lesson}</b></div>
+            <div>Step: <b>{selected.data.step}</b></div>
             <label>
               <input type="checkbox" data-testid="exclusive" checked={selected.data.exclusive_input}
                 onChange={(e) => updateSelected({ exclusive_input: e.target.checked })} />

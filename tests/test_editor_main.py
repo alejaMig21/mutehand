@@ -33,10 +33,10 @@ def test_the_editor_command_prints_a_tokened_loopback_url_and_serves_the_built_e
     url, token = line.removeprefix("Editor: ").split("#token=")
     with urllib.request.urlopen(url, timeout=5) as page:
         assert b'<div id="root">' in page.read()
-    request = urllib.request.Request(url + "api/lessons", headers={"Authorization": f"Bearer {token}"})
+    request = urllib.request.Request(url + "api/steps", headers={"Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(request, timeout=5) as response:
         assert json.loads(response.read()) == []  # an empty user database: nothing taught yet
     with pytest.raises(urllib.error.HTTPError) as refused:
-        urllib.request.urlopen(url + "api/lessons", timeout=5)
+        urllib.request.urlopen(url + "api/steps", timeout=5)
     refused.value.close()
     assert refused.value.code == 401

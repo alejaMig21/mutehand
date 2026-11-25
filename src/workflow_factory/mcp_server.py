@@ -13,8 +13,8 @@ from mcp.server.mcpserver import MCPServer
 from workflow_factory import tutor
 from workflow_factory.agent_desktop import AgentDesktop, AgentDesktopError
 from workflow_factory.desktop import Desktop
-from workflow_factory.lessons import Locator, Sensitivity
 from workflow_factory.paths import default_user_db
+from workflow_factory.steps import Locator, Sensitivity
 
 
 def _code_only(tool):
@@ -54,8 +54,20 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPSer
 
     @server.tool(name="study_status")
     def study_status(app: str) -> dict:
-        """How many study steps have a saved lesson and which one is next (resume after interruption)."""
+        """How many planned controls have a saved step and which one is next (resume after interruption)."""
         return tutor.study_status(user_db, app)
+
+    @server.tool(name="teach_step")
+    @_code_only
+    def teach_step(
+        app: str, name: str, role: str, control_name: str, automation_id: str | None = None,
+        action: str = "click", sensitive: str | None = None, secret_ref: str | None = None,
+    ) -> dict:
+        """Do the action once, measure its effect and save the step at once. A sensitive action
+        returns consent_required: ask the user, then call record_consent and teach again."""
+        return tutor.teach_step(
+            user_db, desktop_for(app), name, Locator(role, control_name, automation_id), action,
+            Sensitivity(sensitive) if sensitive else None, secret_ref)
 
     @server.tool(name="teach_lesson")
     @_code_only
@@ -63,11 +75,8 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPSer
         app: str, name: str, role: str, control_name: str, automation_id: str | None = None,
         action: str = "click", sensitive: str | None = None, secret_ref: str | None = None,
     ) -> dict:
-        """Do the action once, measure its effect and save the lesson at once. A sensitive action
-        returns consent_required: ask the user, then call record_consent and teach again."""
-        return tutor.teach_lesson(
-            user_db, desktop_for(app), name, Locator(role, control_name, automation_id), action,
-            Sensitivity(sensitive) if sensitive else None, secret_ref)
+        """The old name of teach_step: same arguments, same effect."""
+        return teach_step(app, name, role, control_name, automation_id, action, sensitive, secret_ref)
 
     @server.tool(name="list_open_doubts")
     def list_open_doubts() -> list[dict]:
@@ -81,7 +90,7 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPSer
         automation_id: str | None = None, action: str = "click",
         sensitive: str | None = None, secret_ref: str | None = None,
     ) -> dict:
-        """Answer a doubt by teaching or fixing its lesson; the doubt closes once the lesson is saved."""
+        """Answer a doubt by teaching or fixing its step; the doubt closes once the step is saved."""
         return tutor.answer_doubt_by_teaching(
             user_db, desktop_for(app), doubt_id, name, Locator(role, control_name, automation_id),
             action=action, sensitive=Sensitivity(sensitive) if sensitive else None,

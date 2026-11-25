@@ -7,6 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from workflow_factory.flow import Flow, Node
+from workflow_factory.legacy import upgrade_node
 
 SCHEMA = "CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, definition TEXT NOT NULL)"
 
@@ -17,7 +18,7 @@ def flow_to_dict(flow: Flow) -> dict:
 
 def flow_from_dict(flow_id: str, data: dict) -> Flow:
     """Build a flow from editor JSON; raises ValueError/TypeError/KeyError when it is not valid."""
-    nodes = [Node(**{**n, "inputs": tuple(tuple(pair) for pair in n.get("inputs", []))}) for n in data["nodes"]]
+    nodes = [Node(**{**upgrade_node(n), "inputs": tuple(tuple(pair) for pair in n.get("inputs", []))}) for n in data["nodes"]]
     edges = data.get("edges")
     return Flow(nodes=nodes, id=flow_id, edges=None if edges is None else [tuple(edge) for edge in edges])
 
@@ -43,7 +44,7 @@ def _has_table(db: sqlite3.Connection, name: str) -> bool:
 
 
 def _read(db: sqlite3.Connection, flow_id: str) -> Flow | None:
-    if not _has_table(db, "flows"):  # e.g. a factory file that only ships lessons
+    if not _has_table(db, "flows"):  # e.g. a factory file that only ships steps
         return None
     row = db.execute("SELECT definition FROM flows WHERE id = ?", (flow_id,)).fetchone()
     return _load(flow_id, row[0]) if row else None

@@ -12,12 +12,12 @@ import pytest
 from workflow_factory import (
     Effect,
     Flow,
-    Lesson,
     Locator,
     Node,
+    Step,
     list_doubts,
     run_flow,
-    save_lesson,
+    save_step,
 )
 from workflow_factory.agent_desktop import AgentDesktop, AgentDesktopError
 
@@ -51,11 +51,11 @@ def test_click_paint_open_settings_through_run_flow_stores_a_measured_effect(tmp
         pytest.fail(f"Paint must be running on the secondary monitor first: {error}")
     key = desktop.app_key()
     db_path = tmp_path / "user.db"
-    save_lesson(db_path, Lesson(
+    save_step(db_path, Step(
         app=key.process, version=key.version, name="open-settings",
         locator=Locator(role="button", name="Open settings", automation_id="SettingsButton"),
         frame=desktop.frame()))
-    flow = Flow(nodes=[Node(id="open-settings", lesson="open-settings")])
+    flow = Flow(nodes=[Node(id="open-settings", step="open-settings")])
 
     result = run_flow(flow, desktop=desktop, user_db=db_path)
 
@@ -69,10 +69,10 @@ def test_missing_control_in_real_paint_stops_the_flow_with_a_text_free_doubt(tmp
     desktop = AgentDesktop("mspaint.exe")
     key = desktop.app_key()
     db_path = tmp_path / "user.db"
-    save_lesson(db_path, Lesson(app=key.process, version=key.version, name="ghost",
+    save_step(db_path, Step(app=key.process, version=key.version, name="ghost",
                                 locator=Locator(role="button", name="No such control anywhere")))
 
-    result = run_flow(Flow(id="ghost-flow", nodes=[Node(id="n1", lesson="ghost")]),
+    result = run_flow(Flow(id="ghost-flow", nodes=[Node(id="n1", step="ghost")]),
                       desktop=desktop, user_db=db_path)
 
     (doubt,) = list_doubts(db_path)

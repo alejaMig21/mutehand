@@ -4,7 +4,7 @@ import threading
 import time
 from datetime import UTC, datetime, timedelta
 
-from workflow_factory import Lesson, Locator
+from workflow_factory import Locator, Step
 from workflow_factory.desktop import AppKey, Control, DesktopError, Frame
 
 
@@ -158,8 +158,8 @@ def button(name, automation_id="", readable=True, secure=False):
     return Control(role="button", name=name, automation_id=automation_id, readable=readable, secure=secure)
 
 
-def lesson(name, control_name, version="1.0", origin="local", app="paint.exe", **kw):
-    return Lesson(
+def step(name, control_name, version="1.0", origin="local", app="paint.exe", **kw):
+    return Step(
         app=app, version=version, name=name, origin=origin,
         locator=Locator(role="button", name=control_name), **kw,
     )

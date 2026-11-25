@@ -1,17 +1,17 @@
 import sqlite3
 from contextlib import closing
 
-from workflow_factory import Flow, Node, run_flow, save_lesson
+from workflow_factory import Flow, Node, run_flow, save_step
 
-from fake_desktop import FakeDesktop, button, lesson
+from fake_desktop import FakeDesktop, button, step
 
 
 def one_node_flow():
-    return Flow(nodes=[Node(id="n1", lesson="open-menu")])
+    return Flow(nodes=[Node(id="n1", step="open-menu")])
 
 
 def taught(db_path, control_name="Open menu"):
-    save_lesson(db_path, lesson("open-menu", control_name))
+    save_step(db_path, step("open-menu", control_name))
     return db_path
 
 

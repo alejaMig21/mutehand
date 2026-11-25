@@ -33,7 +33,7 @@ def _running_address(state: Path) -> str | None:
     try:
         address = json.loads(state.read_text(encoding="utf-8"))["url"]
         base, token = address.split("#token=")
-        request = urllib.request.Request(base + "api/lessons")
+        request = urllib.request.Request(base + "api/steps")
         request.add_header("Authorization", f"Bearer {token}")
         with urllib.request.urlopen(request, timeout=2) as reply:
             return address if reply.status == 200 and isinstance(json.load(reply), list) else None

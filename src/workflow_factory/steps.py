@@ -1,4 +1,4 @@
-"""Lesson store: one table per SQLite file (user knowledge, factory knowledge)."""
+"""Step store: one table per SQLite file (user knowledge, factory knowledge)."""
 
 import base64
 import io
@@ -13,9 +13,10 @@ from pathlib import Path
 import numpy as np
 
 from workflow_factory.desktop import FRAME_FIELDS, Frame
+from workflow_factory.legacy import migrate_names, readable_table
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS lessons (
+CREATE TABLE IF NOT EXISTS steps (
     app TEXT NOT NULL,
     version TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -40,14 +41,14 @@ CREATE TABLE IF NOT EXISTS lessons (
     PRIMARY KEY (app, name)
 )
 """
-# local counters live in the user database, even for factory lessons (factory file is read-only)
+# local counters live in the user database, even for factory steps (factory file is read-only)
 STATE_SCHEMA = """
-CREATE TABLE IF NOT EXISTS lesson_state (
+CREATE TABLE IF NOT EXISTS step_state (
     app TEXT NOT NULL,
     name TEXT NOT NULL,
     local_successes INTEGER NOT NULL DEFAULT 0,
     local_failures INTEGER NOT NULL DEFAULT 0,
-    rejected INTEGER NOT NULL DEFAULT 0,  -- sticky: set at replay time, cleared only by restore_lesson
+    rejected INTEGER NOT NULL DEFAULT 0,  -- sticky: set at replay time, cleared only by restore_step
     restored INTEGER NOT NULL DEFAULT 0,  -- a human restored it: shipped counters no longer reject
     PRIMARY KEY (app, name)
 )
@@ -59,7 +60,7 @@ COLUMNS = (
     " effect, origin, status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref, derived, template, drag_to"
 )
 PLACEHOLDERS = ", ".join("?" * (COLUMNS.count(",") + 1))
-# Below REJECTED_BELOW a lesson is rejected; everything else that is not trusted is suspect.
+# Below REJECTED_BELOW a step is rejected; everything else that is not trusted is suspect.
 TRUSTED_AT, REJECTED_BELOW, OWN_SUCCESSES_TO_TRUST = 0.80, 0.30, 2
 
 
@@ -122,7 +123,7 @@ class Template:
 
 @dataclass(frozen=True)
 class Endpoint:
-    """Where an action lands, with the rungs the lesson defines."""
+    """Where an action lands, with the rungs the step defines."""
 
     locator: Locator
     derived: Derived | None = None
@@ -130,7 +131,7 @@ class Endpoint:
 
 
 @dataclass(frozen=True)
-class Lesson:
+class Step:
     app: str
     version: str
     name: str
@@ -153,7 +154,7 @@ class Lesson:
 
     @property
     def uses_physical_input(self) -> bool:
-        """Every lesson action acts on the app. Research 20: even an accessibility click or set-value can take
+        """Every step action acts on the app. Research 20: even an accessibility click or set-value can take
         the foreground window, so no action is free of the machine-wide input lock and the pause for the person."""
         return True
 
@@ -235,10 +236,10 @@ def _unpack(blob):
     return np.load(buffer, allow_pickle=False)
 
 
-def _row_to_lesson(row) -> Lesson:
+def _row_to_step(row) -> Step:
     (app, version, name, precondition, action, role, control, automation_id, effect, origin,
      status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref, derived, template, drag_to) = row
-    return Lesson(
+    return Step(
         app=app, version=version, name=name, precondition=precondition, action=action,
         locator=Locator(role, control, automation_id), effect=effect,
         origin=Origin(origin), status=Status(status),
@@ -255,92 +256,99 @@ def _row_to_lesson(row) -> Lesson:
 ACTIONS = ("click", "drag", "type_secret", "type_value")
 
 
-def validate_lesson(lesson: Lesson) -> None:
-    """Everything that would make save_lesson refuse, so callers can check before acting."""
-    if lesson.action not in ACTIONS:
-        raise ValueError(f"unknown action {lesson.action!r}; use one of {', '.join(ACTIONS)}")
-    if (lesson.action == "type_secret") != bool(lesson.secret_ref):
+def validate_step(step: Step) -> None:
+    """Everything that would make save_step refuse, so callers can check before acting."""
+    if step.action not in ACTIONS:
+        raise ValueError(f"unknown action {step.action!r}; use one of {', '.join(ACTIONS)}")
+    if (step.action == "type_secret") != bool(step.secret_ref):
         raise ValueError("a secret reference goes with the type_secret action, and only with it")
-    if lesson.secret_ref and lesson.sensitive != Sensitivity.PASSWORD_FIELD:
-        raise ValueError("a lesson that types a secret must be marked as a password_field")
-    unknown = [name for name in lesson.mask if name not in FRAME_FIELDS]
+    if step.secret_ref and step.sensitive != Sensitivity.PASSWORD_FIELD:
+        raise ValueError("a step that types a secret must be marked as a password_field")
+    unknown = [name for name in step.mask if name not in FRAME_FIELDS]
     if unknown:
         raise ValueError(f"mask names unknown frame fields: {', '.join(unknown)}")
-    for endpoint in (lesson.endpoint, lesson.drag_to):
+    for endpoint in (step.endpoint, step.drag_to):
         derived = endpoint.derived if endpoint else None
         if derived and not (0 <= derived.fx <= 1 and 0 <= derived.fy <= 1):
             raise ValueError("a derived point is a fraction of its anchor (0..1), never a screen coordinate")
-    if lesson.action == "drag" and lesson.drag_to is None:
-        raise ValueError("a drag lesson needs a destination (drag_to)")
+    if step.action == "drag" and step.drag_to is None:
+        raise ValueError("a drag step needs a destination (drag_to)")
 
 
-def save_lesson(db_path: Path, lesson: Lesson) -> None:
-    validate_lesson(lesson)
+def _prepare(db: sqlite3.Connection, *schemas: str) -> None:
+    """Bring a database written by an earlier version up to date, then make sure the tables exist."""
+    migrate_names(db)
+    for schema in schemas:
+        db.execute(schema)
+
+
+def save_step(db_path: Path, step: Step) -> None:
+    validate_step(step)
     with closing(sqlite3.connect(db_path)) as db, db:
-        db.execute(SCHEMA)
-        loc = lesson.locator
+        _prepare(db, SCHEMA)
+        loc = step.locator
         db.execute(
-            f"INSERT OR REPLACE INTO lessons ({COLUMNS}) VALUES ({PLACEHOLDERS})",
-            (lesson.app, lesson.version, lesson.name, lesson.precondition, lesson.action,
-             loc.role, loc.name, loc.automation_id, lesson.effect, str(lesson.origin),
-             str(lesson.status), lesson.factory_successes, lesson.factory_failures,
-             json.dumps(asdict(lesson.frame)) if lesson.frame else None,
-             json.dumps(list(lesson.mask)), _pack(lesson.capture),
-             str(lesson.sensitive) if lesson.sensitive else None, lesson.secret_ref,
-             json.dumps(asdict(lesson.derived)) if lesson.derived else None,
-             _dump_template(lesson.template), _dump_endpoint(lesson.drag_to)),
+            f"INSERT OR REPLACE INTO steps ({COLUMNS}) VALUES ({PLACEHOLDERS})",
+            (step.app, step.version, step.name, step.precondition, step.action,
+             loc.role, loc.name, loc.automation_id, step.effect, str(step.origin),
+             str(step.status), step.factory_successes, step.factory_failures,
+             json.dumps(asdict(step.frame)) if step.frame else None,
+             json.dumps(list(step.mask)), _pack(step.capture),
+             str(step.sensitive) if step.sensitive else None, step.secret_ref,
+             json.dumps(asdict(step.derived)) if step.derived else None,
+             _dump_template(step.template), _dump_endpoint(step.drag_to)),
         )
 
 
-def _find_in(db: sqlite3.Connection, app: str, name: str) -> Lesson | None:
+def _find_in(db: sqlite3.Connection, app: str, name: str, table: str = "steps") -> Step | None:
     row = db.execute(
-        f"SELECT {COLUMNS} FROM lessons WHERE app = ? AND name = ?", (app, name)
+        f"SELECT {COLUMNS} FROM {table} WHERE app = ? AND name = ?", (app, name)
     ).fetchone()
-    return _row_to_lesson(row) if row else None
+    return _row_to_step(row) if row else None
 
 
-def find_lesson(user_db: Path, factory_db: Path | None, app: str, name: str) -> Lesson | None:
+def find_step(user_db: Path, factory_db: Path | None, app: str, name: str) -> Step | None:
     """User knowledge first, then factory knowledge (opened read-only)."""
     with closing(sqlite3.connect(user_db)) as db, db:
-        db.execute(SCHEMA)
+        _prepare(db, SCHEMA)
         found = _find_in(db, app, name)
     if found or factory_db is None or not factory_db.exists():
         return found
     with closing(sqlite3.connect(f"{factory_db.resolve().as_uri()}?mode=ro", uri=True)) as db:
-        return _find_in(db, app, name)
+        table = readable_table(db, "steps")
+        return _find_in(db, app, name, table) if table else None
 
 
 def revalidate_changed_versions(user_db: Path, app: str, current_version: str) -> None:
-    """A version change keeps every lesson of the app but stops trusting it.
+    """A version change keeps every step of the app but stops trusting it.
 
-    Rejected lessons stay rejected: only a human restores those."""
+    Rejected steps stay rejected: only a human restores those."""
     with closing(sqlite3.connect(user_db)) as db, db:
-        db.execute(SCHEMA)
-        db.execute(SEEN_SCHEMA)
+        _prepare(db, SCHEMA, SEEN_SCHEMA)
         db.execute("INSERT OR REPLACE INTO app_seen VALUES (?, ?)", (app, current_version))
         db.execute(
-            "UPDATE lessons SET status = ? WHERE app = ? AND version != ? AND status != ?",
+            "UPDATE steps SET status = ? WHERE app = ? AND version != ? AND status != ?",
             (str(Status.TO_REVALIDATE), app, current_version, str(Status.REJECTED)),
         )
 
 
 def confidence(successes: int, failures: int) -> float:
-    """Failures weigh three times a success; the +1/+2 keeps untested lessons at 0.5."""
+    """Failures weigh three times a success; the +1/+2 keeps untested steps at 0.5."""
     return (successes + 1) / (successes + 3 * failures + 2)
 
 
-def _state(db: sqlite3.Connection, lesson: Lesson) -> tuple[int, int, bool, bool]:
+def _state(db: sqlite3.Connection, step: Step) -> tuple[int, int, bool, bool]:
     row = db.execute(
-        "SELECT local_successes, local_failures, rejected, restored FROM lesson_state"
+        "SELECT local_successes, local_failures, rejected, restored FROM step_state"
         " WHERE app = ? AND name = ?",
-        (lesson.app, lesson.name),
+        (step.app, step.name),
     ).fetchone()
     return row or (0, 0, False, False)
 
 
-def _derive_status(lesson: Lesson, local_successes: int, local_failures: int) -> Status:
-    successes = lesson.factory_successes + local_successes
-    failures = lesson.factory_failures + local_failures
+def _derive_status(step: Step, local_successes: int, local_failures: int) -> Status:
+    successes = step.factory_successes + local_successes
+    failures = step.factory_failures + local_failures
     score = confidence(successes, failures)
     if score < REJECTED_BELOW:
         return Status.REJECTED
@@ -349,116 +357,115 @@ def _derive_status(lesson: Lesson, local_successes: int, local_failures: int) ->
     return Status.SUSPECT
 
 
-def record_outcome(user_db: Path, lesson: Lesson, success: bool) -> Status:
-    """Count one replay result and return the lesson's status afterwards."""
+def record_outcome(user_db: Path, step: Step, success: bool) -> Status:
+    """Count one replay result and return the step's status afterwards."""
     with closing(sqlite3.connect(user_db)) as db, db:
-        db.execute(STATE_SCHEMA)
-        db.execute("INSERT OR IGNORE INTO lesson_state (app, name) VALUES (?, ?)",
-                   (lesson.app, lesson.name))
+        _prepare(db, STATE_SCHEMA)
+        db.execute("INSERT OR IGNORE INTO step_state (app, name) VALUES (?, ?)",
+                   (step.app, step.name))
         column = "local_successes" if success else "local_failures"
-        db.execute(f"UPDATE lesson_state SET {column} = {column} + 1 WHERE app = ? AND name = ?",
-                   (lesson.app, lesson.name))
-        successes, failures, _, _ = _state(db, lesson)
-        derived = _derive_status(lesson, successes, failures)
+        db.execute(f"UPDATE step_state SET {column} = {column} + 1 WHERE app = ? AND name = ?",
+                   (step.app, step.name))
+        successes, failures, _, _ = _state(db, step)
+        derived = _derive_status(step, successes, failures)
         if derived == Status.REJECTED:
-            db.execute("UPDATE lesson_state SET rejected = 1 WHERE app = ? AND name = ?",
-                       (lesson.app, lesson.name))
+            db.execute("UPDATE step_state SET rejected = 1 WHERE app = ? AND name = ?",
+                       (step.app, step.name))
         return derived
 
 
-def current_status(user_db: Path, lesson: Lesson, app_version: str) -> Status:
-    """What the apprentice may do with this lesson right now (rejection outranks revalidation)."""
+def current_status(user_db: Path, step: Step, app_version: str) -> Status:
+    """What the apprentice may do with this step right now (rejection outranks revalidation)."""
     with closing(sqlite3.connect(user_db)) as db, db:
-        db.execute(STATE_SCHEMA)
-        successes, failures, rejected, restored = _state(db, lesson)
-        derived = _derive_status(lesson, successes, failures)
-    if rejected or (not restored and Status.REJECTED in (lesson.status, derived)):
+        _prepare(db, STATE_SCHEMA)
+        successes, failures, rejected, restored = _state(db, step)
+        derived = _derive_status(step, successes, failures)
+    if rejected or (not restored and Status.REJECTED in (step.status, derived)):
         return Status.REJECTED
-    if lesson.status == Status.TO_REVALIDATE or lesson.version != app_version:
+    if step.status == Status.TO_REVALIDATE or step.version != app_version:
         return Status.TO_REVALIDATE
     return Status.SUSPECT if derived == Status.REJECTED else derived  # restored by a human
 
 
-def restore_lesson(user_db: Path, app: str, name: str) -> None:
-    """Human action: forget local failures and lift a rejection. Nothing else restores a rejected lesson."""
+def restore_step(user_db: Path, app: str, name: str) -> None:
+    """Human action: forget local failures and lift a rejection. Nothing else restores a rejected step."""
     with closing(sqlite3.connect(user_db)) as db, db:
-        db.execute(SCHEMA)
-        db.execute(STATE_SCHEMA)
-        db.execute("INSERT OR IGNORE INTO lesson_state (app, name) VALUES (?, ?)", (app, name))
+        _prepare(db, SCHEMA, STATE_SCHEMA)
+        db.execute("INSERT OR IGNORE INTO step_state (app, name) VALUES (?, ?)", (app, name))
         db.execute(
-            "UPDATE lesson_state SET local_successes = 0, local_failures = 0, rejected = 0,"
+            "UPDATE step_state SET local_successes = 0, local_failures = 0, rejected = 0,"
             " restored = 1 WHERE app = ? AND name = ?",
             (app, name),
         )
         db.execute(
-            "UPDATE lessons SET status = ? WHERE app = ? AND name = ? AND status = ?",
+            "UPDATE steps SET status = ? WHERE app = ? AND name = ? AND status = ?",
             (str(Status.SUSPECT), app, name, str(Status.REJECTED)),
         )
 
 
-def list_lessons(user_db: Path, factory_db: Path | None) -> list[Lesson]:
-    """Every lesson the apprentice could use: the user's, plus factory ones they do not shadow."""
-    found: dict[tuple[str, str], Lesson] = {}
+def list_steps(user_db: Path, factory_db: Path | None) -> list[Step]:
+    """Every step the apprentice could use: the user's, plus factory ones they do not shadow."""
+    found: dict[tuple[str, str], Step] = {}
     if factory_db is not None and factory_db.exists():
         with closing(sqlite3.connect(f"{factory_db.resolve().as_uri()}?mode=ro", uri=True)) as db:
-            has_lessons = db.execute("SELECT 1 FROM sqlite_master WHERE name = 'lessons'").fetchone()
-            for row in db.execute(f"SELECT {COLUMNS} FROM lessons") if has_lessons else []:
-                lesson = _row_to_lesson(row)
-                found[(lesson.app, lesson.name)] = lesson
+            table = readable_table(db, "steps")
+            for row in db.execute(f"SELECT {COLUMNS} FROM {table}") if table else []:
+                step = _row_to_step(row)
+                found[(step.app, step.name)] = step
     with closing(sqlite3.connect(user_db)) as db, db:
-        db.execute(SCHEMA)
-        for row in db.execute(f"SELECT {COLUMNS} FROM lessons"):
-            lesson = _row_to_lesson(row)
-            found[(lesson.app, lesson.name)] = lesson  # the user's lesson shadows the factory's
-    return sorted(found.values(), key=lambda lesson: (lesson.app, lesson.name))
+        _prepare(db, SCHEMA)
+        for row in db.execute(f"SELECT {COLUMNS} FROM steps"):
+            step = _row_to_step(row)
+            found[(step.app, step.name)] = step  # the user's step shadows the factory's
+    return sorted(found.values(), key=lambda step: (step.app, step.name))
 
 
-def lesson_report(user_db: Path, lesson: Lesson) -> dict:
-    """The numbers behind a lesson's state, for the library screen."""
+def step_report(user_db: Path, step: Step) -> dict:
+    """The numbers behind a step's state, for the library screen."""
     with closing(sqlite3.connect(user_db)) as db, db:
-        db.execute(STATE_SCHEMA)
+        _prepare(db, STATE_SCHEMA)
         db.execute(SEEN_SCHEMA)
-        local_successes, local_failures, _, _ = _state(db, lesson)
-        seen = db.execute("SELECT version FROM app_seen WHERE app = ?", (lesson.app,)).fetchone()
-    successes = lesson.factory_successes + local_successes
-    failures = lesson.factory_failures + local_failures
+        local_successes, local_failures, _, _ = _state(db, step)
+        seen = db.execute("SELECT version FROM app_seen WHERE app = ?", (step.app,)).fetchone()
+    successes = step.factory_successes + local_successes
+    failures = step.factory_failures + local_failures
     return {
-        "state": str(current_status(user_db, lesson, seen[0] if seen else lesson.version)),
+        "state": str(current_status(user_db, step, seen[0] if seen else step.version)),
         "successes": successes, "failures": failures,
         "confidence": round(confidence(successes, failures), 2),
     }
 
 
-def reject_lesson(user_db: Path, app: str, name: str) -> None:
-    """Human action: stop trusting this lesson. Works for factory lessons too (the mark lives in the user file)."""
+def reject_step(user_db: Path, app: str, name: str) -> None:
+    """Human action: stop trusting this step. Works for factory steps too (the mark lives in the user file)."""
     with closing(sqlite3.connect(user_db)) as db, db:
-        db.execute(STATE_SCHEMA)
-        db.execute("INSERT OR IGNORE INTO lesson_state (app, name) VALUES (?, ?)", (app, name))
-        db.execute("UPDATE lesson_state SET rejected = 1, restored = 0 WHERE app = ? AND name = ?", (app, name))
+        _prepare(db, STATE_SCHEMA)
+        db.execute("INSERT OR IGNORE INTO step_state (app, name) VALUES (?, ?)", (app, name))
+        db.execute("UPDATE step_state SET rejected = 1, restored = 0 WHERE app = ? AND name = ?", (app, name))
 
 
-def lesson_to_dict(lesson: Lesson) -> dict:
-    """A lesson as plain JSON-able data (pixels as base64 .npy). Holds a secret reference, never a value."""
+def step_to_dict(step: Step) -> dict:
+    """A step as plain JSON-able data (pixels as base64 .npy). Holds a secret reference, never a value."""
     return {
-        "app": lesson.app, "version": lesson.version, "name": lesson.name,
-        "precondition": lesson.precondition, "action": lesson.action, "effect": lesson.effect,
-        "origin": str(lesson.origin), "status": str(lesson.status),
-        "factory_successes": lesson.factory_successes, "factory_failures": lesson.factory_failures,
-        "locator": asdict(lesson.locator),
-        "frame": asdict(lesson.frame) if lesson.frame else None, "mask": list(lesson.mask),
-        "capture": base64.b64encode(_pack(lesson.capture)).decode() if lesson.capture is not None else None,
-        "sensitive": str(lesson.sensitive) if lesson.sensitive else None,
-        "secret_ref": lesson.secret_ref,
-        "derived": asdict(lesson.derived) if lesson.derived else None,
-        "template": json.loads(_dump_template(lesson.template)) if lesson.template else None,
-        "drag_to": json.loads(_dump_endpoint(lesson.drag_to)) if lesson.drag_to else None,
+        "app": step.app, "version": step.version, "name": step.name,
+        "precondition": step.precondition, "action": step.action, "effect": step.effect,
+        "origin": str(step.origin), "status": str(step.status),
+        "factory_successes": step.factory_successes, "factory_failures": step.factory_failures,
+        "locator": asdict(step.locator),
+        "frame": asdict(step.frame) if step.frame else None, "mask": list(step.mask),
+        "capture": base64.b64encode(_pack(step.capture)).decode() if step.capture is not None else None,
+        "sensitive": str(step.sensitive) if step.sensitive else None,
+        "secret_ref": step.secret_ref,
+        "derived": asdict(step.derived) if step.derived else None,
+        "template": json.loads(_dump_template(step.template)) if step.template else None,
+        "drag_to": json.loads(_dump_endpoint(step.drag_to)) if step.drag_to else None,
     }
 
 
-def lesson_from_dict(data: dict) -> Lesson:
-    """Inverse of lesson_to_dict; raises ValueError when the data is not a valid lesson."""
+def step_from_dict(data: dict) -> Step:
+    """Inverse of step_to_dict; raises ValueError when the data is not a valid step."""
     try:
-        lesson = Lesson(
+        step = Step(
             app=data["app"], version=data["version"], name=data["name"], locator=Locator(**data["locator"]),
             precondition=data.get("precondition", ""), action=data.get("action", "click"),
             effect=data.get("effect", ""), origin=Origin(data.get("origin", "local")),
@@ -474,13 +481,13 @@ def lesson_from_dict(data: dict) -> Lesson:
             drag_to=_load_endpoint(json.dumps(data["drag_to"])) if data.get("drag_to") else None,
         )
     except (KeyError, TypeError) as error:
-        raise ValueError(f"not a valid lesson: {error}") from None
-    validate_lesson(lesson)
-    return lesson
+        raise ValueError(f"not a valid step: {error}") from None
+    validate_step(step)
+    return step
 
 
 def forget_state(user_db: Path, app: str, name: str) -> None:
-    """Drop the local counters and flags of a lesson that is being replaced by new knowledge."""
+    """Drop the local counters and flags of a step that is being replaced by new knowledge."""
     with closing(sqlite3.connect(user_db)) as db, db:
-        db.execute(STATE_SCHEMA)
-        db.execute("DELETE FROM lesson_state WHERE app = ? AND name = ?", (app, name))
+        _prepare(db, STATE_SCHEMA)
+        db.execute("DELETE FROM step_state WHERE app = ? AND name = ?", (app, name))

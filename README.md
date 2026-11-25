@@ -20,7 +20,7 @@ already been taught: it never starts a lesson.
 Open Claude Code in this folder (`claude`). The first time it asks you to approve the `workflow-factory` MCP
 server that this folder's `.mcp.json` declares: say yes once. Then ask the agent to study an app. The tutor tools
 are `observe_app`, `mark_app_private`, `set_study_order`, `study_status`, `list_open_doubts`, `answer_doubt`,
-`record_consent` and `teach_lesson`. Each taught lesson appears in the editor as a node.
+`record_consent` and `teach_step` (`teach_lesson` still works as its old name). Each taught step appears in the editor as a node.
 
 ## Other commands
 

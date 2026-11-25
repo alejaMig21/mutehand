@@ -14,7 +14,7 @@ export function toFlowJson(nodes, edges) {
   return {
     nodes: nodes.map((n) => ({
       id: n.id,
-      lesson: n.data.lesson,
+      step: n.data.step,
       inputs: n.data.inputs,
       exclusive_input: n.data.exclusive_input,
     })),
@@ -27,8 +27,8 @@ export function fromFlowJson(flow) {
     id: n.id,
     position: layout(i),
     data: {
-      label: n.lesson,
-      lesson: n.lesson,
+      label: n.step,
+      step: n.step,
       inputs: n.inputs ?? [],
       exclusive_input: Boolean(n.exclusive_input),
     },

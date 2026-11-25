@@ -7,16 +7,16 @@ from workflow_factory import (
     answer_doubt,
     list_doubts,
     run_flow,
-    save_lesson,
+    save_step,
 )
 
-from fake_desktop import FakeDesktop, button, lesson
+from fake_desktop import FakeDesktop, button, step
 
 
 def teach(user_db, **controls):
-    """teach(db, a="Alpha") saves lesson 'a' that clicks the control named Alpha."""
+    """teach(db, a="Alpha") saves step 'a' that clicks the control named Alpha."""
     for name, control in controls.items():
-        save_lesson(user_db, lesson(name, control, effect="revealed"))
+        save_step(user_db, step(name, control, effect="revealed"))
 
 
 def desktop_with(*names, **kw):
@@ -71,7 +71,7 @@ def typing_flow():
 
 
 def teach_typer(user_db):
-    save_lesson(user_db, lesson("typer", "Notes", action="type_value"))
+    save_step(user_db, step("typer", "Notes", action="type_value"))
 
 
 def test_a_node_types_a_value_from_the_typed_run_context(tmp_path):
@@ -96,10 +96,10 @@ def test_a_node_with_a_missing_or_mistyped_input_does_not_start(tmp_path, contex
     assert desktop.calls == [] and [d.reason for d in list_doubts(user_db)] == ["precondition_not_met"]
 
 
-def test_a_consentless_lesson_blocks_its_node_while_the_other_branch_still_runs(tmp_path):
+def test_a_consentless_step_blocks_its_node_while_the_other_branch_still_runs(tmp_path):
     user_db = tmp_path / "user.db"
     teach(user_db, ok="Alpha")
-    save_lesson(user_db, lesson("risky", "Send", sensitive=Sensitivity.OUTWARD_ACTION))
+    save_step(user_db, step("risky", "Send", sensitive=Sensitivity.OUTWARD_ACTION))
     flow = Flow(id="f", nodes=[Node("r", "risky"), Node("o", "ok")], edges=[])  # independent branches
     desktop = desktop_with("Send", "Alpha")
 
@@ -117,7 +117,7 @@ def loop_flow(**kw):
 
 
 def teach_scroll(user_db):
-    save_lesson(user_db, lesson("scroll", "Down", effect="no_change"))
+    save_step(user_db, step("scroll", "Down", effect="no_change"))
 
 
 def test_a_loop_stops_at_its_iteration_cap(tmp_path):
@@ -197,7 +197,7 @@ def test_a_flow_with_a_cycle_or_an_unknown_edge_is_rejected():
 
 def test_a_loop_iteration_whose_effect_differs_from_the_taught_one_counts_as_a_failure(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, lesson("scroll", "Down", effect="revealed", factory_successes=50))  # taught: reveals
+    save_step(user_db, step("scroll", "Down", effect="revealed", factory_successes=50))  # taught: reveals
     desktop = desktop_with("Down")  # but clicking changes nothing
 
     result = run_flow(loop_flow(max_iterations=10, max_seconds=60, stop_after_failures=3),
@@ -213,7 +213,7 @@ def test_a_loop_iteration_whose_effect_differs_from_the_taught_one_counts_as_a_f
 ])
 def test_typed_inputs_accept_only_values_of_their_declared_type(tmp_path, type_name, value, accepted):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, lesson("typer", "Notes", action="type_value"))
+    save_step(user_db, step("typer", "Notes", action="type_value"))
     flow = Flow(id="f", nodes=[Node("t", "typer", inputs=(("v", type_name),))])
     desktop = desktop_with("Notes")
 
@@ -268,7 +268,7 @@ def test_the_loop_time_cap_counts_time_already_spent_before_a_stop(tmp_path):
 
 def test_the_effect_a_loop_waits_for_ends_it_even_if_it_differs_from_the_taught_effect(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, lesson("scroll", "Down", effect="revealed", factory_successes=50))
+    save_step(user_db, step("scroll", "Down", effect="revealed", factory_successes=50))
     desktop = desktop_with("Down")  # measures no_change, which is what the loop waits for
 
     result = run_flow(loop_flow(max_iterations=10, max_seconds=60, stop_when_effect="no_change"),
@@ -290,7 +290,7 @@ def test_an_if_node_waits_for_the_node_it_tests_even_when_listed_before_it(tmp_p
     assert result.stopped is None and clicked(desktop) == ["Alpha", "Beta"]
 
 
-def test_a_node_naming_a_lesson_that_does_not_exist_leaves_a_doubt_instead_of_crashing(tmp_path):
+def test_a_node_naming_a_step_that_does_not_exist_leaves_a_doubt_instead_of_crashing(tmp_path):
     user_db = tmp_path / "user.db"
 
     result = run_flow(Flow(id="f", nodes=[Node("n", "never-taught")]), desktop=desktop_with("X"),
@@ -330,7 +330,7 @@ def test_a_second_run_of_the_same_flow_is_refused_while_the_first_is_alive_but_a
     from workflow_factory.queue import acquire_run_lock, release_run_lock
 
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, lesson("a", "Alpha"))  # no taught effect: nothing to count against it
+    save_step(user_db, step("a", "Alpha"))  # no taught effect: nothing to count against it
     flow = Flow(id="f", nodes=[Node("a", "a")])
 
     assert acquire_run_lock(user_db, "f")  # a live run (this very process)

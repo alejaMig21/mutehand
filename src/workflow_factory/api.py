@@ -22,14 +22,14 @@ from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.flow import run_flow
 from workflow_factory.flows import flow_from_dict, flow_to_dict, list_flows, load_flow, save_flow
 from workflow_factory.knowledge import duplicate_flow
-from workflow_factory.lessons import (
-    find_lesson,
-    lesson_report,
-    list_lessons,
-    reject_lesson,
-    restore_lesson,
-)
 from workflow_factory.queue import answer_doubt, dismiss_doubt, list_doubts, list_runs
+from workflow_factory.steps import (
+    find_step,
+    list_steps,
+    reject_step,
+    restore_step,
+    step_report,
+)
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")  # the only names this server can be bound to
 MAX_BODY_BYTES = 1_000_000
@@ -163,6 +163,8 @@ class ApiServer:
                     return self._send(403, {"error": "unexpected Host header"})
                 url = urllib.parse.urlsplit(self.path)
                 path, self.query = url.path, urllib.parse.parse_qs(url.query)
+                if path.startswith("/api/lessons"):  # the name an earlier editor used
+                    path = "/api/steps" + path[len("/api/lessons"):]
                 if not path.startswith("/api/"):
                     return self._static(path) if method == "GET" else self._send(405, {"error": "method"})
                 if not self._authorised():
@@ -178,9 +180,9 @@ class ApiServer:
                 if method == "POST" and path == "/api/quit":
                     api.quit_requested.set()
                     return self._send(202, {"ok": True})
-                if method == "GET" and path == "/api/lessons":
-                    return self._send(200, [_lesson_view(lesson) for lesson in
-                                            list_lessons(api.user_db, api.factory_db)])
+                if method == "GET" and path == "/api/steps":
+                    return self._send(200, [_step_view(step) for step in
+                                            list_steps(api.user_db, api.factory_db)])
                 if method == "GET" and path == "/api/flows":
                     return self._send(200, list_flows(api.user_db, api.factory_db))
                 flow_match = re.fullmatch(r"/api/flows/([\w.-]+)", path)
@@ -205,14 +207,14 @@ class ApiServer:
                                                        429: "too many runs at once"}[code]})
                 if method == "GET" and path == "/api/library":
                     return self._send(200, [
-                        {**_lesson_view(lesson), **lesson_report(api.user_db, lesson)}
-                        for lesson in list_lessons(api.user_db, api.factory_db)])
-                mark = re.fullmatch(r"/api/lessons/([\w.-]+)/([\w.-]+)/(reject|restore)", path)
+                        {**_step_view(step), **step_report(api.user_db, step)}
+                        for step in list_steps(api.user_db, api.factory_db)])
+                mark = re.fullmatch(r"/api/steps/([\w.-]+)/([\w.-]+)/(reject|restore)", path)
                 if mark and method == "POST":
-                    if find_lesson(api.user_db, api.factory_db, mark[1], mark[2]) is None:
-                        return self._send(404, {"error": "no such lesson"})
-                    (reject_lesson if mark[3] == "reject" else restore_lesson)(api.user_db, mark[1], mark[2])
-                    return self._send(200, {"lesson": mark[2], "action": mark[3]})
+                    if find_step(api.user_db, api.factory_db, mark[1], mark[2]) is None:
+                        return self._send(404, {"error": "no such step"})
+                    (reject_step if mark[3] == "reject" else restore_step)(api.user_db, mark[1], mark[2])
+                    return self._send(200, {"step": mark[2], "action": mark[3]})
                 if path == "/api/consents" and method == "GET":
                     return self._send(200, [asdict(consent) for consent in consents(api.user_db)])
                 if path == "/api/consents" and method == "DELETE":  # revoke only: granting happens at teaching time
@@ -265,9 +267,9 @@ class ApiServer:
         return Handler
 
 
-def _lesson_view(lesson) -> dict:
+def _step_view(step) -> dict:
     """What the palette needs: never the secret reference, never pixels."""
-    view = asdict(lesson.locator)
-    return {"app": lesson.app, "name": lesson.name, "origin": str(lesson.origin), "action": lesson.action,
-            "sensitive": str(lesson.sensitive) if lesson.sensitive else None,
+    view = asdict(step.locator)
+    return {"app": step.app, "name": step.name, "origin": str(step.origin), "action": step.action,
+            "sensitive": str(step.sensitive) if step.sensitive else None,
             "locator": view}

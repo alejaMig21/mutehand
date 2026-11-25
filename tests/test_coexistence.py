@@ -6,15 +6,15 @@ from workflow_factory import (
     emergency_stop,
     list_doubts,
     run_flow,
-    save_lesson,
+    save_step,
 )
 
-from fake_desktop import FakeDesktop, button, lesson
+from fake_desktop import FakeDesktop, button, step
 
 
 def two_physical_nodes(user_db):
-    save_lesson(user_db, lesson("a", "Alpha"))
-    save_lesson(user_db, lesson("b", "Beta"))
+    save_step(user_db, step("a", "Alpha"))
+    save_step(user_db, step("b", "Beta"))
     return Flow(id="f", nodes=[Node("a", "a", exclusive_input=True), Node("b", "b", exclusive_input=True)])
 
 
@@ -80,7 +80,7 @@ def test_a_user_who_never_stops_ends_in_a_doubt_instead_of_waiting_forever(tmp_p
 # --- keys only go to the right window ------------------------------------------------------------
 
 def typing_flow(user_db):
-    save_lesson(user_db, lesson("typer", "Notes", action="type_value"))
+    save_step(user_db, step("typer", "Notes", action="type_value"))
     return Flow(id="t", nodes=[Node("t", "typer", inputs=(("text", "str"),))])
 
 
@@ -108,7 +108,7 @@ def test_keys_are_sent_when_the_target_window_is_in_the_foreground(tmp_path):
 
 def three_nodes(user_db):
     for name, control in (("a", "Alpha"), ("b", "Beta"), ("c", "Gamma")):
-        save_lesson(user_db, lesson(name, control))
+        save_step(user_db, step(name, control))
     return Flow(id="f", nodes=[Node("a", "a"), Node("b", "b"), Node("c", "c")])
 
 

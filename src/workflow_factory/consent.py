@@ -1,4 +1,4 @@
-"""Consent gate: a sensitive lesson runs only with a consent record for its app, control, action."""
+"""Consent gate: a sensitive step runs only with a consent record for its app, control, action."""
 
 import re
 import sqlite3
@@ -6,9 +6,9 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
-from workflow_factory.lessons import Lesson, Sensitivity
+from workflow_factory.steps import Sensitivity, Step
 
-# Safety net: a control named like an outward action needs consent even if nobody labelled the lesson.
+# Safety net: a control named like an outward action needs consent even if nobody labelled the step.
 OUTWARD_WORDS = ("send", "publish", "buy", "purchase", "pay", "post", "submit")
 
 SCHEMA = """
@@ -28,20 +28,20 @@ class Consent:
     action: str
 
 
-def effective_sensitivity(lesson: Lesson) -> Sensitivity | None:
-    """The category that applies, whatever the lesson claims: labels come from teachers, files and factories."""
-    if lesson.sensitive is not None:
-        return lesson.sensitive
-    if lesson.action == "type_secret":
+def effective_sensitivity(step: Step) -> Sensitivity | None:
+    """The category that applies, whatever the step claims: labels come from teachers, files and factories."""
+    if step.sensitive is not None:
+        return step.sensitive
+    if step.action == "type_secret":
         return Sensitivity.PASSWORD_FIELD
-    if any(re.search(rf"\b{word}\b", lesson.locator.name.lower()) for word in OUTWARD_WORDS):
+    if any(re.search(rf"\b{word}\b", step.locator.name.lower()) for word in OUTWARD_WORDS):
         return Sensitivity.OUTWARD_ACTION
     return None
 
 
-def scope_of(lesson: Lesson) -> Consent:
-    locator = lesson.locator
-    return Consent(lesson.app, locator.automation_id or locator.name, lesson.action)
+def scope_of(step: Step) -> Consent:
+    locator = step.locator
+    return Consent(step.app, locator.automation_id or locator.name, step.action)
 
 
 def grant_consent(user_db: Path, app: str, control: str, action: str) -> None:
@@ -66,11 +66,11 @@ def consents(user_db: Path) -> list[Consent]:
         return [Consent(*row) for row in db.execute("SELECT app, control, action FROM consents")]
 
 
-def is_permitted(user_db: Path, lesson: Lesson) -> bool:
+def is_permitted(user_db: Path, step: Step) -> bool:
     """No consent record means blocked. Sensitivity is decided here, not trusted from the label."""
-    if effective_sensitivity(lesson) is None:
+    if effective_sensitivity(step) is None:
         return True
-    scope = scope_of(lesson)
+    scope = scope_of(step)
     with closing(sqlite3.connect(user_db)) as db, db:
         db.execute(SCHEMA)
         return db.execute(

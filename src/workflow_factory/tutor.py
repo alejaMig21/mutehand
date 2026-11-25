@@ -1,6 +1,6 @@
 """What the tutor (Claude Code) can do through the project's own tools.
 
-Deliberately small: observe (summarised), study order, teach/fix a lesson, list and answer
+Deliberately small: observe (summarised), study order, teach/fix a step, list and answer
 doubts. There is no force option and no screenshot tracing here, and secrets only ever appear
 as references.
 """
@@ -14,16 +14,16 @@ from pathlib import Path
 from workflow_factory.consent import Consent, effective_sensitivity, grant_consent, is_permitted, scope_of
 from workflow_factory.desktop import Desktop
 from workflow_factory.flow import effect_of
-from workflow_factory.lessons import (
-    Lesson,
+from workflow_factory.queue import answer_doubt, list_doubts
+from workflow_factory.steps import (
     Locator,
     Sensitivity,
     Status,
-    find_lesson,
-    save_lesson,
-    validate_lesson,
+    Step,
+    find_step,
+    save_step,
+    validate_step,
 )
-from workflow_factory.queue import answer_doubt, list_doubts
 
 # Apps whose content is private by default; the user can mark more.
 DEFAULT_PRIVATE_APPS = frozenset({"telegram", "vivaldi", "chrome", "msedge", "firefox", "brave"})
@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS study_order (
 
 @dataclass(frozen=True)
 class StudyStep:
-    """One lesson to teach, in the order the tutor chose to explore the app."""
+    """One step to teach, in the order the tutor chose to explore the app."""
 
     name: str
     locator: Locator
@@ -101,17 +101,17 @@ def set_study_order(user_db: Path, app: str, steps: list[StudyStep]) -> None:
 
 
 def study_status(user_db: Path, app: str) -> dict:
-    """Where the study stands: a step is done once its lesson exists (autosaved when measured)."""
+    """Where the study stands: a step is done once its step exists (autosaved when measured)."""
     with closing(_connect(user_db)) as db:
         rows = db.execute(
             "SELECT name, role, control_name, automation_id FROM study_order WHERE app = ?"
             " ORDER BY position", (app,)).fetchall()
-    def done(row) -> bool:  # a lesson on the same control that is still trusted for this app version
-        lesson = find_lesson(user_db, None, app, row[0])
+    def done(row) -> bool:  # a step on the same control that is still trusted for this app version
+        step = find_step(user_db, None, app, row[0])
         return (
-            lesson is not None
-            and lesson.status != Status.TO_REVALIDATE
-            and lesson.locator == Locator(row[1], row[2], row[3])
+            step is not None
+            and step.status != Status.TO_REVALIDATE
+            and step.locator == Locator(row[1], row[2], row[3])
         )
 
     pending = [row for row in rows if not done(row)]
@@ -134,17 +134,17 @@ def _consent_required(category: Sensitivity, scope: Consent) -> dict:
     }
 
 
-def teach_lesson(
+def teach_step(
     user_db: Path, desktop: Desktop, name: str, locator: Locator, action: str = "click",
     sensitive: Sensitivity | None = None, secret_ref: str | None = None,
 ) -> dict:
-    """Perform the action once, measure its effect and save the lesson at once (autosave)."""
+    """Perform the action once, measure its effect and save the step at once (autosave)."""
     key = desktop.app_key()
-    candidate = Lesson(app=key.process, version=key.version, name=name, locator=locator,
+    candidate = Step(app=key.process, version=key.version, name=name, locator=locator,
                        action=action, sensitive=sensitive, secret_ref=secret_ref)
     category = effective_sensitivity(candidate)  # declared, or implied by the action or the control name
     candidate = replace(candidate, sensitive=category)
-    validate_lesson(candidate)  # refuse before touching the app: a lesson that cannot be saved never runs
+    validate_step(candidate)  # refuse before touching the app: a step that cannot be saved never runs
     if category and not is_permitted(user_db, candidate):  # ask before touching anything
         return _consent_required(category, scope_of(candidate))
     control = desktop.find(locator.role, locator.name, locator.automation_id)
@@ -164,13 +164,13 @@ def teach_lesson(
     else:
         desktop.click(control)
     effect = effect_of(before, set(desktop.snapshot()))
-    save_lesson(user_db, replace(candidate, sensitive=category, effect=str(effect), frame=desktop.frame()))
-    return {"status": "saved", "lesson": name, "effect": str(effect)}
+    save_step(user_db, replace(candidate, sensitive=category, effect=str(effect), frame=desktop.frame()))
+    return {"status": "saved", "step": name, "effect": str(effect)}
 
 
 def list_open_doubts(user_db: Path) -> list[dict]:
     return [
-        {"id": d.id, "flow_id": d.flow_id, "node_id": d.node_id, "lesson": d.lesson,
+        {"id": d.id, "flow_id": d.flow_id, "node_id": d.node_id, "step": d.step,
          "reason": str(d.reason), "capture": d.capture, "status": d.status}
         for d in list_doubts(user_db, status="open")
     ]
@@ -179,13 +179,13 @@ def list_open_doubts(user_db: Path) -> list[dict]:
 def answer_doubt_by_teaching(
     user_db: Path, desktop: Desktop, doubt_id: int, name: str, locator: Locator, **teach_kw
 ) -> dict:
-    """Answer a doubt by (re)teaching its lesson; the doubt closes only if the lesson was saved."""
+    """Answer a doubt by (re)teaching its step; the doubt closes only if the step was saved."""
     doubt = next((d for d in list_doubts(user_db) if d.id == doubt_id), None)
     if doubt is None or doubt.status != "open":
         raise ValueError(f"doubt {doubt_id} is not open")
-    if doubt.lesson != name:
-        raise ValueError(f"doubt {doubt_id} is about lesson {doubt.lesson!r}, not {name!r}")
-    result = teach_lesson(user_db, desktop, name, locator, **teach_kw)
+    if doubt.step != name:
+        raise ValueError(f"doubt {doubt_id} is about step {doubt.step!r}, not {name!r}")
+    result = teach_step(user_db, desktop, name, locator, **teach_kw)
     if result["status"] != "saved":
         return result
     answer_doubt(user_db, doubt_id)

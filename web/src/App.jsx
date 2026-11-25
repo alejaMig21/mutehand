@@ -8,7 +8,7 @@ import Queue from './Queue.jsx'
 
 const SCREENS = [
   ['editor', 'Flow editor', Editor],
-  ['library', 'Lessons', Library],
+  ['library', 'Steps', Library],
   ['queue', 'Tutor queue', Queue],
   ['history', 'Run history', History],
   ['consents', 'Consents', Consents],

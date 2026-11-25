@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from workflow_factory.legacy import migrate_names
+
 
 class Reason(StrEnum):
     """Why the apprentice stopped: a closed list so doubts are triaged consistently."""
@@ -26,7 +28,7 @@ CREATE TABLE IF NOT EXISTS doubts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     flow_id TEXT NOT NULL,
     node_id TEXT NOT NULL,
-    lesson TEXT NOT NULL,
+    step TEXT NOT NULL,
     reason TEXT NOT NULL CHECK (reason IN ({_REASONS})),
     capture TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'answered', 'dismissed')),
@@ -65,7 +67,7 @@ class Doubt:
     id: int
     flow_id: str
     node_id: str
-    lesson: str
+    step: str
     reason: Reason
     capture: dict[str, int]  # roles and counts only, never text
     status: str
@@ -74,28 +76,29 @@ class Doubt:
 
 def _connect(user_db: Path) -> sqlite3.Connection:
     db = sqlite3.connect(user_db)
+    migrate_names(db)
     db.executescript(SCHEMA)
     return db
 
 
-def record_doubt(user_db: Path, flow_id: str, node_id: str, lesson: str,
+def record_doubt(user_db: Path, flow_id: str, node_id: str, step: str,
                  reason: Reason, capture: dict[str, int]) -> int:
     with closing(_connect(user_db)) as db, db:
         cursor = db.execute(
-            "INSERT INTO doubts (flow_id, node_id, lesson, reason, capture) VALUES (?, ?, ?, ?, ?)",
-            (flow_id, node_id, lesson, str(reason), json.dumps(capture)),
+            "INSERT INTO doubts (flow_id, node_id, step, reason, capture) VALUES (?, ?, ?, ?, ?)",
+            (flow_id, node_id, step, str(reason), json.dumps(capture)),
         )
         return cursor.lastrowid
 
 
 def list_doubts(user_db: Path, status: str | None = None) -> list[Doubt]:
-    query = "SELECT id, flow_id, node_id, lesson, reason, capture, status, note FROM doubts"
+    query = "SELECT id, flow_id, node_id, step, reason, capture, status, note FROM doubts"
     args = ()
     if status:
         query, args = query + " WHERE status = ?", (status,)
     with closing(_connect(user_db)) as db:
-        return [Doubt(i, f, n, lesson, Reason(r), json.loads(c), s, note)
-                for i, f, n, lesson, r, c, s, note in db.execute(query + " ORDER BY id", args)]
+        return [Doubt(i, f, n, step, Reason(r), json.loads(c), s, note)
+                for i, f, n, step, r, c, s, note in db.execute(query + " ORDER BY id", args)]
 
 
 def _close_doubt(user_db: Path, doubt_id: int, new_status: str, note: str | None = None) -> None:

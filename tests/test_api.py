@@ -5,10 +5,10 @@ import urllib.request
 
 import pytest
 
-from workflow_factory import Flow, Node, save_flow, save_lesson
+from workflow_factory import Flow, Node, save_flow, save_step
 from workflow_factory.api import ApiServer
 
-from fake_desktop import FakeDesktop, button, lesson
+from fake_desktop import FakeDesktop, button, step
 
 
 def make_server(tmp_path, desktop=None, **kw):
@@ -44,9 +44,9 @@ def server(tmp_path):
 
 
 def test_requests_without_the_token_or_with_a_wrong_one_are_rejected(server):
-    assert call(server, "/api/lessons", token=None)[0] == 401
-    assert call(server, "/api/lessons", token="guess")[0] == 401
-    assert call(server, "/api/lessons")[0] == 200
+    assert call(server, "/api/steps", token=None)[0] == 401
+    assert call(server, "/api/steps", token="guess")[0] == 401
+    assert call(server, "/api/steps")[0] == 200
 
 
 def test_the_server_only_binds_to_the_loopback_interface(tmp_path):
@@ -60,36 +60,36 @@ def test_the_server_only_binds_to_the_loopback_interface(tmp_path):
 
 
 def test_a_request_whose_host_header_is_not_loopback_is_refused_against_dns_rebinding(server):
-    status, _, _ = call(server, "/api/lessons", host="evil.example.com")
+    status, _, _ = call(server, "/api/steps", host="evil.example.com")
 
     assert status == 403
 
 
 def test_the_api_sends_no_cross_origin_permission(server):
-    _, _, headers = call(server, "/api/lessons")
+    _, _, headers = call(server, "/api/steps")
 
     assert not [name for name in headers if name.lower().startswith("access-control-")]
 
 
-def test_the_palette_lists_lessons_from_the_user_and_the_factory_with_the_user_shadowing(tmp_path):
-    save_lesson(tmp_path / "factory.db", lesson("open-menu", "Factory menu", origin="factory"))
-    save_lesson(tmp_path / "factory.db", lesson("save-file", "Save", origin="factory"))
-    save_lesson(tmp_path / "user.db", lesson("open-menu", "My menu"))
+def test_the_palette_lists_steps_from_the_user_and_the_factory_with_the_user_shadowing(tmp_path):
+    save_step(tmp_path / "factory.db", step("open-menu", "Factory menu", origin="factory"))
+    save_step(tmp_path / "factory.db", step("save-file", "Save", origin="factory"))
+    save_step(tmp_path / "user.db", step("open-menu", "My menu"))
     server = make_server(tmp_path)
     try:
-        status, lessons, _ = call(server, "/api/lessons")
+        status, steps, _ = call(server, "/api/steps")
     finally:
         server.stop()
 
     assert status == 200
-    by_name = {item["name"]: item for item in lessons}
+    by_name = {item["name"]: item for item in steps}
     assert by_name["open-menu"]["origin"] == "local" and by_name["open-menu"]["locator"]["name"] == "My menu"
     assert by_name["save-file"]["origin"] == "factory"
-    assert "secret_ref" not in json.dumps(lessons)
+    assert "secret_ref" not in json.dumps(steps)
 
 
 def test_a_flow_built_in_the_editor_is_saved_to_sqlite_and_listed(server, tmp_path):
-    body = {"nodes": [{"id": "a", "lesson": "open-menu"}, {"id": "b", "lesson": "save-file"}],
+    body = {"nodes": [{"id": "a", "step": "open-menu"}, {"id": "b", "step": "save-file"}],
             "edges": [["a", "b"]]}
 
     assert call(server, "/api/flows/morning", "PUT", body)[0] == 200
@@ -101,7 +101,7 @@ def test_a_flow_built_in_the_editor_is_saved_to_sqlite_and_listed(server, tmp_pa
 
 
 def test_an_invalid_flow_is_refused_with_a_message(server):
-    body = {"nodes": [{"id": "a", "lesson": "x"}, {"id": "b", "lesson": "y"}], "edges": [["a", "b"], ["b", "a"]]}
+    body = {"nodes": [{"id": "a", "step": "x"}, {"id": "b", "step": "y"}], "edges": [["a", "b"], ["b", "a"]]}
 
     status, error, _ = call(server, "/api/flows/loopy", "PUT", body)
 
@@ -109,8 +109,8 @@ def test_an_invalid_flow_is_refused_with_a_message(server):
 
 
 def test_a_flow_runs_and_its_live_per_node_status_can_be_polled(tmp_path):
-    save_lesson(tmp_path / "user.db", lesson("open-menu", "Alpha"))
-    save_lesson(tmp_path / "user.db", lesson("save-file", "Beta"))
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
+    save_step(tmp_path / "user.db", step("save-file", "Beta"))
     save_flow(tmp_path / "user.db", Flow(id="morning", nodes=[Node("a", "open-menu"), Node("b", "save-file")]))
     server = make_server(tmp_path)
     try:
@@ -166,7 +166,7 @@ def test_a_negative_content_length_is_refused_instead_of_blocking_a_thread(serve
 
 
 def test_a_non_ascii_authorization_header_is_a_plain_401(server):
-    request = urllib.request.Request(server.url + "/api/lessons")
+    request = urllib.request.Request(server.url + "/api/steps")
     request.add_header("Authorization", "Bearer caf\u00e9")
 
     with pytest.raises(urllib.error.HTTPError) as refused:
@@ -177,13 +177,13 @@ def test_a_non_ascii_authorization_header_is_a_plain_401(server):
 
 
 def test_an_ipv6_host_header_is_refused_because_the_server_never_binds_it(server):
-    assert call(server, "/api/lessons", host=f"[::1]:{server.address[1]}")[0] == 403
+    assert call(server, "/api/steps", host=f"[::1]:{server.address[1]}")[0] == 403
 
 
 def slow_server(tmp_path, flows=1, **kw):
     desktop = FakeDesktop(controls=[button("Alpha")])
     desktop.click_seconds = 0.6  # long enough to still be running when the next request arrives
-    save_lesson(tmp_path / "user.db", lesson("open-menu", "Alpha"))
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
     for number in range(flows):
         save_flow(tmp_path / "user.db", Flow(id=f"f{number}", nodes=[Node("a", "open-menu")]))
     server = ApiServer(tmp_path / "user.db", None, lambda app: desktop, token="secret-token", **kw)
@@ -241,8 +241,8 @@ def test_only_the_most_recent_finished_runs_are_kept(tmp_path):
 def test_a_factory_template_can_be_duplicated_into_the_user_layer_through_the_api(tmp_path):
     from workflow_factory import build_factory
 
-    build_factory(tmp_path / "factory.db", {"version": 1, "lessons": [], "flows": [
-        {"id": "morning-template", "nodes": [{"id": "a", "lesson": "open-menu"}], "edges": None}]})
+    build_factory(tmp_path / "factory.db", {"version": 1, "steps": [], "flows": [
+        {"id": "morning-template", "nodes": [{"id": "a", "step": "open-menu"}], "edges": None}]})
     server = make_server(tmp_path)
     try:
         created = call(server, "/api/flows/morning-template/duplicate", "POST", {"new_id": "mine"})

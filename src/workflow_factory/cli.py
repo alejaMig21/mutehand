@@ -9,7 +9,7 @@ DESCRIPTIONS = {
     "open": "open the flow editor in your browser (the default)",
     "run": "run a flow now, without the editor (--flow, --app; see run --help)",
     "schedule": "run a flow every day with Windows Task Scheduler (create, list, delete)",
-    "knowledge": "move lessons and flows between machines (export, import, build-factory)",
+    "knowledge": "move steps and flows between machines (export, import, build-factory)",
     "mcp": "serve the tutor tools over MCP; an agent starts this, you normally never do",
 }
 

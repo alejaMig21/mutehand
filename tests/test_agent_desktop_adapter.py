@@ -363,7 +363,7 @@ def test_drag_computes_both_ends_from_their_own_anchors_and_centres_when_no_frac
         ["--headed", "drag", "--from-xy", "120,210", "--to-xy", "1090,550"], None)
 
 
-def test_app_key_process_name_is_lowercased_so_lessons_and_consents_never_split_by_case():
+def test_app_key_process_name_is_lowercased_so_steps_and_consents_never_split_by_case():
     runner = FakeRunner(ok({"apps": [{"name": "MSPaint.exe", "pid": 7}]}))
     desktop = AgentDesktop("MSPaint.exe", runner, settle_seconds=0, version_of=lambda pid: "1.0")
 
@@ -429,9 +429,9 @@ def test_the_cursor_is_read_in_physical_pixels_even_from_a_dpi_unaware_thread():
 def test_pressing_the_emergency_hotkey_stops_a_flow_that_is_about_to_run(tmp_path):
     import threading
 
-    from workflow_factory import EmergencyHotkey, Flow, Node, emergency_stop, run_flow, save_lesson
+    from workflow_factory import EmergencyHotkey, Flow, Node, emergency_stop, run_flow, save_step
 
-    from fake_desktop import FakeDesktop, button, lesson
+    from fake_desktop import FakeDesktop, button, step
 
     pressed = threading.Event()
 
@@ -446,7 +446,7 @@ def test_pressing_the_emergency_hotkey_stops_a_flow_that_is_about_to_run(tmp_pat
         assert pressed.wait(timeout=3)
     finally:
         hotkey.stop()
-    save_lesson(tmp_path / "user.db", lesson("a", "Alpha"))
+    save_step(tmp_path / "user.db", step("a", "Alpha"))
     desktop = FakeDesktop(controls=[button("Alpha")])
 
     result = run_flow(Flow(id="f", nodes=[Node("a", "a")]), desktop=desktop, user_db=tmp_path / "user.db")

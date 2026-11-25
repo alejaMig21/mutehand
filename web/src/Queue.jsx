@@ -24,7 +24,7 @@ export default function Queue() {
       <ul>
         {doubts.map((doubt) => (
           <li key={doubt.id} data-testid={`doubt-${doubt.id}`}>
-            Flow <b>{doubt.flow_id}</b>, node {doubt.node_id} (lesson {doubt.lesson}): <b>{doubt.reason}</b>
+            Flow <b>{doubt.flow_id}</b>, node {doubt.node_id} (step {doubt.step}): <b>{doubt.reason}</b>
             {' '}· screen: {Object.entries(doubt.capture).map(([role, count]) => `${count} ${role}`).join(', ') || 'nothing'}
             {doubt.note ? ` · answer: ${doubt.note}` : ''}
             {doubt.status === 'open' && (

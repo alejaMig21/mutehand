@@ -4,8 +4,12 @@
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A migration test: a database written before the rename opens with every step intact
-- [ ] The glossary and the code use the same words
-- [ ] The tutor tools keep working with their old names
+- [x] A migration test: a database written before the rename opens with every step intact
+- [x] The glossary and the code use the same words
+- [x] The tutor tools keep working with their old names
+
+## Answer
+
+Code, storage, API and web now say Step. `legacy.py` renames the old tables (`lessons`, `lesson_state`) and the `doubts.lesson` column in place on open, reads an old read-only factory file, upgrades old flow nodes and old export files, and the old API path `/api/lessons` and tool name `teach_lesson` still answer. Tests: `tests/test_rename_compat.py`. Lesson now means the teaching session, which has no code yet (recipes, ticket 08).

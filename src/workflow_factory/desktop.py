@@ -27,7 +27,7 @@ FRAME_FIELDS = (
     "scale", "language", "theme",
 )
 # ponytail: fixed tolerances (window size may drift 20 px, everything else must match exactly);
-# per-lesson tolerances if teaching shows a need.
+# per-step tolerances if teaching shows a need.
 FRAME_TOLERANCE = np.array([0, 20, 20, 0, 0, 0, 0, 0], dtype=float)
 
 
@@ -37,7 +37,7 @@ def _code(text: str) -> float:
 
 @dataclass(frozen=True)
 class Frame:
-    """The exact conditions a lesson was measured in (app and version live in the AppKey)."""
+    """The exact conditions a step was measured in (app and version live in the AppKey)."""
 
     window_state: str = "normal"
     window_width: int = 1000

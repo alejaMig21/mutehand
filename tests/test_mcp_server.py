@@ -8,7 +8,7 @@ from workflow_factory.mcp_server import build_server
 from fake_desktop import FakeDesktop, button
 
 EXPECTED_TOOLS = {
-    "observe_app", "mark_app_private", "set_study_order", "study_status", "teach_lesson",
+    "observe_app", "mark_app_private", "set_study_order", "study_status", "teach_step", "teach_lesson",  # teach_lesson: old name
     "list_open_doubts", "answer_doubt", "record_consent",
 }
 FORBIDDEN = ("force", "trace", "screenshot", "debug")
@@ -54,15 +54,15 @@ def test_observing_a_private_app_through_mcp_returns_roles_and_counts_only(tmp_p
     assert "Maria" not in json.dumps(payload(result))
 
 
-def test_teaching_through_mcp_saves_the_lesson_and_never_returns_a_secret_value(tmp_path):
+def test_teaching_through_mcp_saves_the_step_and_never_returns_a_secret_value(tmp_path):
     desktop = FakeDesktop(controls=[button("Password")], secrets={"login": "hunter2"})
     server = server_for(tmp_path, {"paint.exe": desktop})
 
-    first = ask(server, "teach_lesson", {"app": "paint.exe", "name": "login", "role": "button",
+    first = ask(server, "teach_step", {"app": "paint.exe", "name": "login", "role": "button",
                                          "control_name": "Password", "action": "type_secret",
                                          "secret_ref": "login"})
     ask(server, "record_consent", {"app": "paint.exe", "control": "Password", "action": "type_secret"})
-    second = ask(server, "teach_lesson", {"app": "paint.exe", "name": "login", "role": "button",
+    second = ask(server, "teach_step", {"app": "paint.exe", "name": "login", "role": "button",
                                           "control_name": "Password", "action": "type_secret",
                                           "secret_ref": "login"})
 

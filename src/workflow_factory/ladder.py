@@ -1,7 +1,7 @@
 """Locator ladder: accessibility identity, then derived geometry, then bounded template search.
 
 Absolute screen coordinates never appear here: a point is always a fraction of an anchor
-control found by accessibility, and only the adapter turns it into pixels. A lesson says
+control found by accessibility, and only the adapter turns it into pixels. A step says
 which rungs it has; a rung it lacks is never improvised, the flow stops and queues a doubt.
 """
 
@@ -11,7 +11,7 @@ import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 
 from workflow_factory.desktop import Control, Desktop
-from workflow_factory.lessons import Endpoint, Locator, Template
+from workflow_factory.steps import Endpoint, Locator, Template
 
 
 @dataclass(frozen=True)

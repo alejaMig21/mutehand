@@ -5,8 +5,8 @@ import { fromFlowJson, layout, nextNodeId, toFlowJson } from './flowjson.js'
 test('a flow survives the trip from API JSON to the canvas and back', () => {
   const flow = {
     nodes: [
-      { id: 'n1', lesson: 'open-menu', inputs: [['text', 'str']], exclusive_input: true },
-      { id: 'n3', lesson: 'save-file' },
+      { id: 'n1', step: 'open-menu', inputs: [['text', 'str']], exclusive_input: true },
+      { id: 'n3', step: 'save-file' },
     ],
     edges: [['n1', 'n3']],
   }
@@ -14,8 +14,8 @@ test('a flow survives the trip from API JSON to the canvas and back', () => {
 
   assert.deepEqual(toFlowJson(nodes, edges), {
     nodes: [
-      { id: 'n1', lesson: 'open-menu', inputs: [['text', 'str']], exclusive_input: true },
-      { id: 'n3', lesson: 'save-file', inputs: [], exclusive_input: false },
+      { id: 'n1', step: 'open-menu', inputs: [['text', 'str']], exclusive_input: true },
+      { id: 'n3', step: 'save-file', inputs: [], exclusive_input: false },
     ],
     edges: [['n1', 'n3']],
   })

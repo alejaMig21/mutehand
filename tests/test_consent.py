@@ -10,16 +10,16 @@ from workflow_factory import (
     grant_consent,
     revoke_consent,
     run_flow,
-    save_lesson,
+    save_step,
 )
 
-from fake_desktop import FakeDesktop, button, lesson
+from fake_desktop import FakeDesktop, button, step
 
-FLOW = Flow(nodes=[Node(id="n1", lesson="send-message")])
+FLOW = Flow(nodes=[Node(id="n1", step="send-message")])
 
 
-def sensitive_lesson(**kw):
-    return lesson("send-message", "Send", sensitive=Sensitivity.OUTWARD_ACTION, **kw)
+def sensitive_step(**kw):
+    return step("send-message", "Send", sensitive=Sensitivity.OUTWARD_ACTION, **kw)
 
 
 def run(user_db, desktop=None, factory_db=None):
@@ -27,9 +27,9 @@ def run(user_db, desktop=None, factory_db=None):
     return desktop, run_flow(FLOW, desktop=desktop, user_db=user_db, factory_db=factory_db)
 
 
-def test_sensitive_lesson_without_consent_is_blocked_before_reaching_the_desktop(tmp_path):
+def test_sensitive_step_without_consent_is_blocked_before_reaching_the_desktop(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, sensitive_lesson())
+    save_step(user_db, sensitive_step())
 
     desktop, result = run(user_db)
 
@@ -37,9 +37,9 @@ def test_sensitive_lesson_without_consent_is_blocked_before_reaching_the_desktop
     assert desktop.calls == []
 
 
-def test_granted_consent_is_stored_with_its_scope_and_the_lesson_then_runs(tmp_path):
+def test_granted_consent_is_stored_with_its_scope_and_the_step_then_runs(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, sensitive_lesson())
+    save_step(user_db, sensitive_step())
 
     grant_consent(user_db, app="paint.exe", control="Send", action="click")
     desktop, result = run(user_db)
@@ -49,9 +49,9 @@ def test_granted_consent_is_stored_with_its_scope_and_the_lesson_then_runs(tmp_p
     assert [c.name for c in desktop.clicks] == ["Send"]
 
 
-def test_revoking_a_consent_blocks_the_lesson_again(tmp_path):
+def test_revoking_a_consent_blocks_the_step_again(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, sensitive_lesson())
+    save_step(user_db, sensitive_step())
     grant_consent(user_db, app="paint.exe", control="Send", action="click")
 
     revoke_consent(user_db, app="paint.exe", control="Send", action="click")
@@ -64,7 +64,7 @@ def test_revoking_a_consent_blocks_the_lesson_again(tmp_path):
 
 def test_broad_consent_covers_any_control_of_the_app_for_that_action(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, sensitive_lesson())
+    save_step(user_db, sensitive_step())
     grant_consent(user_db, app="paint.exe", control="*", action="click")
 
     desktop, result = run(user_db)
@@ -75,7 +75,7 @@ def test_broad_consent_covers_any_control_of_the_app_for_that_action(tmp_path):
 
 def test_an_unreadable_control_is_blocked_even_with_a_broad_consent(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, sensitive_lesson())
+    save_step(user_db, sensitive_step())
     grant_consent(user_db, app="paint.exe", control="*", action="click")
 
     desktop, result = run(user_db, FakeDesktop(controls=[button("Send", readable=False)]))
@@ -84,9 +84,9 @@ def test_an_unreadable_control_is_blocked_even_with_a_broad_consent(tmp_path):
     assert desktop.clicks == []
 
 
-def test_factory_lesson_in_a_sensitive_category_ships_without_consent(tmp_path):
+def test_factory_step_in_a_sensitive_category_ships_without_consent(tmp_path):
     factory_db, user_db = tmp_path / "factory.db", tmp_path / "user.db"
-    save_lesson(factory_db, sensitive_lesson(origin="factory"))
+    save_step(factory_db, sensitive_step(origin="factory"))
 
     _, blocked = run(user_db, factory_db=factory_db)
     grant_consent(user_db, app="paint.exe", control="Send", action="click")
@@ -98,14 +98,14 @@ def test_factory_lesson_in_a_sensitive_category_ships_without_consent(tmp_path):
     assert [c.name for c in desktop.clicks] == ["Send"]
 
 
-def secret_lesson():
-    return lesson("send-message", "Password", action="type_secret", secret_ref="login",
+def secret_step():
+    return step("send-message", "Password", action="type_secret", secret_ref="login",
                   sensitive=Sensitivity.PASSWORD_FIELD)
 
 
 def test_secret_reaches_the_target_by_reference_and_never_appears_in_recorded_calls(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, secret_lesson())
+    save_step(user_db, secret_step())
     grant_consent(user_db, app="paint.exe", control="Password", action="type_secret")
     desktop = FakeDesktop(controls=[button("Password")], secrets={"login": "hunter2"})
 
@@ -113,12 +113,12 @@ def test_secret_reaches_the_target_by_reference_and_never_appears_in_recorded_ca
 
     assert desktop.delivered == [("Password", "hunter2")]  # the target did receive it
     assert "hunter2" not in repr(desktop.calls)
-    assert b"hunter2" not in user_db.read_bytes()  # lessons hold only the reference
+    assert b"hunter2" not in user_db.read_bytes()  # steps hold only the reference
 
 
-def test_secret_lesson_without_consent_types_nothing(tmp_path):
+def test_secret_step_without_consent_types_nothing(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, secret_lesson())
+    save_step(user_db, secret_step())
     desktop = FakeDesktop(controls=[button("Password")], secrets={"login": "hunter2"})
 
     result = run_flow(FLOW, desktop=desktop, user_db=user_db)
@@ -127,14 +127,14 @@ def test_secret_lesson_without_consent_types_nothing(tmp_path):
     assert desktop.delivered == []
 
 
-def test_a_lesson_that_types_a_secret_must_be_marked_as_a_password_field(tmp_path):
+def test_a_step_that_types_a_secret_must_be_marked_as_a_password_field(tmp_path):
     with pytest.raises(ValueError, match="secret"):
-        save_lesson(tmp_path / "user.db", lesson("x", "Password", action="type_secret", secret_ref="login"))
+        save_step(tmp_path / "user.db", step("x", "Password", action="type_secret", secret_ref="login"))
 
 
-def test_an_unreadable_control_blocks_even_a_non_sensitive_lesson(tmp_path):
+def test_an_unreadable_control_blocks_even_a_non_sensitive_step(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, lesson("send-message", "Open"))  # a plain control: no consent involved
+    save_step(user_db, step("send-message", "Open"))  # a plain control: no consent involved
 
     desktop, result = run(user_db, FakeDesktop(controls=[button("Open", readable=False)]))
 
@@ -142,15 +142,15 @@ def test_an_unreadable_control_blocks_even_a_non_sensitive_lesson(tmp_path):
     assert desktop.clicks == []
 
 
-def test_typing_a_secret_needs_consent_even_when_a_factory_lesson_forgot_the_label(tmp_path):
+def test_typing_a_secret_needs_consent_even_when_a_factory_step_forgot_the_label(tmp_path):
     factory_db, user_db = tmp_path / "factory.db", tmp_path / "user.db"
-    save_lesson(factory_db, lesson("send-message", "Password", origin="factory",
+    save_step(factory_db, step("send-message", "Password", origin="factory",
                                    action="type_secret", secret_ref="login",
                                    sensitive=Sensitivity.PASSWORD_FIELD))
-    # the shipped row loses its label (factory files are written outside save_lesson's guard)
+    # the shipped row loses its label (factory files are written outside save_step's guard)
     import sqlite3
     with sqlite3.connect(factory_db) as db:
-        db.execute("UPDATE lessons SET sensitive = NULL")
+        db.execute("UPDATE steps SET sensitive = NULL")
     desktop = FakeDesktop(controls=[button("Password")], secrets={"login": "hunter2"})
 
     result = run_flow(FLOW, desktop=desktop, user_db=user_db, factory_db=factory_db)
@@ -161,7 +161,7 @@ def test_typing_a_secret_needs_consent_even_when_a_factory_lesson_forgot_the_lab
 
 def test_a_secure_field_takes_a_consented_secret_but_nothing_else(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, secret_lesson())
+    save_step(user_db, secret_step())
     grant_consent(user_db, app="paint.exe", control="Password", action="type_secret")
     secure = FakeDesktop(controls=[button("Password", secure=True)], secrets={"login": "hunter2"})
 
@@ -170,7 +170,7 @@ def test_a_secure_field_takes_a_consented_secret_but_nothing_else(tmp_path):
     assert typed.blocked == {} and secure.delivered == [("Password", "hunter2")]
 
     plain_user_db = tmp_path / "plain.db"
-    save_lesson(plain_user_db, lesson("send-message", "Password"))  # a plain click on the secure field
+    save_step(plain_user_db, step("send-message", "Password"))  # a plain click on the secure field
     refused = FakeDesktop(controls=[button("Password", secure=True)])
 
     result = run_flow(FLOW, desktop=refused, user_db=plain_user_db)

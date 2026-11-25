@@ -11,10 +11,10 @@ from pathlib import Path
 
 import pytest
 
-from workflow_factory import Flow, Node, load_flow, save_lesson
+from workflow_factory import Flow, Node, load_flow, save_step
 from workflow_factory.api import ApiServer
 
-from fake_desktop import FakeDesktop, button, lesson
+from fake_desktop import FakeDesktop, button, step
 
 pytestmark = pytest.mark.web
 DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
@@ -26,9 +26,9 @@ HEADLESS_SHELL = glob.glob(os.path.expanduser(
 def editor(tmp_path):
     if not (DIST / "index.html").exists():
         pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
-    save_lesson(tmp_path / "user.db", lesson("open-menu", "Alpha"))
-    save_lesson(tmp_path / "user.db", lesson("save-file", "Beta"))
-    save_lesson(tmp_path / "factory.db", lesson("factory-only", "Gamma", origin="factory"))
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
+    save_step(tmp_path / "user.db", step("save-file", "Beta"))
+    save_step(tmp_path / "factory.db", step("factory-only", "Gamma", origin="factory"))
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
     server = ApiServer(tmp_path / "user.db", tmp_path / "factory.db", lambda app: desktop,
                        token="e2e-token", web_dir=DIST)
@@ -55,7 +55,7 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
         page = browser.new_page()
         page.goto(f"{server.url}/#token=e2e-token")
 
-        # palette: lessons from the user and factory layers
+        # palette: steps from the user and factory layers
         for name in ("open-menu", "save-file", "factory-only"):
             page.get_by_test_id(f"palette-{name}").wait_for()
         page.get_by_test_id("palette-open-menu").click()
@@ -73,7 +73,7 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
         page.get_by_test_id("run-status").filter(has_text="saved").wait_for()
 
         saved = load_flow(tmp_path / "user.db", None, "e2e-flow")
-        assert [n.lesson for n in saved.nodes] == ["open-menu", "save-file"]
+        assert [n.step for n in saved.nodes] == ["open-menu", "save-file"]
         assert saved.edges == [("n1", "n2")]
         assert saved.nodes[1].inputs == (("value", "str"),)
 
@@ -145,13 +145,13 @@ def test_the_pure_javascript_of_the_editor_passes_its_own_tests():
     assert done.returncode == 0, done.stdout + done.stderr
 
 
-def test_a_sensitive_lesson_is_marked_in_words_in_the_palette_not_only_by_colour(editor, tmp_path):
+def test_a_sensitive_step_is_marked_in_words_in_the_palette_not_only_by_colour(editor, tmp_path):
     from playwright.sync_api import sync_playwright
 
     from workflow_factory import Sensitivity
 
     server, folder = editor
-    save_lesson(folder / "user.db", lesson("send-message", "Send", sensitive=Sensitivity.OUTWARD_ACTION))
+    save_step(folder / "user.db", step("send-message", "Send", sensitive=Sensitivity.OUTWARD_ACTION))
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
             headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
@@ -180,8 +180,8 @@ def test_the_four_other_screens_show_their_data_and_their_actions_work(tmp_path)
     if not (DIST / "index.html").exists():
         pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
     user_db, factory_db = tmp_path / "user.db", tmp_path / "factory.db"
-    save_lesson(factory_db, lesson("open-menu", "Menu", origin="factory", factory_successes=50))
-    save_lesson(user_db, lesson("save-file", "Save"))
+    save_step(factory_db, step("open-menu", "Menu", origin="factory", factory_successes=50))
+    save_step(user_db, step("save-file", "Save"))
     grant_consent(user_db, app="paint.exe", control="Send", action="click")
     flow = Flow(id="morning", nodes=[Node("a", "save-file"), Node("b", "open-menu")])
     # Menu is missing on screen: the flow stops at b, leaving a doubt and a history row
@@ -193,7 +193,7 @@ def test_the_four_other_screens_show_their_data_and_their_actions_work(tmp_path)
             browser, page = open_page(playwright, server)
 
             page.get_by_test_id("tab-library").click()
-            row = page.get_by_test_id("lesson-row-open-menu")
+            row = page.get_by_test_id("step-row-open-menu")
             row.wait_for()
             assert "factory" in row.inner_text() and page.get_by_test_id("state-open-menu").inner_text() == "suspect"
             page.get_by_test_id("reject-open-menu").click()
@@ -234,8 +234,8 @@ def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editab
 
     if not (DIST / "index.html").exists():
         pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
-    build_factory(tmp_path / "factory.db", {"version": 1, "lessons": [], "flows": [
-        {"id": "morning-template", "nodes": [{"id": "n1", "lesson": "open-menu"}], "edges": None}]})
+    build_factory(tmp_path / "factory.db", {"version": 1, "steps": [], "flows": [
+        {"id": "morning-template", "nodes": [{"id": "n1", "step": "open-menu"}], "edges": None}]})
     server = ApiServer(tmp_path / "user.db", tmp_path / "factory.db", lambda app: None, token="e2e-token", web_dir=DIST)
     server.start()
     try:

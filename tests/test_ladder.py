@@ -8,20 +8,20 @@ from workflow_factory import (
     Locator,
     Node,
     Template,
-    find_lesson,
+    find_step,
     list_doubts,
     run_flow,
-    save_lesson,
+    save_step,
 )
 
-from fake_desktop import FakeDesktop, button, icon, lesson, pane
+from fake_desktop import FakeDesktop, button, icon, pane, step
 
-FLOW = Flow(nodes=[Node(id="n1", lesson="open-bin")])
+FLOW = Flow(nodes=[Node(id="n1", step="open-bin")])
 BIN = Locator(role="icon", name="Recycle Bin")
 
 
-def run(user_db, controls, **lesson_kw):
-    save_lesson(user_db, lesson("open-bin", "Open Recycle Bin", **lesson_kw))
+def run(user_db, controls, **step_kw):
+    save_step(user_db, step("open-bin", "Open Recycle Bin", **step_kw))
     desktop = FakeDesktop(controls=controls)
     return desktop, run_flow(FLOW, desktop=desktop, user_db=user_db)
 
@@ -34,7 +34,7 @@ def test_a_control_found_by_accessibility_is_used_without_touching_later_rungs(t
     assert desktop.calls == [("find", "button", "Open Recycle Bin", None), ("click", "Open Recycle Bin")]
 
 
-def test_when_accessibility_fails_the_derived_geometry_the_lesson_defines_is_used(tmp_path):
+def test_when_accessibility_fails_the_derived_geometry_the_step_defines_is_used(tmp_path):
     desktop, result = run(tmp_path / "user.db", [icon("Recycle Bin", 100, 100, 40, 40)],
                           derived=Derived(anchor=BIN, fx=0.5, fy=0.25))
 
@@ -47,7 +47,7 @@ def test_a_moved_icon_is_still_resolved_through_its_anchor(tmp_path):
     desktop, _ = run(tmp_path / "user.db", [icon("Recycle Bin", 400, 300, 40, 40)],
                      derived=Derived(anchor=BIN, fx=0.5, fy=0.5))
 
-    assert desktop.hits == [(420.0, 320.0)]  # same lesson, new place
+    assert desktop.hits == [(420.0, 320.0)]  # same step, new place
 
 
 def test_without_a_derived_rung_a_failed_accessibility_lookup_stops_with_a_doubt(tmp_path):
@@ -79,7 +79,7 @@ def canvas_with_template_at(x, y, width=100, height=50):
 
 def run_with_template(user_db, screen, **template_kw):
     template = Template(anchor=CANVAS, pixels=TEMPLATE, **template_kw)
-    save_lesson(user_db, lesson("open-bin", "Brush", template=template))
+    save_step(user_db, step("open-bin", "Brush", template=template))
     desktop = FakeDesktop(controls=[pane("Canvas", 0, 0, 100, 50)], captures={"Canvas": screen})
     return desktop, run_flow(FLOW, desktop=desktop, user_db=user_db)
 
@@ -106,7 +106,7 @@ def test_a_template_miss_is_bounded_by_attempts_and_queues_a_template_no_match_d
 
 def test_template_with_a_missing_region_anchor_stops_with_control_not_found(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, lesson("open-bin", "Brush", template=Template(anchor=CANVAS, pixels=TEMPLATE)))
+    save_step(user_db, step("open-bin", "Brush", template=Template(anchor=CANVAS, pixels=TEMPLATE)))
 
     result = run_flow(FLOW, desktop=FakeDesktop(controls=[]), user_db=user_db)
 
@@ -117,13 +117,13 @@ def test_template_with_a_missing_region_anchor_stops_with_control_not_found(tmp_
 DESKTOP_PANE = Locator(role="pane", name="Desktop")
 
 
-def drag_lesson(**kw):
-    return lesson("open-bin", "Report.docx", action="drag", **kw)
+def drag_step(**kw):
+    return step("open-bin", "Report.docx", action="drag", **kw)
 
 
 def test_a_drag_locates_both_ends_with_the_ladder(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, drag_lesson(drag_to=Endpoint(
+    save_step(user_db, drag_step(drag_to=Endpoint(
         locator=Locator(role="icon", name="Recycle Bin"),
         derived=Derived(anchor=DESKTOP_PANE, fx=0.9, fy=0.95))))
     desktop = FakeDesktop(controls=[button("Report.docx"), pane("Desktop", 0, 0, 1000, 500)])
@@ -136,7 +136,7 @@ def test_a_drag_locates_both_ends_with_the_ladder(tmp_path):
 
 def test_a_drag_stops_with_a_doubt_when_its_destination_cannot_be_located(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, drag_lesson(drag_to=Endpoint(locator=Locator(role="icon", name="Recycle Bin"))))
+    save_step(user_db, drag_step(drag_to=Endpoint(locator=Locator(role="icon", name="Recycle Bin"))))
     desktop = FakeDesktop(controls=[button("Report.docx")])
 
     result = run_flow(FLOW, desktop=desktop, user_db=user_db)
@@ -146,19 +146,19 @@ def test_a_drag_stops_with_a_doubt_when_its_destination_cannot_be_located(tmp_pa
     assert not any(call[0] == "drag" for call in desktop.calls)
 
 
-def test_a_drag_lesson_without_a_destination_is_rejected_when_saved(tmp_path):
+def test_a_drag_step_without_a_destination_is_rejected_when_saved(tmp_path):
     with pytest.raises(ValueError, match="drag"):
-        save_lesson(tmp_path / "user.db", drag_lesson())
+        save_step(tmp_path / "user.db", drag_step())
 
 
-def test_a_drag_destination_round_trips_through_the_lesson_store(tmp_path):
+def test_a_drag_destination_round_trips_through_the_step_store(tmp_path):
     user_db = tmp_path / "user.db"
     destination = Endpoint(locator=Locator(role="icon", name="Recycle Bin"),
                            derived=Derived(anchor=DESKTOP_PANE, fx=0.9, fy=0.95),
                            template=Template(anchor=CANVAS, pixels=TEMPLATE, min_score=0.9, max_attempts=2))
-    save_lesson(user_db, drag_lesson(drag_to=destination))
+    save_step(user_db, drag_step(drag_to=destination))
 
-    stored = find_lesson(user_db, None, "paint.exe", "open-bin").drag_to
+    stored = find_step(user_db, None, "paint.exe", "open-bin").drag_to
 
     assert stored == destination and np.array_equal(stored.template.pixels, TEMPLATE)
 
@@ -167,7 +167,7 @@ def test_a_drag_destination_round_trips_through_the_lesson_store(tmp_path):
 def test_a_derived_point_outside_the_anchor_is_rejected_so_it_can_never_act_as_an_absolute_coordinate(
         tmp_path, fx, fy):
     with pytest.raises(ValueError, match="fraction"):
-        save_lesson(tmp_path / "user.db", lesson("open-bin", "X", derived=Derived(anchor=BIN, fx=fx, fy=fy)))
+        save_step(tmp_path / "user.db", step("open-bin", "X", derived=Derived(anchor=BIN, fx=fx, fy=fy)))
 
 
 def test_a_flat_template_is_rejected_because_it_would_match_any_similar_area():
@@ -189,7 +189,7 @@ def test_colour_matters_two_patches_with_the_same_brightness_are_not_a_match(tmp
     screen = np.full((50, 100, 3), 20, dtype=np.uint8)
     screen[20:30, 30:40] = green
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, lesson("open-bin", "Brush", template=Template(anchor=CANVAS, pixels=red)))
+    save_step(user_db, step("open-bin", "Brush", template=Template(anchor=CANVAS, pixels=red)))
     desktop = FakeDesktop(controls=[pane("Canvas", 0, 0, 100, 50)], captures={"Canvas": screen})
 
     result = run_flow(FLOW, desktop=desktop, user_db=user_db)
