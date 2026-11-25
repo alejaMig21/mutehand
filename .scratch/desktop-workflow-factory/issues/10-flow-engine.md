@@ -4,11 +4,11 @@
 
 **Blocked by:** 07
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Fan-out branches and a join node that waits for all its inputs
-- [ ] An IF node routes on a measured effect
-- [ ] A node with a missing typed input does not start
-- [ ] A loop stops at its iteration cap or time cap
-- [ ] Consecutive failures stop the loop and queue one doubt
-- [ ] A consentless lesson blocks its node, not the whole flow
+- [x] Fan-out branches and a join node that waits for all its inputs
+- [x] An IF node routes on a measured effect
+- [x] A node with a missing typed input does not start
+- [x] A loop stops at its iteration cap or time cap
+- [x] Consecutive failures stop the loop and queue one doubt
+- [x] A consentless lesson blocks its node, not the whole flow

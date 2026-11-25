@@ -2,7 +2,6 @@ from fake_desktop import FakeDesktop, button, lesson
 import pytest
 from workflow_factory import (
     Flow,
-    LessonNotFound,
     Node,
     Status,
     answer_doubt,
@@ -84,10 +83,9 @@ def test_factory_lesson_measured_on_another_version_is_not_replayed_or_written(t
 def test_unknown_lesson_stops_the_flow_without_clicking(tmp_path):
     desktop = FakeDesktop(controls=[button("Menu")])
 
-    with pytest.raises(LessonNotFound):
-        run_flow(flow_for("never-taught"), desktop=desktop, user_db=tmp_path / "user.db")
+    result = run_flow(flow_for("never-taught"), desktop=desktop, user_db=tmp_path / "user.db")
 
-    assert desktop.clicks == []
+    assert result.stopped == "n1" and desktop.clicks == []
 
 
 def test_version_change_does_not_lift_a_rejection(tmp_path):
@@ -103,6 +101,7 @@ def test_version_change_does_not_lift_a_rejection(tmp_path):
 def test_missing_factory_database_means_no_factory_lessons(tmp_path):
     desktop = FakeDesktop(controls=[button("Menu")])
 
-    with pytest.raises(LessonNotFound):
-        run_flow(flow_for("open-menu"), desktop=desktop, user_db=tmp_path / "user.db",
-                 factory_db=tmp_path / "absent-factory.db")
+    result = run_flow(flow_for("open-menu"), desktop=desktop, user_db=tmp_path / "user.db",
+                      factory_db=tmp_path / "absent-factory.db")
+
+    assert result.stopped == "n1" and desktop.clicks == []  # no lesson anywhere, and no crash

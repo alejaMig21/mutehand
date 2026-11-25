@@ -228,7 +228,7 @@ def _row_to_lesson(row) -> Lesson:
     )
 
 
-ACTIONS = ("click", "drag", "type_secret")
+ACTIONS = ("click", "drag", "type_secret", "type_value")
 
 
 def validate_lesson(lesson: Lesson) -> None:

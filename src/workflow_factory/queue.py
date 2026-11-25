@@ -30,8 +30,8 @@ CREATE TABLE IF NOT EXISTS doubts (
 );
 CREATE TABLE IF NOT EXISTS checkpoints (
     flow_id TEXT PRIMARY KEY,
-    last_node TEXT NOT NULL,
-    definition TEXT NOT NULL  -- the flow's nodes when saved: an edited flow is not resumed
+    state TEXT NOT NULL,  -- JSON: done nodes, effects, loop progress, run context
+    definition TEXT NOT NULL  -- the flow when saved: an edited flow is not resumed
 );
 """
 
@@ -99,18 +99,18 @@ def has_open_doubt(user_db: Path, flow_id: str) -> bool:
                           (flow_id,)).fetchone() is not None
 
 
-def save_checkpoint(user_db: Path, flow_id: str, last_node: str, definition: str) -> None:
+def save_checkpoint(user_db: Path, flow_id: str, state: dict, definition: str) -> None:
     with closing(_connect(user_db)) as db, db:
         db.execute("INSERT OR REPLACE INTO checkpoints VALUES (?, ?, ?)",
-                   (flow_id, last_node, definition))
+                   (flow_id, json.dumps(state), definition))
 
 
-def load_checkpoint(user_db: Path, flow_id: str, definition: str) -> str | None:
-    """Last completed node, only when the flow still has the definition it was saved with."""
+def load_checkpoint(user_db: Path, flow_id: str, definition: str) -> dict | None:
+    """Saved state, only when the flow still has the definition it was saved with."""
     with closing(_connect(user_db)) as db:
-        row = db.execute("SELECT last_node, definition FROM checkpoints WHERE flow_id = ?",
+        row = db.execute("SELECT state, definition FROM checkpoints WHERE flow_id = ?",
                          (flow_id,)).fetchone()
-    return row[0] if row and row[1] == definition else None
+    return json.loads(row[0]) if row and row[1] == definition else None
 
 
 def clear_checkpoint(user_db: Path, flow_id: str) -> None:

@@ -57,6 +57,7 @@ def test_click_paint_open_settings_through_run_flow_stores_a_measured_effect(tmp
 
     result = run_flow(flow, desktop=desktop, user_db=db_path)
 
+    assert not result.blocked, result.blocked
     assert result.effects["open-settings"] == Effect.REVEALED
     with closing(sqlite3.connect(db_path)) as db:
         assert db.execute("SELECT count(*) FROM node_results").fetchone() == (1,)

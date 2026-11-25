@@ -1,12 +1,14 @@
 """Fake desktop port: the single test seam. No real screen access."""
 
+from datetime import UTC, datetime, timedelta
+
 from workflow_factory import Lesson, Locator
 from workflow_factory.desktop import AppKey, Control, Frame
 
 
 class FakeDesktop:
     def __init__(
-        self, controls, reveals=None, removes=None, now_value="2026-01-01T00:00:00Z",
+        self, controls, reveals=None, removes=None, seconds_per_action=0, vanish_after=None,
         app="paint.exe", version="1.0", frame=None, secrets=None, captures=None,
     ):
         self._captures = captures or {}  # anchor name -> pixel array the fake "screen" shows there
@@ -17,7 +19,10 @@ class FakeDesktop:
         self._controls = list(controls)
         self._reveals = reveals or {}  # (role, name) -> controls shown after a click
         self._removes = removes or {}  # (role, name) -> controls hidden after a click
-        self._now = now_value
+        self._start = datetime(2026, 1, 1, tzinfo=UTC)
+        self._seconds_per_action = seconds_per_action  # the fake clock advances with every action
+        self._vanish_after = vanish_after  # after this many clicks every control disappears
+        self._actions = 0
         self.clicks = []
         self.typed = []
         self.hits = []  # absolute screen points the fake derived internally; the core never sees them
@@ -32,6 +37,9 @@ class FakeDesktop:
         return None
 
     def click(self, control):
+        self._actions += 1
+        if self._vanish_after is not None and self._actions >= self._vanish_after:
+            self._controls = []
         self.calls.append(("click", control.name))
         self.clicks.append(control)
         key = (control.role, control.name)
@@ -69,7 +77,8 @@ class FakeDesktop:
         return self._frame
 
     def now(self):
-        return self._now
+        moment = self._start + timedelta(seconds=self._actions * self._seconds_per_action)
+        return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def button(name, automation_id="", readable=True, secure=False):
