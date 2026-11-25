@@ -161,6 +161,8 @@ def teach_step(
     before = set(desktop.snapshot())
     if action == "type_secret":
         desktop.type_secret(control, secret_ref)
+    elif action == "read_value":
+        desktop.read_text(control)  # a read acts on nothing: the step is taught by proving the control answers
     else:
         desktop.click(control)
     effect = effect_of(before, set(desktop.snapshot()))

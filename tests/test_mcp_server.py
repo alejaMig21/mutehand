@@ -10,6 +10,7 @@ from fake_desktop import FakeDesktop, button
 EXPECTED_TOOLS = {
     "observe_app", "mark_app_private", "set_study_order", "study_status", "teach_step", "teach_lesson",  # teach_lesson: old name
     "list_open_doubts", "answer_doubt", "record_consent",
+    "save_recipe", "list_recipes", "apply_recipe", "mark_step_known",
 }
 FORBIDDEN = ("force", "trace", "screenshot", "debug")
 
@@ -89,3 +90,18 @@ def test_adapter_errors_reach_the_tutor_as_a_code_only_never_as_screen_text(tmp_
 
     assert payload(result) == {"status": "error", "code": "ACTION_FAILED"}
     assert "Maria" not in json.dumps(payload(result))
+
+
+def test_a_recipe_taught_through_the_tools_is_applied_to_a_second_app(tmp_path):
+    desktops = {"a.exe": FakeDesktop(controls=[button("Open"), button("Go")], app="a.exe"),
+                "b.exe": FakeDesktop(controls=[button("Open"), button("Start")], app="b.exe")}
+    server = server_for(tmp_path, desktops)
+    holes = [{"hole": "open", "role": "button", "control_name": "Open"}, {"hole": "go", "role": "button", "control_name": "Go"}]
+    ask(server, "save_recipe", {"name": "launch", "holes": holes})
+
+    first = payload(ask(server, "apply_recipe", {"app": "a.exe", "recipe": "launch"}))
+    second = payload(ask(server, "apply_recipe", {"app": "b.exe", "recipe": "launch",
+                                                  "fills": {"go": {"role": "button", "control_name": "Start"}}}))
+
+    assert first["status"] == "applied" and second["status"] == "applied"
+    assert payload(ask(server, "list_recipes"))["result"][0]["name"] == "launch"

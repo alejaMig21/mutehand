@@ -21,6 +21,8 @@ Open Claude Code in this folder (`claude`). The first time it asks you to approv
 server that this folder's `.mcp.json` declares: say yes once. Then ask the agent to study an app. The tutor tools
 are `observe_app`, `mark_app_private`, `set_study_order`, `study_status`, `list_open_doubts`, `answer_doubt`,
 `record_consent` and `teach_step` (`teach_lesson` still works as its old name). Each taught step appears in the editor as a node.
+Recipes (one pattern taught once, reused on another app by teaching only the controls that differ) use `save_recipe`, `list_recipes`,
+`apply_recipe` and `mark_step_known`.
 
 ## Other commands
 

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 
-from workflow_factory import tutor
+from workflow_factory import recipes, tutor
 from workflow_factory.agent_desktop import AgentDesktop, AgentDesktopError
 from workflow_factory.desktop import Desktop
 from workflow_factory.paths import default_user_db
@@ -95,6 +95,31 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPSer
             user_db, desktop_for(app), doubt_id, name, Locator(role, control_name, automation_id),
             action=action, sensitive=Sensitivity(sensitive) if sensitive else None,
             secret_ref=secret_ref)
+
+    @server.tool(name="save_recipe")
+    def save_recipe(name: str, holes: list[dict]) -> None:
+        """Save a recipe: the ordered holes of a pattern. Each hole: hole (its name), role, control_name,
+        automation_id?, action? (click by default), sensitive?. The control is the one the first app uses."""
+        recipes.save_recipe(user_db, name, holes)
+
+    @server.tool(name="list_recipes")
+    def list_recipes() -> list[dict]:
+        """The saved recipes with their holes."""
+        return recipes.list_recipes(user_db)
+
+    @server.tool(name="apply_recipe")
+    @_code_only
+    def apply_recipe(app: str, recipe: str, fills: dict | None = None) -> dict:
+        """Teach a recipe's steps on this app, one per hole in order, measuring each. `fills` gives only the
+        holes whose control differs here: {hole: {role, control_name, automation_id?}} or {hole: {known_step}}.
+        A hole that fails leaves a doubt naming it and the recipe stops there. A sensitive hole returns
+        consent_required: ask the user, call record_consent, then apply again (finished holes are not repeated)."""
+        return recipes.apply_recipe(user_db, desktop_for(app), recipe, fills)
+
+    @server.tool(name="mark_step_known")
+    def mark_step_known(app: str, recipe: str, hole: str, step: str) -> None:
+        """This app already has a step for the hole: bind it, without acting on the app."""
+        recipes.mark_step_known(user_db, app, recipe, hole, step)
 
     @server.tool(name="record_consent")
     def record_consent(app: str, control: str, action: str) -> None:
