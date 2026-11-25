@@ -218,6 +218,7 @@ def _walk(node: dict):
             name=node.get("name", ""),
             automation_id=_native_id(node.get("native_id")),
             ref=node.get("ref_id", ""),
+            secure="secure" in node.get("states", []),
         )
     for child in node.get("children", []):
         yield from _walk(child)
@@ -265,7 +266,7 @@ class AgentDesktop:
             name=match.get("name", ""),
             automation_id=_native_id(match.get("native_id")) or automation_id or "",
             ref=match.get("ref_id", ""),
-            # ponytail: "secure" state is a guess until research ticket 23 confirms how the CLI marks secure fields
+            # research 23: the CLI lists a password field with states ["secure"], hides its name and value
             secure="secure" in match.get("states", []),
         )
 
@@ -314,12 +315,21 @@ class AgentDesktop:
         box = self._call(["get", anchor.ref, "--property", "bounds"])["value"]
         return capture_region(round(box["x"]), round(box["y"]), round(box["width"]), round(box["height"]))
 
+    def _enter(self, control: Control, text: str) -> None:
+        """Insert text; a field with no semantic insert (only SetValue) is refused without focus, so set its value."""
+        try:
+            self._call(["type", control.ref, "--stdin"], stdin=text)
+        except AgentDesktopError as error:
+            if error.code != "POLICY_DENIED":
+                raise
+            self._call(["set-value", control.ref, "--stdin"], stdin=text)  # replaces the content, takes no focus
+
     def type_text(self, control: Control, text: str) -> None:
-        self._call(["type", control.ref, "--stdin"], stdin=text)
+        self._enter(control, text)
 
     def type_secret(self, control: Control, secret_ref: str) -> None:
         try:
-            self._call(["type", control.ref, "--stdin"], stdin=self._read_secret(secret_ref))
+            self._enter(control, self._read_secret(secret_ref))
         except AgentDesktopError as error:
             # the CLI message could echo what was typed: keep the code, drop the text
             raise AgentDesktopError(error.code, "typing a secret failed; details withheld") from None

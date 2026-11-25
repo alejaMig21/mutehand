@@ -449,3 +449,57 @@ def test_pressing_the_emergency_hotkey_stops_a_flow_that_is_about_to_run(tmp_pat
     result = run_flow(Flow(id="f", nodes=[Node("a", "a")]), desktop=desktop, user_db=tmp_path / "user.db")
 
     assert result.emergency is True and desktop.clicks == []
+
+
+DENIED = {"ok": False, "error": {"code": "POLICY_DENIED", "message": "Target is not actionable: supported_action"}}
+
+
+def test_a_field_that_only_accepts_a_value_is_filled_with_set_value_through_stdin():
+    runner = FakeRunner(DENIED, ok({}))
+
+    AgentDesktop("notepad.exe", runner, settle_seconds=0).type_text(Control("edit", "Body", ref="@s1:e2"), "hello")
+
+    assert runner.calls == [(["type", "@s1:e2", "--stdin"], "hello"), (["set-value", "@s1:e2", "--stdin"], "hello")]
+
+
+def test_a_secret_falls_back_to_set_value_through_stdin_and_never_through_arguments():
+    runner = FakeRunner(DENIED, ok({}))
+
+    AgentDesktop("notepad.exe", runner, settle_seconds=0, read_secret=lambda ref: "s3cret").type_secret(
+        Control("edit", "", ref="@s1:e3", secure=True), "ref:one")
+
+    assert [call[0] for call in runner.calls] == [["type", "@s1:e3", "--stdin"], ["set-value", "@s1:e3", "--stdin"]]
+    assert all(call[1] == "s3cret" for call in runner.calls)
+    assert all("s3cret" not in arg for call in runner.calls for arg in call[0])
+
+
+def test_only_a_policy_denial_triggers_the_set_value_fallback():
+    runner = FakeRunner({"ok": False, "error": {"code": "STALE_REF", "message": "gone"}})
+
+    with pytest.raises(AgentDesktopError) as error:
+        AgentDesktop("notepad.exe", runner, settle_seconds=0).type_text(Control("edit", "Body", ref="@s1:e2"), "hello")
+
+    assert error.value.code == "STALE_REF"
+    assert len(runner.calls) == 1
+
+
+def test_a_failed_secret_fallback_withholds_the_details():
+    runner = FakeRunner(DENIED, {"ok": False, "error": {"code": "ACTION_FAILED", "message": "echo s3cret"}})
+
+    with pytest.raises(AgentDesktopError) as error:
+        AgentDesktop("notepad.exe", runner, settle_seconds=0, read_secret=lambda ref: "s3cret").type_secret(
+            Control("edit", "", ref="@s1:e3", secure=True), "ref:one")
+
+    assert "s3cret" not in str(error.value)
+
+
+def test_snapshot_marks_a_password_field_as_secure_and_leaves_a_plain_one_alone():
+    tree = {"role": "window", "children": [
+        {"role": "textfield", "name": "Plain field", "ref_id": "@s1:e1", "states": ["focused"]},
+        {"role": "textfield", "ref_id": "@s1:e2", "states": ["secure"]},
+    ]}
+    runner = FakeRunner(ok({"snapshot_id": "s1", "tree": tree}))
+
+    controls = AgentDesktop("notepad.exe", runner, settle_seconds=0).snapshot()
+
+    assert [(c.ref, c.secure) for c in controls if c.role == "textfield"] == [("@s1:e1", False), ("@s1:e2", True)]
