@@ -7,7 +7,10 @@ Run again with any Python that has opencv-python-headless for the OpenCV numbers
 Nothing here touches the screen: frames are synthetic arrays.
 """
 
+import pathlib
 import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))  # the shipped matcher is timed even from an environment without the project installed
 import time
 
 import numpy as np
@@ -122,26 +125,35 @@ def available_methods():
 # ------------------------------------------------------------------ the experiments
 
 def timing(methods, budget_seconds=60):
-    print("\n## Time per search (seconds, best of 3; '-' = skipped because the first run took too long)")
-    print(f"{'method':38s}" + "".join(f"{w}x{h:<9d}" for w, h in SIZES))
+    """Prints a Markdown table; paste it into the research note as is, never retype a figure."""
+    print("\n## Time per search (seconds, best of 3; a method whose first run exceeds the budget is timed once)")
+    print("| method | " + " | ".join(f"{w}x{h}" for w, h in SIZES) + " |")
+    print("|---|" + "---|" * len(SIZES))
     template = make_template()
+    results = {}
     for name, method in methods.items():
-        row = f"{name:38s}"
+        row = []
         for width, height in SIZES:
             region = plant(make_frame(width, height), template, width // 2, height // 2)
             started = time.perf_counter()
             method(region, template)
-            first = time.perf_counter() - started
-            if first > budget_seconds:
-                row += f"{first:<14.2f}"  # a single slow run is enough to know
-                continue
-            best = first
-            for _ in range(2):
-                started = time.perf_counter()
-                method(region, template)
-                best = min(best, time.perf_counter() - started)
-            row += f"{best:<14.3f}"
-        print(row)
+            best = time.perf_counter() - started
+            if best <= budget_seconds:
+                for _ in range(2):
+                    started = time.perf_counter()
+                    method(region, template)
+                    best = min(best, time.perf_counter() - started)
+            row.append(best)
+        results[name] = row
+        print(f"| {name} | " + " | ".join(f"{v:.3f}" for v in row) + " |")
+    shipped = results.get("shipped ladder.match_template")
+    opencv = [v for k, v in results.items() if k.startswith("opencv")]
+    if shipped and opencv:  # the ratio the verdict quotes, computed here so a note cannot misquote it
+        best_cv = [min(column) for column in zip(*opencv)]
+        print("\nshipped / fastest OpenCV: " + ", ".join(f"{w}x{h} {a / b:.2f}x" for (w, h), a, b in zip(SIZES, shipped, best_cv)))
+
+
+DEFAULT_MIN_SCORE = 0.95  # the default threshold of the ladder; `weak` = right place, score below it, so the ladder would reject it
 
 
 def robustness(methods):
@@ -174,15 +186,16 @@ def robustness(methods):
     scenarios = {"exact": (clean, at), "brighter +30": (brighter(clean), at), "inverted theme": (inverted(clean), at),
                  "scaled 125%": (scaled(clean), scaled_at), "37% occluded": (occluded(clean), at),
                  "noise sigma 8": (noisy(clean), at)}
-    print(f"{'scenario':18s}" + "".join(f"{name[:26]:28s}" for name in methods))
+    print("| scenario | " + " | ".join(methods) + " |")
+    print("|---|" + "---|" * len(methods))
     for scenario, (image, expected) in scenarios.items():
-        row = f"{scenario:18s}"
+        cells = []
         for name, method in methods.items():
             location, score = method(image, template)
-            hit = location is not None and abs(location[0] - expected[0]) <= 3 and abs(location[1] - expected[1]) <= 3
-            row += f"{('FOUND' if hit else 'missed') + f' score {score:.2f}':28s}"
-        print(row)
-
+            right_place = location is not None and abs(location[0] - expected[0]) <= 3 and abs(location[1] - expected[1]) <= 3
+            verdict = "found" if right_place and score >= DEFAULT_MIN_SCORE else "weak" if right_place else "missed"
+            cells.append(f"{verdict} {score:.2f}")
+        print(f"| {scenario} | " + " | ".join(cells) + " |")
 
 if __name__ == "__main__":
     chosen = available_methods()
