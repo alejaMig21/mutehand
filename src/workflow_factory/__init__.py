@@ -1,29 +1,17 @@
 from workflow_factory.consent import Consent, consents, grant_consent, revoke_consent
 from workflow_factory.flow import (
     USER_IDLE_SECONDS,
-    clear_emergency_stop,
-    emergency_stop,
     Effect,
     Flow,
     Node,
     RunResult,
+    clear_emergency_stop,
+    emergency_stop,
     run_flow,
 )
 from workflow_factory.flows import list_flows, load_flow, save_flow
 from workflow_factory.hotkey import EmergencyHotkey
 from workflow_factory.knowledge import build_factory, duplicate_flow, export_knowledge, import_knowledge
-from workflow_factory.tutor import (
-    StudyStep,
-    answer_doubt_by_teaching,
-    list_open_doubts,
-    mark_private,
-    observe,
-    record_consent,
-    set_study_order,
-    study_status,
-    teach_lesson,
-)
-from workflow_factory.queue import Doubt, Reason, answer_doubt, dismiss_doubt, list_doubts, list_runs
 from workflow_factory.lessons import (
     Derived,
     Endpoint,
@@ -39,6 +27,18 @@ from workflow_factory.lessons import (
     reject_lesson,
     restore_lesson,
     save_lesson,
+)
+from workflow_factory.queue import Doubt, Reason, answer_doubt, dismiss_doubt, list_doubts, list_runs
+from workflow_factory.tutor import (
+    StudyStep,
+    answer_doubt_by_teaching,
+    list_open_doubts,
+    mark_private,
+    observe,
+    record_consent,
+    set_study_order,
+    study_status,
+    teach_lesson,
 )
 
 __all__ = [

@@ -8,6 +8,7 @@ import math
 import random
 import time
 from collections.abc import Callable
+from itertools import pairwise
 
 # Starting values, not yet tuned on a real session: a short hop should take ~0.1 s, a long one ~0.4 s.
 STEP_DELAY_SECONDS = 0.006  # pause between cursor steps
@@ -47,7 +48,7 @@ def generate_bezier_curve(
     steps = max(15, int(distance / 15))
     if max_step:
         legs = [(x0, y0), (cx1, cy1), (cx2, cy2), (x3, y3)]
-        steps = max(steps, math.ceil(3 * max(math.dist(p, q) for p, q in zip(legs, legs[1:])) / max_step))
+        steps = max(steps, math.ceil(3 * max(math.dist(p, q) for p, q in pairwise(legs)) / max_step))
     points = []
     for i in range(steps + 1):
         t = i / steps

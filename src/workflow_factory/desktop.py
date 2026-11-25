@@ -56,10 +56,10 @@ class Frame:
             dtype=float,
         )
 
-    def distance(self, other: "Frame") -> float:
+    def distance(self, other: Frame) -> float:
         return float(np.linalg.norm(self.vector() - other.vector()))
 
-    def matches(self, other: "Frame", mask: tuple[str, ...]) -> bool:
+    def matches(self, other: Frame, mask: tuple[str, ...]) -> bool:
         """Within tolerance on every field of the relevance mask; other fields are ignored."""
         picked = [FRAME_FIELDS.index(name) for name in mask]
         gap = np.abs(self.vector() - other.vector())

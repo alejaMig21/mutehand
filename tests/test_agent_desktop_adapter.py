@@ -2,6 +2,7 @@ import json
 import re
 
 import pytest
+
 from workflow_factory.agent_desktop import (
     SNAPSHOT_ATTEMPTS,
     AgentDesktop,
@@ -11,8 +12,9 @@ from workflow_factory.agent_desktop import (
     system_frame_fields,
     version_of_pid,
 )
-from fake_desktop import FakeDesktop
 from workflow_factory.desktop import AppKey, Control, Desktop, Frame
+
+from fake_desktop import FakeDesktop
 
 FORBIDDEN_FLAGS = {"--force", "--trace", "--trace-strict", "--screenshot", "--debug"}
 
@@ -427,8 +429,9 @@ def test_the_cursor_is_read_in_physical_pixels_even_from_a_dpi_unaware_thread():
 def test_pressing_the_emergency_hotkey_stops_a_flow_that_is_about_to_run(tmp_path):
     import threading
 
-    from fake_desktop import FakeDesktop, button, lesson
     from workflow_factory import EmergencyHotkey, Flow, Node, emergency_stop, run_flow, save_lesson
+
+    from fake_desktop import FakeDesktop, button, lesson
 
     pressed = threading.Event()
 

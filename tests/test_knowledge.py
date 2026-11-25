@@ -4,7 +4,7 @@ import sys
 
 import numpy as np
 import pytest
-from fake_desktop import FakeDesktop, button, lesson
+
 from workflow_factory import (
     Derived,
     Endpoint,
@@ -26,6 +26,8 @@ from workflow_factory import (
     save_lesson,
 )
 from workflow_factory.desktop import Frame
+
+from fake_desktop import FakeDesktop, button, lesson
 
 TEMPLATE_PIXELS = np.random.default_rng(5).integers(0, 255, (6, 6, 3), dtype=np.uint8)
 

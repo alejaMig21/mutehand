@@ -1,0 +1,8 @@
+#!/bin/sh
+# Lint gate. Enable once per clone: git config core.hooksPath .githooks
+# A missing linter is a failure, not a skip: run `uv sync` first.
+if ! uv run --no-sync ruff --version >/dev/null 2>&1; then
+  echo "pre-commit: ruff is not installed in the project environment. Run: uv sync" >&2
+  exit 1
+fi
+uv run --no-sync ruff check || { echo "pre-commit: ruff found problems (fix them, or run: uv run ruff check --fix)" >&2; exit 1; }

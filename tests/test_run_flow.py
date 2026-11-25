@@ -1,8 +1,9 @@
 import sqlite3
 from contextlib import closing
 
-from fake_desktop import FakeDesktop, button, lesson
 from workflow_factory import Flow, Node, run_flow, save_lesson
+
+from fake_desktop import FakeDesktop, button, lesson
 
 
 def one_node_flow():

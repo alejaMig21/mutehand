@@ -5,7 +5,6 @@ no screenshot or trace option, and no tool that returns a secret value (ADR 0002
 """
 
 import functools
-import os
 from collections.abc import Callable
 from pathlib import Path
 

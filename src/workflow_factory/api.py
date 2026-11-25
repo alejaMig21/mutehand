@@ -17,11 +17,11 @@ from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from workflow_factory.consent import consents, revoke_consent
 from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.flow import run_flow
 from workflow_factory.flows import flow_from_dict, flow_to_dict, list_flows, load_flow, save_flow
 from workflow_factory.knowledge import duplicate_flow
-from workflow_factory.consent import consents, revoke_consent
 from workflow_factory.lessons import (
     find_lesson,
     lesson_report,

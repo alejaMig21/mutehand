@@ -1,8 +1,10 @@
 import numpy as np
 import pytest
-from fake_desktop import FakeDesktop, button, lesson
+
 from workflow_factory import Flow, Node, find_lesson, run_flow, save_lesson
 from workflow_factory.desktop import Frame
+
+from fake_desktop import FakeDesktop, button, lesson
 
 FLOW = Flow(nodes=[Node(id="n1", lesson="open-menu")])
 

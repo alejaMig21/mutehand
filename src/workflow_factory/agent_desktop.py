@@ -12,8 +12,8 @@ import shutil
 import subprocess
 import time
 import winreg
-from ctypes import wintypes
 from collections.abc import Callable
+from ctypes import wintypes
 from datetime import UTC, datetime
 from pathlib import Path
 

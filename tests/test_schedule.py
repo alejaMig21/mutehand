@@ -1,11 +1,11 @@
 import re
 import subprocess
-import sys
 import time
 import uuid
 from pathlib import Path
 
 import pytest
+
 from workflow_factory.schedule import (
     SCHEDULE_PREFIX,
     create_schedule,

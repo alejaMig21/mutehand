@@ -1,8 +1,8 @@
 import json
 import time
 
-from fake_desktop import FakeDesktop, button, lesson
 from test_api import call, make_server
+
 from workflow_factory import (
     Flow,
     Node,
@@ -13,6 +13,8 @@ from workflow_factory import (
     save_flow,
     save_lesson,
 )
+
+from fake_desktop import FakeDesktop, button, lesson
 
 
 def run_and_wait(server, flow_id, context=None):

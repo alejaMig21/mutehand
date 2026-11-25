@@ -10,9 +10,11 @@ import os
 from pathlib import Path
 
 import pytest
-from fake_desktop import FakeDesktop, button, lesson
+
 from workflow_factory import Flow, Node, load_flow, save_lesson
 from workflow_factory.api import ApiServer
+
+from fake_desktop import FakeDesktop, button, lesson
 
 pytestmark = pytest.mark.web
 DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
@@ -101,6 +103,7 @@ def test_the_editor_without_the_token_cannot_read_anything(editor):
 
 def test_a_loaded_flow_keeps_unique_node_ids_and_drops_the_previous_run_colours(editor):
     from playwright.sync_api import sync_playwright
+
     from workflow_factory import save_flow
 
     server, tmp_path = editor
@@ -144,6 +147,7 @@ def test_the_pure_javascript_of_the_editor_passes_its_own_tests():
 
 def test_a_sensitive_lesson_is_marked_in_words_in_the_palette_not_only_by_colour(editor, tmp_path):
     from playwright.sync_api import sync_playwright
+
     from workflow_factory import Sensitivity
 
     server, folder = editor
@@ -170,6 +174,7 @@ def open_page(playwright, server):
 
 def test_the_four_other_screens_show_their_data_and_their_actions_work(tmp_path):
     from playwright.sync_api import sync_playwright
+
     from workflow_factory import grant_consent, run_flow
 
     if not (DIST / "index.html").exists():
@@ -224,6 +229,7 @@ def test_the_four_other_screens_show_their_data_and_their_actions_work(tmp_path)
 
 def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editable_copy(tmp_path):
     from playwright.sync_api import sync_playwright
+
     from workflow_factory import build_factory
 
     if not (DIST / "index.html").exists():

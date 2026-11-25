@@ -1,5 +1,5 @@
 import pytest
-from fake_desktop import FakeDesktop, button, lesson
+
 from workflow_factory import (
     Flow,
     Node,
@@ -9,6 +9,8 @@ from workflow_factory import (
     run_flow,
     save_lesson,
 )
+
+from fake_desktop import FakeDesktop, button, lesson
 
 
 def teach(user_db, **controls):

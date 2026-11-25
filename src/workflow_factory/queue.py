@@ -5,9 +5,9 @@ import json
 import os
 import sqlite3
 from contextlib import closing
+from ctypes import wintypes
 from dataclasses import dataclass
 from enum import StrEnum
-from ctypes import wintypes
 from pathlib import Path
 
 
@@ -165,7 +165,7 @@ def list_runs(user_db: Path, flow_id: str | None = None, limit: int = 50) -> lis
     if flow_id:
         query, args = query + " WHERE flow_id = ?", (flow_id,)
     with closing(_connect(user_db)) as db:
-        runs = [dict(zip(("id", "flow_id", "started_at", "finished_at", "status", "stopped_node"), row))
+        runs = [dict(zip(("id", "flow_id", "started_at", "finished_at", "status", "stopped_node"), row, strict=True))
                 for row in db.execute(query + " ORDER BY id DESC LIMIT ?", (*args, limit))]
         for run in runs:
             run["nodes"] = [

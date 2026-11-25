@@ -1,8 +1,7 @@
 import json
-from pathlib import Path
 
 import pytest
-from fake_desktop import FakeDesktop, button, lesson
+
 from workflow_factory import (
     Flow,
     Node,
@@ -22,6 +21,8 @@ from workflow_factory.workday import (
     main,
     write_report,
 )
+
+from fake_desktop import FakeDesktop, button, lesson
 
 
 def setup(tmp_path, nodes=None, lessons=(("open-menu", "Alpha"), ("save-file", "Beta"))):

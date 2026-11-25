@@ -34,8 +34,9 @@ def test_loading_an_unknown_flow_gives_none_even_without_a_factory_file(tmp_path
 
 
 def test_a_factory_file_that_has_lessons_but_no_flows_is_simply_empty_of_flows(tmp_path):
-    from fake_desktop import lesson
     from workflow_factory import list_flows, save_lesson
+
+    from fake_desktop import lesson
 
     factory_db, user_db = tmp_path / "factory.db", tmp_path / "user.db"
     save_lesson(factory_db, lesson("x", "X", origin="factory"))  # a factory file with only lessons

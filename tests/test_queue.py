@@ -2,8 +2,7 @@ import sqlite3
 from contextlib import closing
 
 import pytest
-from fake_desktop import FakeDesktop, button, field, lesson
-from workflow_factory.desktop import Frame
+
 from workflow_factory import (
     Doubt,
     Flow,
@@ -15,6 +14,9 @@ from workflow_factory import (
     run_flow,
     save_lesson,
 )
+from workflow_factory.desktop import Frame
+
+from fake_desktop import FakeDesktop, button, field, lesson
 
 
 def flow(flow_id, *lesson_names):

@@ -1,15 +1,15 @@
-from fake_desktop import FakeDesktop, button, lesson
 from workflow_factory import (
     USER_IDLE_SECONDS,
     Flow,
     Node,
-    answer_doubt,
     clear_emergency_stop,
     emergency_stop,
     list_doubts,
     run_flow,
     save_lesson,
 )
+
+from fake_desktop import FakeDesktop, button, lesson
 
 
 def two_physical_nodes(user_db):

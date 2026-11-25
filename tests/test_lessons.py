@@ -1,5 +1,4 @@
-from fake_desktop import FakeDesktop, button, lesson
-import pytest
+
 from workflow_factory import (
     Flow,
     Node,
@@ -9,6 +8,8 @@ from workflow_factory import (
     run_flow,
     save_lesson,
 )
+
+from fake_desktop import FakeDesktop, button, lesson
 
 
 def flow_for(lesson_name):

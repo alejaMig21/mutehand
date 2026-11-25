@@ -1,17 +1,19 @@
 import pytest
-from fake_desktop import FakeDesktop, button, lesson
+
 from workflow_factory import (
     Consent,
     Flow,
-    answer_doubt,
     Node,
     Sensitivity,
+    answer_doubt,
     consents,
     grant_consent,
     revoke_consent,
     run_flow,
     save_lesson,
 )
+
+from fake_desktop import FakeDesktop, button, lesson
 
 FLOW = Flow(nodes=[Node(id="n1", lesson="send-message")])
 

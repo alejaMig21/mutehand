@@ -1,11 +1,10 @@
 """Consent gate: a sensitive lesson runs only with a consent record for its app, control, action."""
 
+import re
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
-
-import re
 
 from workflow_factory.lessons import Lesson, Sensitivity
 

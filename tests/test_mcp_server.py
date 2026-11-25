@@ -1,9 +1,11 @@
 import asyncio
 import json
 
-from fake_desktop import FakeDesktop, button
 from mcp.client import Client
+
 from workflow_factory.mcp_server import build_server
+
+from fake_desktop import FakeDesktop, button
 
 EXPECTED_TOOLS = {
     "observe_app", "mark_app_private", "set_study_order", "study_status", "teach_lesson",

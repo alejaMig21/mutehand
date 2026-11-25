@@ -22,6 +22,7 @@ from contextlib import closing, nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
+from itertools import pairwise
 from pathlib import Path
 
 from workflow_factory.consent import is_permitted
@@ -153,7 +154,7 @@ class Flow:
     @property
     def all_edges(self) -> list[tuple[str, str]]:
         edges = (list(self.edges) if self.edges is not None
-                 else [(a.id, b.id) for a, b in zip(self.nodes, self.nodes[1:])])
+                 else [(a.id, b.id) for a, b in pairwise(self.nodes)])
         for node in self.nodes:
             if node.kind == "if":  # it routes to its targets, and waits for the node it tests
                 edges += [(node.id, target) for target in (node.then, node.otherwise) if target]
@@ -220,7 +221,7 @@ class _State:
                 "choices": self.choices, "loops": self.loops, "context": self.context}
 
     @classmethod
-    def load(cls, data: dict) -> "_State":
+    def load(cls, data: dict) -> _State:
         return cls(set(data["done"]), set(data["skipped"]), data["effects"], data["choices"],
                    data["loops"], data["context"])
 

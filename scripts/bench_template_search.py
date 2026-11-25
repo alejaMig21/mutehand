@@ -10,7 +10,8 @@ Nothing here touches the screen: frames are synthetic arrays.
 import pathlib
 import sys
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))  # the shipped matcher is timed even from an environment without the project installed
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
+# the shipped matcher is timed even from an environment without the project installed
 import time
 
 import numpy as np
@@ -149,8 +150,9 @@ def timing(methods, budget_seconds=60):
     shipped = results.get("shipped ladder.match_template")
     opencv = [v for k, v in results.items() if k.startswith("opencv")]
     if shipped and opencv:  # the ratio the verdict quotes, computed here so a note cannot misquote it
-        best_cv = [min(column) for column in zip(*opencv)]
-        print("\nshipped / fastest OpenCV: " + ", ".join(f"{w}x{h} {a / b:.2f}x" for (w, h), a, b in zip(SIZES, shipped, best_cv)))
+        best_cv = [min(column) for column in zip(*opencv, strict=True)]
+        ratios = (f"{w}x{h} {a / b:.2f}x" for (w, h), a, b in zip(SIZES, shipped, best_cv, strict=True))
+        print("\nshipped / fastest OpenCV: " + ", ".join(ratios))
 
 
 DEFAULT_MIN_SCORE = 0.95  # the default threshold of the ladder; `weak` = right place, score below it, so the ladder would reject it
@@ -190,7 +192,7 @@ def robustness(methods):
     print("|---|" + "---|" * len(methods))
     for scenario, (image, expected) in scenarios.items():
         cells = []
-        for name, method in methods.items():
+        for method in methods.values():
             location, score = method(image, template)
             right_place = location is not None and abs(location[0] - expected[0]) <= 3 and abs(location[1] - expected[1]) <= 3
             verdict = "found" if right_place and score >= DEFAULT_MIN_SCORE else "weak" if right_place else "missed"

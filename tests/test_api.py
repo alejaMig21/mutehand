@@ -4,9 +4,11 @@ import urllib.error
 import urllib.request
 
 import pytest
-from fake_desktop import FakeDesktop, button, lesson
+
 from workflow_factory import Flow, Node, save_flow, save_lesson
 from workflow_factory.api import ApiServer
+
+from fake_desktop import FakeDesktop, button, lesson
 
 
 def make_server(tmp_path, desktop=None, **kw):

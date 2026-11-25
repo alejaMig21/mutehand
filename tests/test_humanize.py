@@ -1,5 +1,6 @@
 import math
 import random
+from itertools import pairwise
 
 from workflow_factory.humanize import MAX_STEP_PIXELS, STEP_DELAY_SECONDS, generate_bezier_curve, glide
 
@@ -28,7 +29,7 @@ def test_the_curve_stays_inside_the_bounds_when_given_some():
 def test_no_two_neighbouring_points_are_further_apart_than_max_step():
     path = curve(max_step=25)
 
-    assert max(math.dist(a, b) for a, b in zip(path, path[1:])) <= 25 + 2  # +2: integer rounding
+    assert max(math.dist(a, b) for a, b in pairwise(path)) <= 25 + 2  # +2: integer rounding
 
 
 def test_glide_walks_from_start_to_destination_in_small_steps_pausing_after_each():
@@ -37,5 +38,5 @@ def test_glide_walks_from_start_to_destination_in_small_steps_pausing_after_each
     glide((0, 0), (300, 200), moved.append, rng=random.Random(3), sleep=pauses.append)
 
     assert moved[0] == (0, 0) and moved[-1] == (300, 200)
-    assert max(math.dist(a, b) for a, b in zip(moved, moved[1:])) <= MAX_STEP_PIXELS + 2
+    assert max(math.dist(a, b) for a, b in pairwise(moved)) <= MAX_STEP_PIXELS + 2
     assert pauses == [STEP_DELAY_SECONDS] * len(moved)

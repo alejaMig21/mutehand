@@ -1,8 +1,7 @@
-import threading
 
 import numpy as np
 import pytest
-from fake_desktop import FakeDesktop, button, icon, lesson
+
 from workflow_factory import (
     Derived,
     Endpoint,
@@ -16,6 +15,8 @@ from workflow_factory import (
     save_flow,
     save_lesson,
 )
+
+from fake_desktop import FakeDesktop, button, icon, lesson
 
 TWO_PARALLEL_BRANCHES = dict(id="f", edges=[])  # no edge between the nodes: they may run together
 

@@ -8,6 +8,7 @@ import sqlite3
 from contextlib import closing
 
 import pytest
+
 from workflow_factory import (
     Effect,
     Flow,
@@ -27,6 +28,7 @@ pytestmark = pytest.mark.live
 
 def test_capture_of_a_real_control_returns_its_pixels_and_a_crop_of_it_is_found_again():
     import numpy as np
+
     from workflow_factory.ladder import match_template
 
     desktop = AgentDesktop("mspaint.exe")

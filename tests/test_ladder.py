@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from fake_desktop import FakeDesktop, button, icon, lesson, pane
+
 from workflow_factory import (
     Derived,
     Endpoint,
@@ -13,6 +13,8 @@ from workflow_factory import (
     run_flow,
     save_lesson,
 )
+
+from fake_desktop import FakeDesktop, button, icon, lesson, pane
 
 FLOW = Flow(nodes=[Node(id="n1", lesson="open-bin")])
 BIN = Locator(role="icon", name="Recycle Bin")
@@ -289,7 +291,7 @@ def test_a_template_made_of_thin_lines_is_found_among_look_alike_decoys():
 
     region = big_region(lines(6), (900, 400))
     # decoys use another spacing: a shifted copy of the same periodic pattern would BE the template
-    for period, spot in zip([5, 7, 8, 9], [(100, 100), (500, 700), (1500, 200), (1700, 900)]):
+    for period, spot in zip([5, 7, 8, 9], [(100, 100), (500, 700), (1500, 200), (1700, 900)], strict=True):
         region[spot[1]:spot[1] + 24, spot[0]:spot[0] + 24] = lines(period)
 
     assert match_template(region, lines(6), 0.95) == ((900 + 12) / 1920, (400 + 12) / 1080)

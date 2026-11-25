@@ -1,5 +1,5 @@
 import pytest
-from fake_desktop import FakeDesktop, button, field, lesson
+
 from workflow_factory import (
     Flow,
     Locator,
@@ -19,6 +19,8 @@ from workflow_factory import (
     study_status,
     teach_lesson,
 )
+
+from fake_desktop import FakeDesktop, button, field, lesson
 
 
 def test_observe_summarises_a_normal_app_by_roles_and_control_names(tmp_path):
