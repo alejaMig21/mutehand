@@ -250,3 +250,27 @@ def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editab
             browser.close()
     finally:
         server.stop()
+
+
+def test_the_quit_button_asks_first_then_ends_the_server_and_says_so_on_screen(editor):
+    from playwright.sync_api import sync_playwright
+
+    server, _ = editor
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
+        page = browser.new_page()
+        asked, accept = [], {"now": False}
+        page.on("dialog", lambda dialog: (asked.append(dialog.message), dialog.accept() if accept["now"] else dialog.dismiss()))
+        page.goto(server.url + "/#token=e2e-token")
+
+        page.get_by_test_id("quit").click()
+        page.wait_for_timeout(500)
+        assert len(asked) == 1 and not server.quit_requested.is_set()  # asked, and "cancel" changed nothing
+
+        accept["now"] = True
+        page.get_by_test_id("quit").click()
+        page.get_by_test_id("closed").wait_for()
+        assert server.quit_requested.is_set()
+        assert "closed" in page.get_by_test_id("closed").inner_text().lower()
+        browser.close()

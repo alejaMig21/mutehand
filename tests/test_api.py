@@ -254,3 +254,11 @@ def test_a_factory_template_can_be_duplicated_into_the_user_layer_through_the_ap
     assert created[0] == 201 and created[1]["id"] == "mine"
     assert again[0] == 400 and "already exists" in again[1]["error"]
     assert listing == [{"id": "mine", "origin": "local"}, {"id": "morning-template", "origin": "factory"}]
+
+
+def test_quit_needs_the_token_and_then_flags_the_server_to_stop(server):
+    assert call(server, "/api/quit", method="POST", token=None)[0] == 401
+    assert not server.quit_requested.is_set()
+
+    assert call(server, "/api/quit", method="POST")[0] == 202
+    assert server.quit_requested.is_set()

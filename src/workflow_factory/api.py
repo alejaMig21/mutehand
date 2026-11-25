@@ -51,6 +51,7 @@ class ApiServer:
         self.max_active_runs, self.max_kept_runs = max_active_runs, max_kept_runs
         self._runs: dict[str, dict] = {}
         self._runs_lock = threading.Lock()
+        self.quit_requested = threading.Event()  # set by POST /api/quit; whoever started the server waits on it
         self._http = ThreadingHTTPServer((host, port), self._handler())
         self._thread = threading.Thread(target=self._http.serve_forever, name="editor-api", daemon=True)
 
@@ -174,6 +175,9 @@ class ApiServer:
                     self._send(500, {"error": "internal error"})
 
             def _route(self, method: str, path: str):
+                if method == "POST" and path == "/api/quit":
+                    api.quit_requested.set()
+                    return self._send(202, {"ok": True})
                 if method == "GET" and path == "/api/lessons":
                     return self._send(200, [_lesson_view(lesson) for lesson in
                                             list_lessons(api.user_db, api.factory_db)])

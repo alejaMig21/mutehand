@@ -4,13 +4,20 @@ A deterministic apprentice for Windows desktop apps. A tutor (Claude Code, throu
 once; afterwards it replays them without any language model, in **flows** you can edit, run, schedule and stop.
 Terms are in `GLOSSARY.md`, decisions in `docs/adr/`, research notes in `docs/research/`.
 
+## Open it
+
+Double-click `Install.cmd` once. It puts a **Workflow Factory** shortcut on your Desktop and in the Start Menu
+(it needs `uv sync` to have been run once). From then on, double-click the shortcut: the editor opens in your
+browser with no console window, a second click opens the same one, and **Quit** in the top bar closes it.
+
 ## Status
 
-All 16 build tickets and the research tickets are done and tested (`uv run pytest -q`, plus opt-in live tests
-with `-m live`). It is not packaged: there are no installed commands, everything runs as
-`uv run python -m workflow_factory.<module>`. No lessons are taught yet; the data folder starts empty.
-The example flow Vivaldi -> Word -> Telegram is not built: its research is in `docs/research/17` to `19`.
-Writing into a Word page needs real input (paste or keys), which the adapter does not do yet (`docs/research/18`).
+All 16 build tickets and the research tickets are done and tested (`uv run pytest -q`, plus opt-in tests with
+`-m live` and `-m web`). The product shell is in progress (`.scratch/usable-product/spec.md`): the launcher and
+shortcut are done; teaching from the app, scheduling from the app and a first-run check are next. Until teaching
+is in the app, the tutor still has to be connected by hand (see the table below). No lessons are taught yet; the
+data folder starts empty. The example flow Vivaldi -> Word -> Telegram is not built (research in `docs/research/17`
+to `19`); writing into a Word page needs the paste step of ticket 29.
 
 ## Setup
 
@@ -22,7 +29,7 @@ It needs the `agent-desktop` command line tool (the adapter looks for the real e
 Your data lives in `%LOCALAPPDATA%\workflow-factory` (`user.db`, `reports\`); set `WORKFLOW_FACTORY_USER_DB` or
 `WORKFLOW_FACTORY_REPORT_DIR` to move it.
 
-## Use it
+## Use it from a terminal (advanced)
 
 | What | Command |
 |---|---|
