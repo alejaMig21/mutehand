@@ -6,7 +6,11 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved (logged-in part waits for the person)
 
-- [ ] A working launch route recorded, or a verdict that none exists
-- [ ] Which controls are reachable by accessibility, as roles and counts
+- [x] A working launch route recorded, or a verdict that none exists
+- [x] Which controls are reachable by accessibility, as roles and counts
+
+## Answer
+
+See `docs/research/19-telegram-launch-and-reading.md`. Launch route works: `agent-desktop launch "<abs path>" --arg=-workdir --arg=<dir> --arg=-many` (own instance, window in about 10 s, no --activate). Accessibility exposes Telegram widgets by name and Qt class (login screen: 25 nodes, 7 buttons). Not run: the person's logged-in profile, so chat list and message box reachability stays open until they allow it.
