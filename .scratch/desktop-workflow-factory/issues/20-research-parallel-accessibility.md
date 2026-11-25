@@ -6,7 +6,11 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Experiment with two apps in parallel, results recorded
-- [ ] Verdict on whether nodes without physical input can safely overlap
+- [x] Experiment with two apps in parallel, results recorded
+- [x] Verdict on whether nodes without physical input can safely overlap
+
+## Answer
+
+See `docs/research/20-parallel-accessibility-actions.md`. Two windows can be read and written at the same time with no crossed values or errors (30/30 rounds). Reads never touch the foreground; `click` and `set-value` can take it even in headless mode, so accessibility writes are not "no physical input". Decision moved to ticket 24.
