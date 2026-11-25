@@ -9,17 +9,22 @@ from workflow_factory.flow import (
 )
 from workflow_factory.queue import Doubt, Reason, answer_doubt, dismiss_doubt, list_doubts
 from workflow_factory.lessons import (
+    Derived,
+    Endpoint,
     Lesson,
     Locator,
     Origin,
     Sensitivity,
     Status,
+    Template,
     find_lesson,
     restore_lesson,
     save_lesson,
 )
 
 __all__ = [
+    "Template",
+    "Derived", "Endpoint",
     "Consent", "Sensitivity", "consents", "grant_consent", "revoke_consent",
     "Doubt", "Reason", "answer_doubt", "dismiss_doubt", "list_doubts", "Effect", "Flow", "Lesson", "LessonNotFound", "Locator", "Node",
     "Origin", "RunResult", "Status", "find_lesson", "restore_lesson", "run_flow", "save_lesson",

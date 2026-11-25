@@ -22,6 +22,24 @@ from workflow_factory.agent_desktop import AgentDesktop, AgentDesktopError
 
 pytestmark = pytest.mark.live
 
+# Paint is shared by these tests: the capture test runs first because the next one opens Settings.
+
+
+def test_capture_of_a_real_control_returns_its_pixels_and_a_crop_of_it_is_found_again():
+    import numpy as np
+    from workflow_factory.ladder import match_template
+
+    desktop = AgentDesktop("mspaint.exe")
+    anchor = desktop.find("button", "Open settings", "SettingsButton")
+
+    pixels = desktop.capture(anchor)
+    crop = pixels[8:24, 8:24]
+    point = match_template(pixels, crop, 0.99)
+
+    assert pixels.ndim == 3 and pixels.shape[2] == 3 and pixels.dtype == np.uint8
+    assert pixels.shape[0] >= 24 and pixels.shape[1] >= 24 and pixels.std() > 0
+    assert point == ((8 + 8) / pixels.shape[1], (8 + 8) / pixels.shape[0])
+
 
 def test_click_paint_open_settings_through_run_flow_stores_a_measured_effect(tmp_path):
     desktop = AgentDesktop("mspaint.exe")
@@ -58,3 +76,4 @@ def test_missing_control_in_real_paint_stops_the_flow_with_a_text_free_doubt(tmp
     assert result.stopped == "n1"
     assert doubt.reason == "control_not_found" and doubt.capture.get("button", 0) >= 1
     assert "Open settings" not in repr(doubt) and b"Open settings" not in db_path.read_bytes()
+

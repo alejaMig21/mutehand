@@ -1,5 +1,6 @@
 """Lesson store: one table per SQLite file (user knowledge, factory knowledge)."""
 
+import base64
 import io
 import json
 import sqlite3
@@ -32,6 +33,9 @@ CREATE TABLE IF NOT EXISTS lessons (
     capture BLOB,  -- canvas pixels, numpy .npy bytes
     sensitive TEXT,  -- Sensitivity category or NULL
     secret_ref TEXT, -- reference into the Windows credential store, never the value
+    derived TEXT,    -- JSON of Derived (rung 2) or NULL
+    template TEXT,   -- JSON of Template (rung 3; pixels as base64 .npy) or NULL
+    drag_to TEXT,    -- JSON of the drag destination Endpoint or NULL
     PRIMARY KEY (app, name)
 )
 """
@@ -49,7 +53,7 @@ CREATE TABLE IF NOT EXISTS lesson_state (
 """
 COLUMNS = (
     "app, version, name, precondition, action, role, control_name, automation_id,"
-    " effect, origin, status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref"
+    " effect, origin, status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref, derived, template, drag_to"
 )
 PLACEHOLDERS = ", ".join("?" * (COLUMNS.count(",") + 1))
 # Below REJECTED_BELOW a lesson is rejected; everything else that is not trusted is suspect.
@@ -85,6 +89,44 @@ class Locator:
 
 
 @dataclass(frozen=True)
+class Derived:
+    """Rung 2: a point given as fractions of an anchor control that is re-located each time."""
+
+    anchor: Locator
+    fx: float
+    fy: float
+
+
+@dataclass(frozen=True)
+class Template:
+    """Rung 3: a stored image fragment searched for inside the anchor's region only."""
+
+    anchor: Locator  # the search region is this control's area
+    pixels: np.ndarray = field(compare=False)
+    min_score: float = 0.95  # 1.0 is a pixel-exact match
+    max_attempts: int = 3  # captures tried before giving up
+
+    def __post_init__(self):
+        if not 0 <= self.min_score <= 1:
+            raise ValueError("min_score must be between 0 and 1")
+        if self.max_attempts < 1:
+            raise ValueError("max_attempts must be at least 1")
+        if self.pixels.ndim != 3 or self.pixels.size == 0:
+            raise ValueError("template pixels must be a non-empty height x width x channels array")
+        if self.pixels.std() < 2:  # a flat patch matches any area of similar colour
+            raise ValueError("template is too flat to search for")
+
+
+@dataclass(frozen=True)
+class Endpoint:
+    """Where an action lands, with the rungs the lesson defines."""
+
+    locator: Locator
+    derived: Derived | None = None
+    template: Template | None = None
+
+
+@dataclass(frozen=True)
 class Lesson:
     app: str
     version: str
@@ -102,6 +144,59 @@ class Lesson:
     capture: np.ndarray | None = field(default=None, compare=False)
     sensitive: Sensitivity | None = None
     secret_ref: str | None = None
+    derived: Derived | None = None
+    template: Template | None = None
+    drag_to: Endpoint | None = None  # the destination of a drag, located with its own ladder
+
+    @property
+    def endpoint(self) -> Endpoint:
+        return Endpoint(self.locator, self.derived, self.template)
+
+
+def _load_derived(raw):
+    if not raw:
+        return None
+    data = json.loads(raw)
+    return Derived(anchor=Locator(**data["anchor"]), fx=data["fx"], fy=data["fy"])
+
+
+def _dump_endpoint(endpoint):
+    if endpoint is None:
+        return None
+    return json.dumps({
+        "locator": asdict(endpoint.locator),
+        "derived": json.loads(json.dumps(asdict(endpoint.derived))) if endpoint.derived else None,
+        "template": json.loads(_dump_template(endpoint.template)) if endpoint.template else None,
+    })
+
+
+def _load_endpoint(raw):
+    if not raw:
+        return None
+    data = json.loads(raw)
+    return Endpoint(
+        locator=Locator(**data["locator"]),
+        derived=_load_derived(json.dumps(data["derived"])) if data["derived"] else None,
+        template=_load_template(json.dumps(data["template"])) if data["template"] else None,
+    )
+
+
+def _dump_template(template):
+    if template is None:
+        return None
+    return json.dumps({
+        "anchor": asdict(template.anchor), "min_score": template.min_score,
+        "max_attempts": template.max_attempts,
+        "pixels": base64.b64encode(_pack(template.pixels)).decode(),
+    })
+
+
+def _load_template(raw):
+    if not raw:
+        return None
+    data = json.loads(raw)
+    return Template(anchor=Locator(**data["anchor"]), pixels=_unpack(base64.b64decode(data["pixels"])),
+                    min_score=data["min_score"], max_attempts=data["max_attempts"])
 
 
 def _pack(capture):
@@ -118,7 +213,7 @@ def _unpack(blob):
 
 def _row_to_lesson(row) -> Lesson:
     (app, version, name, precondition, action, role, control, automation_id, effect, origin,
-     status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref) = row
+     status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref, derived, template, drag_to) = row
     return Lesson(
         app=app, version=version, name=name, precondition=precondition, action=action,
         locator=Locator(role, control, automation_id), effect=effect,
@@ -128,10 +223,18 @@ def _row_to_lesson(row) -> Lesson:
         mask=tuple(json.loads(mask)) if mask else FRAME_FIELDS,
         capture=_unpack(capture),
         sensitive=Sensitivity(sensitive) if sensitive else None, secret_ref=secret_ref,
+        derived=_load_derived(derived), template=_load_template(template),
+        drag_to=_load_endpoint(drag_to),
     )
 
 
 def save_lesson(db_path: Path, lesson: Lesson) -> None:
+    for endpoint in (lesson.endpoint, lesson.drag_to):
+        derived = endpoint.derived if endpoint else None
+        if derived and not (0 <= derived.fx <= 1 and 0 <= derived.fy <= 1):
+            raise ValueError("a derived point is a fraction of its anchor (0..1), never a screen coordinate")
+    if lesson.action == "drag" and lesson.drag_to is None:
+        raise ValueError("a drag lesson needs a destination (drag_to)")
     if lesson.secret_ref and lesson.sensitive != Sensitivity.PASSWORD_FIELD:
         raise ValueError("a lesson that types a secret must be marked as a password_field")
     unknown = [name for name in lesson.mask if name not in FRAME_FIELDS]
@@ -147,7 +250,9 @@ def save_lesson(db_path: Path, lesson: Lesson) -> None:
              str(lesson.status), lesson.factory_successes, lesson.factory_failures,
              json.dumps(asdict(lesson.frame)) if lesson.frame else None,
              json.dumps(list(lesson.mask)), _pack(lesson.capture),
-             str(lesson.sensitive) if lesson.sensitive else None, lesson.secret_ref),
+             str(lesson.sensitive) if lesson.sensitive else None, lesson.secret_ref,
+             json.dumps(asdict(lesson.derived)) if lesson.derived else None,
+             _dump_template(lesson.template), _dump_endpoint(lesson.drag_to)),
         )
 
 

@@ -15,6 +15,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+import numpy as np
+
 from workflow_factory.desktop import AppKey, Control, Frame
 
 Runner = Callable[[list[str], str | None], str]
@@ -115,6 +117,44 @@ def read_secret(ref: str) -> str:
         ctypes.windll.advapi32.CredFree(pointer)
 
 
+class _BitmapInfoHeader(ctypes.Structure):
+    _fields_ = [
+        ("biSize", wintypes.DWORD), ("biWidth", wintypes.LONG), ("biHeight", wintypes.LONG),
+        ("biPlanes", wintypes.WORD), ("biBitCount", wintypes.WORD), ("biCompression", wintypes.DWORD),
+        ("biSizeImage", wintypes.DWORD), ("biXPelsPerMeter", wintypes.LONG),
+        ("biYPelsPerMeter", wintypes.LONG), ("biClrUsed", wintypes.DWORD),
+        ("biClrImportant", wintypes.DWORD),
+    ]
+
+
+def capture_region(x: int, y: int, width: int, height: int) -> np.ndarray:
+    """RGB pixels of a screen rectangle (physical px), read with GDI. Reads only, sends no input."""
+    user32, gdi32 = ctypes.windll.user32, ctypes.windll.gdi32
+    handle = ctypes.c_void_p
+    for name, restype in (("GetDC", handle), ("CreateCompatibleDC", handle),
+                          ("CreateCompatibleBitmap", handle), ("SelectObject", handle)):
+        getattr(user32 if name == "GetDC" else gdi32, name).restype = restype
+    user32.SetThreadDpiAwarenessContext.restype = handle
+    previous = user32.SetThreadDpiAwarenessContext(handle(-4))  # per-monitor v2: coordinates are physical
+    screen = user32.GetDC(None)
+    memory = gdi32.CreateCompatibleDC(handle(screen))
+    bitmap = gdi32.CreateCompatibleBitmap(handle(screen), width, height)
+    try:
+        gdi32.SelectObject(handle(memory), handle(bitmap))
+        # SRCCOPY | CAPTUREBLT: also captures layered windows
+        if not gdi32.BitBlt(handle(memory), 0, 0, width, height, handle(screen), x, y, 0x00CC0020 | 0x40000000):
+            raise AgentDesktopError("CAPTURE_FAILED", f"{width}x{height} at {x},{y}")
+        header = _BitmapInfoHeader(ctypes.sizeof(_BitmapInfoHeader), width, -height, 1, 32, 0)
+        buffer = ctypes.create_string_buffer(width * height * 4)
+        gdi32.GetDIBits(handle(memory), handle(bitmap), 0, height, buffer, ctypes.byref(header), 0)
+    finally:
+        gdi32.DeleteObject(handle(bitmap))
+        gdi32.DeleteDC(handle(memory))
+        user32.ReleaseDC(None, handle(screen))
+        user32.SetThreadDpiAwarenessContext(previous)
+    return np.frombuffer(buffer, np.uint8).reshape(height, width, 4)[:, :, 2::-1].copy()  # BGRA -> RGB
+
+
 def _native_id(raw) -> str:
     # real CLI publishes {"kind": "automation_id", "value": "Save"}
     return raw.get("value", "") if isinstance(raw, dict) else raw or ""
@@ -177,6 +217,28 @@ class AgentDesktop:
     def click(self, control: Control) -> None:
         self._call(["click", control.ref])
         time.sleep(self._settle)  # let the app repaint before the effect is measured
+
+    def _point(self, anchor: Control, fraction: tuple[float, float] | None) -> tuple[int, int]:
+        """Screen point at a fraction of the anchor's current bounds (centre when None)."""
+        fx, fy = fraction or (0.5, 0.5)
+        box = self._call(["get", anchor.ref, "--property", "bounds"])["value"]
+        return round(box["x"] + fx * box["width"]), round(box["y"] + fy * box["height"])
+
+    def click_at(self, anchor: Control, fx: float, fy: float) -> None:
+        """Physical click inside the anchor (never an absolute point from the caller)."""
+        x, y = self._point(anchor, (fx, fy))
+        self._call(["--headed", "mouse-click", "--xy", f"{x},{y}"])
+        time.sleep(self._settle)
+
+    def drag(self, source: Control, source_point, destination: Control, destination_point) -> None:
+        (x1, y1), (x2, y2) = self._point(source, source_point), self._point(destination, destination_point)
+        self._call(["--headed", "drag", "--from-xy", f"{x1},{y1}", "--to-xy", f"{x2},{y2}"])
+        time.sleep(self._settle)
+
+    def capture(self, anchor: Control) -> np.ndarray:
+        time.sleep(self._settle)  # a retry is only useful if the screen had time to change
+        box = self._call(["get", anchor.ref, "--property", "bounds"])["value"]
+        return capture_region(round(box["x"]), round(box["y"]), round(box["width"]), round(box["height"]))
 
     def type_text(self, control: Control, text: str) -> None:
         self._call(["type", control.ref, "--stdin"], stdin=text)

@@ -327,3 +327,29 @@ def test_a_cli_error_while_typing_a_secret_never_repeats_the_cli_message():
 
     assert caught.value.code == "ACTION_FAILED"
     assert "hunter2" not in str(caught.value)
+
+
+def test_click_at_turns_a_fraction_of_the_anchor_into_a_physical_click_inside_it():
+    bounds = ok({"value": {"x": 2620.0, "y": 75.0, "width": 32.0, "height": 32.0}})
+    runner = FakeRunner(bounds, ok({}))
+
+    AgentDesktop("mspaint.exe", runner, settle_seconds=0).click_at(
+        Control("icon", "Recycle Bin", ref="@s1:e5"), 0.5, 0.25)
+
+    assert runner.calls == [
+        (["get", "@s1:e5", "--property", "bounds"], None),
+        (["--headed", "mouse-click", "--xy", "2636,83"], None),  # 2620 + 16, 75 + 8
+    ]
+
+
+def test_drag_computes_both_ends_from_their_own_anchors_and_centres_when_no_fraction_is_given():
+    source = ok({"value": {"x": 100.0, "y": 200.0, "width": 40.0, "height": 20.0}})
+    destination = ok({"value": {"x": 1000.0, "y": 500.0, "width": 100.0, "height": 100.0}})
+    runner = FakeRunner(source, destination, ok({}))
+
+    AgentDesktop("explorer.exe", runner, settle_seconds=0).drag(
+        Control("listitem", "Report.docx", ref="@s1:e1"), None,
+        Control("pane", "Desktop", ref="@s1:e9"), (0.9, 0.5))
+
+    assert runner.calls[2] == (
+        ["--headed", "drag", "--from-xy", "120,210", "--to-xy", "1090,550"], None)

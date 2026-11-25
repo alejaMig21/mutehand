@@ -1,0 +1,208 @@
+import numpy as np
+import pytest
+from fake_desktop import FakeDesktop, button, icon, lesson, pane
+from workflow_factory import (
+    Derived,
+    Endpoint,
+    Flow,
+    Locator,
+    Node,
+    Template,
+    find_lesson,
+    list_doubts,
+    run_flow,
+    save_lesson,
+)
+
+FLOW = Flow(nodes=[Node(id="n1", lesson="open-bin")])
+BIN = Locator(role="icon", name="Recycle Bin")
+
+
+def run(user_db, controls, **lesson_kw):
+    save_lesson(user_db, lesson("open-bin", "Open Recycle Bin", **lesson_kw))
+    desktop = FakeDesktop(controls=controls)
+    return desktop, run_flow(FLOW, desktop=desktop, user_db=user_db)
+
+
+def test_a_control_found_by_accessibility_is_used_without_touching_later_rungs(tmp_path):
+    desktop, result = run(tmp_path / "user.db", [button("Open Recycle Bin"), icon("Recycle Bin", 0, 0, 40, 40)],
+                          derived=Derived(anchor=BIN, fx=0.5, fy=0.5))
+
+    assert result.stopped is None
+    assert desktop.calls == [("find", "button", "Open Recycle Bin", None), ("click", "Open Recycle Bin")]
+
+
+def test_when_accessibility_fails_the_derived_geometry_the_lesson_defines_is_used(tmp_path):
+    desktop, result = run(tmp_path / "user.db", [icon("Recycle Bin", 100, 100, 40, 40)],
+                          derived=Derived(anchor=BIN, fx=0.5, fy=0.25))
+
+    assert result.stopped is None
+    assert ("click_at", "Recycle Bin", 0.5, 0.25) in desktop.calls
+    assert desktop.hits == [(120.0, 110.0)]
+
+
+def test_a_moved_icon_is_still_resolved_through_its_anchor(tmp_path):
+    desktop, _ = run(tmp_path / "user.db", [icon("Recycle Bin", 400, 300, 40, 40)],
+                     derived=Derived(anchor=BIN, fx=0.5, fy=0.5))
+
+    assert desktop.hits == [(420.0, 320.0)]  # same lesson, new place
+
+
+def test_without_a_derived_rung_a_failed_accessibility_lookup_stops_with_a_doubt(tmp_path):
+    user_db = tmp_path / "user.db"
+    desktop, result = run(user_db, [icon("Recycle Bin", 100, 100, 40, 40)])
+
+    assert result.stopped == "n1"
+    assert [d.reason for d in list_doubts(user_db)] == ["control_not_found"]
+    assert not any(call[0] == "click_at" for call in desktop.calls)
+
+
+def test_a_derived_rung_whose_anchor_is_missing_stops_with_a_doubt(tmp_path):
+    user_db = tmp_path / "user.db"
+    desktop, result = run(user_db, [], derived=Derived(anchor=BIN, fx=0.5, fy=0.5))
+
+    assert result.stopped == "n1"
+    assert [d.reason for d in list_doubts(user_db)] == ["control_not_found"]
+
+
+CANVAS = Locator(role="pane", name="Canvas")
+TEMPLATE = np.random.default_rng(0).integers(0, 255, (10, 10, 3), dtype=np.uint8)
+
+
+def canvas_with_template_at(x, y, width=100, height=50):
+    pixels = np.full((height, width, 3), 20, dtype=np.uint8)
+    pixels[y:y + 10, x:x + 10] = TEMPLATE
+    return pixels
+
+
+def run_with_template(user_db, screen, **template_kw):
+    template = Template(anchor=CANVAS, pixels=TEMPLATE, **template_kw)
+    save_lesson(user_db, lesson("open-bin", "Brush", template=template))
+    desktop = FakeDesktop(controls=[pane("Canvas", 0, 0, 100, 50)], captures={"Canvas": screen})
+    return desktop, run_flow(FLOW, desktop=desktop, user_db=user_db)
+
+
+def test_a_template_found_in_the_anchor_region_resolves_to_a_fraction_of_that_region(tmp_path):
+    desktop, result = run_with_template(tmp_path / "user.db", canvas_with_template_at(30, 20))
+
+    assert result.stopped is None
+    assert ("click_at", "Canvas", 0.35, 0.5) in desktop.calls  # centre (35, 25) of a 100x50 region
+    assert desktop.hits == [(35.0, 25.0)]
+
+
+def test_a_template_miss_is_bounded_by_attempts_and_queues_a_template_no_match_doubt(tmp_path):
+    user_db = tmp_path / "user.db"
+    blank = np.full((50, 100, 3), 20, dtype=np.uint8)
+
+    desktop, result = run_with_template(user_db, blank, max_attempts=2)
+
+    assert result.stopped == "n1"
+    assert [d.reason for d in list_doubts(user_db)] == ["template_no_match"]
+    assert [c for c in desktop.calls if c[0] == "capture"] == [("capture", "Canvas")] * 2
+    assert not any(call[0] == "click_at" for call in desktop.calls)
+
+
+def test_template_with_a_missing_region_anchor_stops_with_control_not_found(tmp_path):
+    user_db = tmp_path / "user.db"
+    save_lesson(user_db, lesson("open-bin", "Brush", template=Template(anchor=CANVAS, pixels=TEMPLATE)))
+
+    result = run_flow(FLOW, desktop=FakeDesktop(controls=[]), user_db=user_db)
+
+    assert result.stopped == "n1"
+    assert [d.reason for d in list_doubts(user_db)] == ["control_not_found"]
+
+
+DESKTOP_PANE = Locator(role="pane", name="Desktop")
+
+
+def drag_lesson(**kw):
+    return lesson("open-bin", "Report.docx", action="drag", **kw)
+
+
+def test_a_drag_locates_both_ends_with_the_ladder(tmp_path):
+    user_db = tmp_path / "user.db"
+    save_lesson(user_db, drag_lesson(drag_to=Endpoint(
+        locator=Locator(role="icon", name="Recycle Bin"),
+        derived=Derived(anchor=DESKTOP_PANE, fx=0.9, fy=0.95))))
+    desktop = FakeDesktop(controls=[button("Report.docx"), pane("Desktop", 0, 0, 1000, 500)])
+
+    result = run_flow(FLOW, desktop=desktop, user_db=user_db)
+
+    assert result.stopped is None
+    assert ("drag", "Report.docx", None, "Desktop", (0.9, 0.95)) in desktop.calls
+
+
+def test_a_drag_stops_with_a_doubt_when_its_destination_cannot_be_located(tmp_path):
+    user_db = tmp_path / "user.db"
+    save_lesson(user_db, drag_lesson(drag_to=Endpoint(locator=Locator(role="icon", name="Recycle Bin"))))
+    desktop = FakeDesktop(controls=[button("Report.docx")])
+
+    result = run_flow(FLOW, desktop=desktop, user_db=user_db)
+
+    assert result.stopped == "n1"
+    assert [d.reason for d in list_doubts(user_db)] == ["control_not_found"]
+    assert not any(call[0] == "drag" for call in desktop.calls)
+
+
+def test_a_drag_lesson_without_a_destination_is_rejected_when_saved(tmp_path):
+    with pytest.raises(ValueError, match="drag"):
+        save_lesson(tmp_path / "user.db", drag_lesson())
+
+
+def test_a_drag_destination_round_trips_through_the_lesson_store(tmp_path):
+    user_db = tmp_path / "user.db"
+    destination = Endpoint(locator=Locator(role="icon", name="Recycle Bin"),
+                           derived=Derived(anchor=DESKTOP_PANE, fx=0.9, fy=0.95),
+                           template=Template(anchor=CANVAS, pixels=TEMPLATE, min_score=0.9, max_attempts=2))
+    save_lesson(user_db, drag_lesson(drag_to=destination))
+
+    stored = find_lesson(user_db, None, "paint.exe", "open-bin").drag_to
+
+    assert stored == destination and np.array_equal(stored.template.pixels, TEMPLATE)
+
+
+@pytest.mark.parametrize("fx, fy", [(120, 0.5), (0.5, -1), (1.5, 0.5)])
+def test_a_derived_point_outside_the_anchor_is_rejected_so_it_can_never_act_as_an_absolute_coordinate(
+        tmp_path, fx, fy):
+    with pytest.raises(ValueError, match="fraction"):
+        save_lesson(tmp_path / "user.db", lesson("open-bin", "X", derived=Derived(anchor=BIN, fx=fx, fy=fy)))
+
+
+def test_a_flat_template_is_rejected_because_it_would_match_any_similar_area():
+    with pytest.raises(ValueError, match="flat"):
+        Template(anchor=CANVAS, pixels=np.zeros((10, 10, 3), dtype=np.uint8))
+
+
+@pytest.mark.parametrize("kw", [{"min_score": -1.0}, {"min_score": 1.5}, {"max_attempts": 0}])
+def test_template_limits_must_make_sense(kw):
+    with pytest.raises(ValueError):
+        Template(anchor=CANVAS, pixels=TEMPLATE, **kw)
+
+
+def test_colour_matters_two_patches_with_the_same_brightness_are_not_a_match(tmp_path):
+    red = np.zeros((10, 10, 3), dtype=np.uint8)
+    red[..., 0] = 90
+    red[::2, ::2] = (200, 0, 0)  # some texture so it is not flat
+    green = red[..., [1, 0, 2]]  # channels swapped: same grey level, different colour
+    screen = np.full((50, 100, 3), 20, dtype=np.uint8)
+    screen[20:30, 30:40] = green
+    user_db = tmp_path / "user.db"
+    save_lesson(user_db, lesson("open-bin", "Brush", template=Template(anchor=CANVAS, pixels=red)))
+    desktop = FakeDesktop(controls=[pane("Canvas", 0, 0, 100, 50)], captures={"Canvas": screen})
+
+    result = run_flow(FLOW, desktop=desktop, user_db=user_db)
+
+    assert result.stopped == "n1"
+    assert [d.reason for d in list_doubts(user_db)] == ["template_no_match"]
+
+
+def test_a_template_that_appears_twice_is_ambiguous_and_queues_a_doubt_instead_of_guessing(tmp_path):
+    screen = canvas_with_template_at(10, 5)
+    screen[30:40, 70:80] = TEMPLATE  # the same icon a second time
+    user_db = tmp_path / "user.db"
+
+    desktop, result = run_with_template(user_db, screen)
+
+    assert result.stopped == "n1"
+    assert [d.reason for d in list_doubts(user_db)] == ["template_no_match"]
+    assert not any(call[0] == "click_at" for call in desktop.calls)

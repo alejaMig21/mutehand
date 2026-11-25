@@ -7,8 +7,9 @@ from workflow_factory.desktop import AppKey, Control, Frame
 class FakeDesktop:
     def __init__(
         self, controls, reveals=None, removes=None, now_value="2026-01-01T00:00:00Z",
-        app="paint.exe", version="1.0", frame=None, secrets=None,
+        app="paint.exe", version="1.0", frame=None, secrets=None, captures=None,
     ):
+        self._captures = captures or {}  # anchor name -> pixel array the fake "screen" shows there
         self._secrets = secrets or {}
         self.delivered = []  # (control name, value) the target received; never part of `calls`
         self._frame = frame or Frame()
@@ -19,6 +20,7 @@ class FakeDesktop:
         self._now = now_value
         self.clicks = []
         self.typed = []
+        self.hits = []  # absolute screen points the fake derived internally; the core never sees them
         self.calls = []  # every action call the apprentice made, in order (names and arguments)
 
     def find(self, role, name, automation_id=None):
@@ -36,6 +38,18 @@ class FakeDesktop:
         gone = self._removes.get(key, [])
         self._controls = [c for c in self._controls if c not in gone]
         self._controls.extend(self._reveals.get(key, []))
+
+    def click_at(self, anchor, fx, fy):
+        self.calls.append(("click_at", anchor.name, fx, fy))
+        x, y, w, h = anchor.bounds
+        self.hits.append((x + fx * w, y + fy * h))
+
+    def drag(self, source, source_point, destination, destination_point):
+        self.calls.append(("drag", source.name, source_point, destination.name, destination_point))
+
+    def capture(self, anchor):
+        self.calls.append(("capture", anchor.name))
+        return self._captures[anchor.name]
 
     def type_text(self, control, text):
         self.calls.append(("type_text", control.name))
@@ -71,3 +85,11 @@ def lesson(name, control_name, version="1.0", origin="local", app="paint.exe", *
 
 def field(name):
     return Control(role="textfield", name=name)
+
+
+def icon(name, x, y, width, height):
+    return Control(role="icon", name=name, bounds=(x, y, width, height))
+
+
+def pane(name, x, y, width, height):
+    return Control(role="pane", name=name, bounds=(x, y, width, height))

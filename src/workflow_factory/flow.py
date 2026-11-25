@@ -9,6 +9,7 @@ from pathlib import Path
 
 from workflow_factory.consent import is_permitted
 from workflow_factory.desktop import Desktop
+from workflow_factory.ladder import locate
 from workflow_factory.lessons import (
     Status,
     current_status,
@@ -85,6 +86,7 @@ DOUBT_REASON = {
     "out_of_frame": Reason.PRECONDITION_NOT_MET,
     "rejected": Reason.PRECONDITION_NOT_MET,
     "to_revalidate": Reason.PRECONDITION_NOT_MET,
+    "template_no_match": Reason.TEMPLATE_NO_MATCH,
 }
 
 
@@ -97,13 +99,16 @@ def _gate(lesson, user_db, key, desktop):
         return "no_consent", None
     if lesson.frame and not lesson.frame.matches(desktop.frame(), lesson.mask):
         return "out_of_frame", None
-    loc = lesson.locator
-    control = desktop.find(loc.role, loc.name, loc.automation_id)
-    if control is None:
-        return "control_not_found", None
-    if not control.readable:  # unreadable means blocked, whatever the consent
-        return "unreadable", None
-    return None, control
+    endpoints = [lesson.endpoint] + ([lesson.drag_to] if lesson.action == "drag" else [])
+    targets = []
+    for endpoint in endpoints:  # a drag needs both ends
+        target, reason = locate(endpoint, desktop)
+        if reason:
+            return reason, None
+        if not target.control.readable:  # unreadable means blocked, whatever the consent
+            return "unreadable", None
+        targets.append(target)
+    return None, targets
 
 
 def _effect_of(before, after) -> Effect:
@@ -135,7 +140,8 @@ def run_flow(
         lesson = find_lesson(user_db, factory_db, key.process, node.lesson)
         if lesson is None:
             raise LessonNotFound(node.lesson)
-        reason, control = _gate(lesson, user_db, key, desktop)
+        reason, targets = _gate(lesson, user_db, key, desktop)
+        target = targets[0] if targets else None
         if reason:
             blocked[node.id] = reason
             capture = dict(Counter(c.role for c in desktop.snapshot()))  # roles and counts only
@@ -143,9 +149,14 @@ def run_flow(
             return RunResult(effects, blocked, statuses, stopped=node.id)
         before = set(desktop.snapshot())
         if lesson.action == "type_secret":
-            desktop.type_secret(control, lesson.secret_ref)  # the value never enters the core
+            desktop.type_secret(target.control, lesson.secret_ref)  # the value never enters the core
+        elif lesson.action == "drag":
+            source, destination = targets
+            desktop.drag(source.control, source.point, destination.control, destination.point)
+        elif target.point:
+            desktop.click_at(target.control, *target.point)
         else:
-            desktop.click(control)
+            desktop.click(target.control)
         effect = _effect_of(before, set(desktop.snapshot()))
         effects[node.id] = effect
         if lesson.effect:  # nothing taught to compare against means nothing to count
