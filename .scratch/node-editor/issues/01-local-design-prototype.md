@@ -4,8 +4,12 @@
 
 **Blocked by:** none
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] At least three distinct directions per view, exported as images
-- [ ] The person picked one direction and said what to change
-- [ ] The choice and a short design brief are recorded in the spec
+- [x] At least three distinct directions per view, exported as images
+- [x] The person picked one direction and said what to change
+- [x] The choice and a short design brief are recorded in the spec
+
+## Answer
+
+The person chose A's structure with B's colours (direction D). See "Interface design" in `.scratch/node-editor/spec.md` and the images in `mockups/node-editor/`.

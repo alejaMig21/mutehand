@@ -35,7 +35,7 @@ markers = [
 
 [tool.ruff]
 line-length = 140
-extend-exclude = ["web", ".scratch"]
+extend-exclude = ["web", ".scratch", "design"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]

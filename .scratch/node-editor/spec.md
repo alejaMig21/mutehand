@@ -42,3 +42,20 @@ other triggers, sub-flows, flow versioning, the expression field.
 nodes; 05 data system nodes; 06 error handling per node; 07 steps that read values out of an app; 08 recipes in the tutor
 tools; 09 new canvas shell with the right search panel; 10 node detail, test this node and Data panes; 11 run view,
 safety marks and doubts count; 12 recipes in the editor.
+
+## Interface design (chosen by the person, 2026-11-25)
+
+Direction D: the structure of A ("Taller") with the colour scheme of B ("Plano"). The three reference images are
+`mockups/node-editor/D1-taller-plano-canvas.png`, `D2-taller-plano-detail.png` and `D3-taller-plano-run.png`
+(1440 x 900 CSS px); the other directions stay in `design/node-editor/` (not committed) for comparison.
+
+- Structure: a top bar (flow name, saved state, safety summary, Test flow and Run flow, which becomes Stop while running);
+  a full canvas with node cards joined by wires on a dotted grid; the node search panel as a floating card on the right
+  over the canvas; the node detail as a window over the dimmed canvas with three panes (Data in, Settings, Data out); the
+  run log as a sheet along the bottom.
+- Colours: ground #0D1520, surface #142030, sunk #0A111A, ink #E4ECF6, muted #8EA2B7, line #26384C, accent #4CC9F0 with
+  text #06202B on it, ok #5BE49B, warn #FFC857, bad #FF7A7A with text #2B0A0A on it, info #7DB8FF. Every text pair is at
+  least 4.5:1 (lowest: muted on the surface, 6.3:1).
+- Type: system sans (Segoe UI Variable) for the interface, Cascadia Mono for Data field names, values and the log.
+- App icons are neutral letter chips, never a company's logo. Trust, consent, private app, adapted-from and doubts always
+  show an icon and a word, never colour alone.
