@@ -22,7 +22,7 @@ from workflow_factory.tutor import (
     study_status,
     teach_lesson,
 )
-from workflow_factory.queue import Doubt, Reason, answer_doubt, dismiss_doubt, list_doubts
+from workflow_factory.queue import Doubt, Reason, answer_doubt, dismiss_doubt, list_doubts, list_runs
 from workflow_factory.lessons import (
     Derived,
     Endpoint,
@@ -33,12 +33,15 @@ from workflow_factory.lessons import (
     Status,
     Template,
     find_lesson,
+    lesson_report,
     list_lessons,
+    reject_lesson,
     restore_lesson,
     save_lesson,
 )
 
 __all__ = [
+    "lesson_report", "list_runs", "reject_lesson",
     "EmergencyHotkey",
     "USER_IDLE_SECONDS", "clear_emergency_stop", "emergency_stop",
     "list_flows", "list_lessons", "load_flow", "save_flow",

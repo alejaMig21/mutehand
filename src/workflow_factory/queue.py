@@ -26,8 +26,25 @@ CREATE TABLE IF NOT EXISTS doubts (
     lesson TEXT NOT NULL,
     reason TEXT NOT NULL CHECK (reason IN ({_REASONS})),
     capture TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'answered', 'dismissed'))
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'answered', 'dismissed')),
+    note TEXT  -- what the person wrote when answering, if anything
 );
+CREATE TABLE IF NOT EXISTS run_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    flow_id TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    stopped_node TEXT
+);
+CREATE TABLE IF NOT EXISTS run_nodes (  -- what each node did: never any data value
+    run_id INTEGER NOT NULL,
+    node_id TEXT NOT NULL,
+    status TEXT NOT NULL,  -- done | blocked | skipped
+    reason TEXT,
+    effect TEXT
+);
+CREATE INDEX IF NOT EXISTS run_nodes_by_run ON run_nodes (run_id);
 CREATE TABLE IF NOT EXISTS checkpoints (
     flow_id TEXT PRIMARY KEY,
     state TEXT NOT NULL,  -- JSON: done nodes, effects, loop progress, run context
@@ -45,6 +62,7 @@ class Doubt:
     reason: Reason
     capture: dict[str, int]  # roles and counts only, never text
     status: str
+    note: str | None = None
 
 
 def _connect(user_db: Path) -> sqlite3.Connection:
@@ -64,25 +82,25 @@ def record_doubt(user_db: Path, flow_id: str, node_id: str, lesson: str,
 
 
 def list_doubts(user_db: Path, status: str | None = None) -> list[Doubt]:
-    query = "SELECT id, flow_id, node_id, lesson, reason, capture, status FROM doubts"
+    query = "SELECT id, flow_id, node_id, lesson, reason, capture, status, note FROM doubts"
     args = ()
     if status:
         query, args = query + " WHERE status = ?", (status,)
     with closing(_connect(user_db)) as db:
-        return [Doubt(i, f, n, lesson, Reason(r), json.loads(c), s)
-                for i, f, n, lesson, r, c, s in db.execute(query + " ORDER BY id", args)]
+        return [Doubt(i, f, n, lesson, Reason(r), json.loads(c), s, note)
+                for i, f, n, lesson, r, c, s, note in db.execute(query + " ORDER BY id", args)]
 
 
-def _close_doubt(user_db: Path, doubt_id: int, new_status: str) -> None:
+def _close_doubt(user_db: Path, doubt_id: int, new_status: str, note: str | None = None) -> None:
     with closing(_connect(user_db)) as db, db:
-        changed = db.execute("UPDATE doubts SET status = ? WHERE id = ? AND status = 'open'",
-                             (new_status, doubt_id)).rowcount
+        changed = db.execute("UPDATE doubts SET status = ?, note = ? WHERE id = ? AND status = 'open'",
+                             (new_status, note, doubt_id)).rowcount
     if not changed:
         raise ValueError(f"doubt {doubt_id} is not open")
 
 
-def answer_doubt(user_db: Path, doubt_id: int) -> None:
-    _close_doubt(user_db, doubt_id, "answered")
+def answer_doubt(user_db: Path, doubt_id: int, note: str | None = None) -> None:
+    _close_doubt(user_db, doubt_id, "answered", note)
 
 
 def dismiss_doubt(user_db: Path, doubt_id: int) -> None:
@@ -116,3 +134,36 @@ def load_checkpoint(user_db: Path, flow_id: str, definition: str) -> dict | None
 def clear_checkpoint(user_db: Path, flow_id: str) -> None:
     with closing(_connect(user_db)) as db, db:
         db.execute("DELETE FROM checkpoints WHERE flow_id = ?", (flow_id,))
+
+
+def record_run(user_db: Path, flow_id: str, started_at: str, finished_at: str, status: str,
+               stopped_node: str | None, nodes: list[dict], keep: int = 500) -> int:
+    with closing(_connect(user_db)) as db, db:
+        run_id = db.execute(
+            "INSERT INTO run_history (flow_id, started_at, finished_at, status, stopped_node)"
+            " VALUES (?, ?, ?, ?, ?)", (flow_id, started_at, finished_at, status, stopped_node)).lastrowid
+        db.executemany(
+            "INSERT INTO run_nodes VALUES (?, ?, ?, ?, ?)",
+            [(run_id, n["node_id"], n["status"], n.get("reason"), n.get("effect")) for n in nodes])
+        old = "SELECT id FROM run_history ORDER BY id DESC LIMIT -1 OFFSET ?"  # everything after the newest `keep`
+        db.execute(f"DELETE FROM run_nodes WHERE run_id IN ({old})", (keep,))
+        db.execute(f"DELETE FROM run_history WHERE id IN ({old})", (keep,))
+        return run_id
+
+
+def list_runs(user_db: Path, flow_id: str | None = None, limit: int = 50) -> list[dict]:
+    """Recent runs, newest first, with what each node did and why it stopped."""
+    query = "SELECT id, flow_id, started_at, finished_at, status, stopped_node FROM run_history"
+    args: tuple = ()
+    if flow_id:
+        query, args = query + " WHERE flow_id = ?", (flow_id,)
+    with closing(_connect(user_db)) as db:
+        runs = [dict(zip(("id", "flow_id", "started_at", "finished_at", "status", "stopped_node"), row))
+                for row in db.execute(query + " ORDER BY id DESC LIMIT ?", (*args, limit))]
+        for run in runs:
+            run["nodes"] = [
+                {"node_id": n, "status": o, "reason": r, "effect": e}
+                for n, o, r, e in db.execute(
+                    "SELECT node_id, status, reason, effect FROM run_nodes WHERE run_id = ? ORDER BY rowid",
+                    (run["id"],))]
+    return runs

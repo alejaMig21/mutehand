@@ -10,6 +10,7 @@ import json
 import re
 import secrets
 import threading
+import urllib.parse
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict
@@ -19,11 +20,20 @@ from pathlib import Path
 from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.flow import run_flow
 from workflow_factory.flows import flow_from_dict, flow_to_dict, list_flows, load_flow, save_flow
-from workflow_factory.lessons import list_lessons
+from workflow_factory.consent import consents, revoke_consent
+from workflow_factory.lessons import (
+    find_lesson,
+    lesson_report,
+    list_lessons,
+    reject_lesson,
+    restore_lesson,
+)
+from workflow_factory.queue import answer_doubt, dismiss_doubt, list_doubts, list_runs
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")  # the only names this server can be bound to
 MAX_BODY_BYTES = 1_000_000
 REQUEST_TIMEOUT_SECONDS = 10
+MAX_NOTE_CHARS = 500
 CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css",
                  ".svg": "image/svg+xml", ".json": "application/json", ".map": "application/json"}
 
@@ -93,9 +103,7 @@ class ApiServer:
             try:
                 result = run_flow(flow, self.desktop_for(app), self.user_db, self.factory_db,
                                   context=context, progress=progress)
-                final = {"status": ("emergency" if result.emergency else "waiting" if result.waiting
-                                    else "stopped" if result.stopped else "finished"),
-                         "stopped": result.stopped}
+                final = {"status": result.status, "stopped": result.stopped}
             except DesktopError as error:  # the code only: its text could echo what is on screen
                 final = {"status": "error", "error": getattr(error, "code", "DESKTOP_ERROR")}
             except Exception:  # noqa: BLE001 - a run must always end in a final state
@@ -151,7 +159,8 @@ class ApiServer:
             def _dispatch(self, method: str):
                 if not self._host_ok():
                     return self._send(403, {"error": "unexpected Host header"})
-                path = self.path.split("?")[0]
+                url = urllib.parse.urlsplit(self.path)
+                path, self.query = url.path, urllib.parse.parse_qs(url.query)
                 if not path.startswith("/api/"):
                     return self._static(path) if method == "GET" else self._send(405, {"error": "method"})
                 if not self._authorised():
@@ -185,6 +194,37 @@ class ApiServer:
                         return self._send(202, {"run_id": run_id})
                     return self._send(code, {"error": {404: "no such flow", 409: "this flow is already running",
                                                        429: "too many runs at once"}[code]})
+                if method == "GET" and path == "/api/library":
+                    return self._send(200, [
+                        {**_lesson_view(lesson), **lesson_report(api.user_db, lesson)}
+                        for lesson in list_lessons(api.user_db, api.factory_db)])
+                mark = re.fullmatch(r"/api/lessons/([\w.-]+)/([\w.-]+)/(reject|restore)", path)
+                if mark and method == "POST":
+                    if find_lesson(api.user_db, api.factory_db, mark[1], mark[2]) is None:
+                        return self._send(404, {"error": "no such lesson"})
+                    (reject_lesson if mark[3] == "reject" else restore_lesson)(api.user_db, mark[1], mark[2])
+                    return self._send(200, {"lesson": mark[2], "action": mark[3]})
+                if path == "/api/consents" and method == "GET":
+                    return self._send(200, [asdict(consent) for consent in consents(api.user_db)])
+                if path == "/api/consents" and method == "DELETE":  # revoke only: granting happens at teaching time
+                    body = self._body()
+                    if not revoke_consent(api.user_db, body["app"], body["control"], body["action"]):
+                        return self._send(404, {"error": "no such consent"})
+                    return self._send(200, {"revoked": True})
+                if path == "/api/doubts" and method == "GET":
+                    status = (self.query.get("status") or [None])[0]
+                    return self._send(200, [
+                        {**asdict(doubt), "reason": str(doubt.reason)} for doubt in list_doubts(api.user_db, status)])
+                doubt = re.fullmatch(r"/api/doubts/(\d+)/(answer|dismiss)", path)
+                if doubt and method == "POST":
+                    if doubt[2] == "answer":
+                        note = str(self._body().get("note") or "")[:MAX_NOTE_CHARS] or None
+                        answer_doubt(api.user_db, int(doubt[1]), note)
+                    else:
+                        dismiss_doubt(api.user_db, int(doubt[1]))
+                    return self._send(200, {"doubt": int(doubt[1]), "action": doubt[2]})
+                if path == "/api/history" and method == "GET":
+                    return self._send(200, list_runs(api.user_db, (self.query.get("flow") or [None])[0]))
                 status_match = re.fullmatch(r"/api/runs/(\w+)", path)
                 if status_match and method == "GET":
                     view = api._run_view(status_match[1])
@@ -210,6 +250,9 @@ class ApiServer:
             def do_POST(self):
                 self._dispatch("POST")
 
+            def do_DELETE(self):
+                self._dispatch("DELETE")
+
         return Handler
 
 
@@ -217,5 +260,5 @@ def _lesson_view(lesson) -> dict:
     """What the palette needs: never the secret reference, never pixels."""
     view = asdict(lesson.locator)
     return {"app": lesson.app, "name": lesson.name, "origin": str(lesson.origin), "action": lesson.action,
-            "status": str(lesson.status), "sensitive": str(lesson.sensitive) if lesson.sensitive else None,
+            "sensitive": str(lesson.sensitive) if lesson.sensitive else None,
             "locator": view}

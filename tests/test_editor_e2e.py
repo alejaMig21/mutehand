@@ -158,3 +158,65 @@ def test_a_sensitive_lesson_is_marked_in_words_in_the_palette_not_only_by_colour
         assert "needs consent" in marked.inner_text()
         assert "needs consent" not in page.get_by_test_id("palette-open-menu").inner_text()
         browser.close()
+
+
+def open_page(playwright, server):
+    browser = playwright.chromium.launch(
+        headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
+    page = browser.new_page()
+    page.goto(f"{server.url}/#token=e2e-token")
+    return browser, page
+
+
+def test_the_four_other_screens_show_their_data_and_their_actions_work(tmp_path):
+    from playwright.sync_api import sync_playwright
+    from workflow_factory import grant_consent, run_flow
+
+    if not (DIST / "index.html").exists():
+        pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
+    user_db, factory_db = tmp_path / "user.db", tmp_path / "factory.db"
+    save_lesson(factory_db, lesson("open-menu", "Menu", origin="factory", factory_successes=50))
+    save_lesson(user_db, lesson("save-file", "Save"))
+    grant_consent(user_db, app="paint.exe", control="Send", action="click")
+    flow = Flow(id="morning", nodes=[Node("a", "save-file"), Node("b", "open-menu")])
+    # Menu is missing on screen: the flow stops at b, leaving a doubt and a history row
+    run_flow(flow, desktop=FakeDesktop(controls=[button("Save")]), user_db=user_db, factory_db=factory_db)
+    server = ApiServer(user_db, factory_db, lambda app: FakeDesktop(controls=[]), token="e2e-token", web_dir=DIST)
+    server.start()
+    try:
+        with sync_playwright() as playwright:
+            browser, page = open_page(playwright, server)
+
+            page.get_by_test_id("tab-library").click()
+            row = page.get_by_test_id("lesson-row-open-menu")
+            row.wait_for()
+            assert "factory" in row.inner_text() and page.get_by_test_id("state-open-menu").inner_text() == "suspect"
+            page.get_by_test_id("reject-open-menu").click()
+            page.get_by_test_id("restore-open-menu").wait_for()
+            assert page.get_by_test_id("state-open-menu").inner_text() == "rejected"
+            page.get_by_test_id("restore-open-menu").click()
+            page.get_by_test_id("reject-open-menu").wait_for()
+
+            page.get_by_test_id("tab-consents").click()
+            page.get_by_test_id("consent").wait_for()
+            assert page.get_by_role("button", name="Grant").count() == 0  # revoke only
+            page.get_by_test_id("revoke-Send").click()
+            page.get_by_test_id("no-consents").wait_for()
+
+            page.get_by_test_id("tab-queue").click()
+            page.get_by_test_id("doubt-1").wait_for()
+            assert "control_not_found" in page.get_by_test_id("doubt-1").inner_text()
+            page.get_by_test_id("note-1").fill("the button is called Main menu now")
+            page.get_by_test_id("answer-1").click()
+            page.get_by_test_id("no-doubts").wait_for()
+            page.get_by_test_id("doubt-filter").select_option("answered")
+            page.get_by_test_id("doubt-1").wait_for()
+            assert "answer: the button is called Main menu now" in page.get_by_test_id("doubt-1").inner_text()
+
+            page.get_by_test_id("tab-history").click()
+            page.get_by_test_id("run-1").wait_for()
+            text = page.get_by_test_id("run-1").inner_text()
+            assert "stopped" in text and "a: done" in text and "b: blocked (control_not_found)" in text
+            browser.close()
+    finally:
+        server.stop()

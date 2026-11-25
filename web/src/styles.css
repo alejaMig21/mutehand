@@ -16,3 +16,12 @@ html, body, #root { height: 100%; margin: 0; font-family: system-ui, sans-serif;
 .row input, .row select { flex: 1; min-width: 0; }
 .error { color: #b00; }
 .status-line { margin-top: 8px; font-weight: 600; }
+.shell { display: flex; flex-direction: column; height: 100%; }
+.tabs { display: flex; gap: 4px; padding: 6px 12px; border-bottom: 1px solid #ddd; background: #f3f3f3; }
+.tabs button { padding: 6px 12px; border: 1px solid #ccc; background: #fff; cursor: pointer; border-radius: 4px; }
+.tabs button[aria-current="true"] { background: #2a6; color: #fff; border-color: #2a6; }
+.screen { flex: 1; min-height: 0; overflow: auto; }
+.screen > section { padding: 12px 20px; }
+table { border-collapse: collapse; }
+th, td { padding: 4px 10px; border-bottom: 1px solid #eee; text-align: left; }
+.run { border-top: 1px solid #ddd; margin-top: 8px; }

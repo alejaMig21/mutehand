@@ -35,13 +35,14 @@ def grant_consent(user_db: Path, app: str, control: str, action: str) -> None:
         db.execute("INSERT OR IGNORE INTO consents VALUES (?, ?, ?)", (app, control, action))
 
 
-def revoke_consent(user_db: Path, app: str, control: str, action: str) -> None:
+def revoke_consent(user_db: Path, app: str, control: str, action: str) -> bool:
+    """True if a consent was revoked, False if there was none to revoke."""
     with closing(sqlite3.connect(user_db)) as db, db:
         db.execute(SCHEMA)
-        db.execute(
+        return db.execute(
             "DELETE FROM consents WHERE app = ? AND control = ? AND action = ?",
             (app, control, action),
-        )
+        ).rowcount > 0
 
 
 def consents(user_db: Path) -> list[Consent]:

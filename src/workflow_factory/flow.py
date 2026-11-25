@@ -39,6 +39,7 @@ from workflow_factory.queue import (
     has_open_doubt,
     load_checkpoint,
     record_doubt,
+    record_run,
     save_checkpoint,
 )
 
@@ -172,6 +173,11 @@ class RunResult:
     waiting: bool = False  # the flow has an open doubt, so it did not run
     emergency: bool = False  # a human pressed the emergency stop; the checkpoint allows resuming
 
+    @property
+    def status(self) -> str:
+        return ("emergency" if self.emergency else "waiting" if self.waiting
+                else "stopped" if self.stopped else "finished")
+
 
 # Detailed block reason -> the fixed doubt vocabulary
 DOUBT_REASON = {
@@ -281,6 +287,7 @@ class _Run:
         self.effects, self.blocked, self.statuses = {}, {}, {}
         self.lock = threading.RLock()  # parallel nodes share the state and its checkpoint
         self.baseline = None  # cursor and last-input time right after our own last physical action
+        self.node_status = {}  # node id -> (status, reason): what the run history will show
         self.emergency = False
 
     def save(self) -> None:
@@ -364,6 +371,7 @@ class _Run:
             capture = {}  # the desktop is what failed: nothing to summarise
         with self.lock:
             self.blocked[node.id] = reason
+            self.node_status[node.id] = ("blocked", reason)
             self.progress(node.id, "blocked")
             record_doubt(self.user_db, self.flow.key, node.id, node.lesson, DOUBT_REASON[reason], capture)
             self.save()
@@ -371,6 +379,7 @@ class _Run:
     def finish(self, node: Node) -> None:
         with self.lock:
             self.state.done.add(node.id)
+            self.node_status[node.id] = ("done", None)
             self.progress(node.id, "done")
             self.save()
 
@@ -462,36 +471,51 @@ def run_flow(
     state = _State.load(saved) if saved else _State()
     state.context.update(context or {})
     run = _Run(flow, desktop, user_db, factory_db, state, progress)
+    started_at = desktop.now()
     nodes = {node.id: node for node in flow.nodes}
     runners = {"lesson": _run_lesson, "loop": _run_loop, "if": _run_if,
                "join": lambda current, node: current.finish(node)}
-    progressed = True
-    while progressed and not run.emergency:
-        progressed = False
-        if EMERGENCY_STOP.is_set():
-            run.emergency = True
-            break
-        wave = []
-        for node in flow.nodes:
-            if node.id in state.done or node.id in state.skipped or node.id in run.blocked:
-                continue
-            verdict = _verdict(node.id, flow, nodes, state)
-            if verdict == "wait":
-                continue
-            progressed = True
-            if verdict == "skip":
-                state.skipped.add(node.id)
-                run.progress(node.id, "skipped")
-            else:
-                wave.append(node)
-        if wave:  # everything ready together; PHYSICAL_INPUT serialises the nodes that need it
-            with ThreadPoolExecutor(max_workers=min(len(wave), MAX_PARALLEL_NODES)) as pool:
-                list(pool.map(lambda node: _guarded(run, node, runners[node.kind]), wave))
+    try:
+        progressed = True
+        while progressed and not run.emergency:
+            progressed = False
+            if EMERGENCY_STOP.is_set():
+                run.emergency = True
+                break
+            wave = []
+            for node in flow.nodes:
+                if node.id in state.done or node.id in state.skipped or node.id in run.blocked:
+                    continue
+                verdict = _verdict(node.id, flow, nodes, state)
+                if verdict == "wait":
+                    continue
+                progressed = True
+                if verdict == "skip":
+                    state.skipped.add(node.id)
+                    run.node_status[node.id] = ("skipped", None)
+                    run.progress(node.id, "skipped")
+                else:
+                    wave.append(node)
+            if wave:  # everything ready together; PHYSICAL_INPUT serialises the nodes that need it
+                with ThreadPoolExecutor(max_workers=min(len(wave), MAX_PARALLEL_NODES)) as pool:
+                    list(pool.map(lambda node: _guarded(run, node, runners[node.kind]), wave))
+    except Exception:
+        # a bug or a failure we do not handle: the run still leaves a trace, then the error goes on
+        record_run(user_db, flow.key, started_at, desktop.now(), "error", None, [
+            {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1]}
+            for node in flow.nodes if node.id in run.node_status])
+        raise
     effects = {node_id: Effect(effect) for node_id, effect in run.effects.items()}
     if run.emergency:  # no doubt, no cleanup: the checkpoint lets the flow resume after the stop
-        return RunResult(effects, run.blocked, run.statuses, emergency=True)
-    if run.blocked:
+        result = RunResult(effects, run.blocked, run.statuses, emergency=True)
+    elif run.blocked:
         first = next(node.id for node in flow.nodes if node.id in run.blocked)  # flow order, not timing
-        return RunResult(effects, run.blocked, run.statuses, stopped=first)
-    clear_checkpoint(user_db, flow.key)
-    return RunResult(effects, {}, run.statuses)
+        result = RunResult(effects, run.blocked, run.statuses, stopped=first)
+    else:
+        clear_checkpoint(user_db, flow.key)
+        result = RunResult(effects, {}, run.statuses)
+    record_run(user_db, flow.key, started_at, desktop.now(), result.status, result.stopped, [
+        {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1],
+         "effect": str(effects[node.id]) if node.id in effects else None}
+        for node in flow.nodes if node.id in run.node_status])
+    return result

@@ -4,9 +4,9 @@
 
 **Blocked by:** 13, 04, 06
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The library shows origin and state and lets the user mark or reject a lesson
-- [ ] The consents screen lists scope and offers revoke; there is no grant action
-- [ ] The queue screen shows doubts and can record a human answer
-- [ ] Run history shows outcomes without data values unless the user asks
+- [x] The library shows origin and state and lets the user mark or reject a lesson
+- [x] The consents screen lists scope and offers revoke; there is no grant action
+- [x] The queue screen shows doubts and can record a human answer
+- [x] Run history shows outcomes without data values unless the user asks

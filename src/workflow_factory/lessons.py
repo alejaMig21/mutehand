@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS lesson_state (
     PRIMARY KEY (app, name)
 )
 """
+# the newest version of each app a run has seen: lets the library show to_revalidate before any lookup
+SEEN_SCHEMA = "CREATE TABLE IF NOT EXISTS app_seen (app TEXT PRIMARY KEY, version TEXT NOT NULL)"
 COLUMNS = (
     "app, version, name, precondition, action, role, control_name, automation_id,"
     " effect, origin, status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref, derived, template, drag_to"
@@ -298,6 +300,8 @@ def revalidate_changed_versions(user_db: Path, app: str, current_version: str) -
     Rejected lessons stay rejected: only a human restores those."""
     with closing(sqlite3.connect(user_db)) as db, db:
         db.execute(SCHEMA)
+        db.execute(SEEN_SCHEMA)
+        db.execute("INSERT OR REPLACE INTO app_seen VALUES (?, ?)", (app, current_version))
         db.execute(
             "UPDATE lessons SET status = ? WHERE app = ? AND version != ? AND status != ?",
             (str(Status.TO_REVALIDATE), app, current_version, str(Status.REJECTED)),
@@ -391,3 +395,27 @@ def list_lessons(user_db: Path, factory_db: Path | None) -> list[Lesson]:
             lesson = _row_to_lesson(row)
             found[(lesson.app, lesson.name)] = lesson  # the user's lesson shadows the factory's
     return sorted(found.values(), key=lambda lesson: (lesson.app, lesson.name))
+
+
+def lesson_report(user_db: Path, lesson: Lesson) -> dict:
+    """The numbers behind a lesson's state, for the library screen."""
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute(STATE_SCHEMA)
+        db.execute(SEEN_SCHEMA)
+        local_successes, local_failures, _, _ = _state(db, lesson)
+        seen = db.execute("SELECT version FROM app_seen WHERE app = ?", (lesson.app,)).fetchone()
+    successes = lesson.factory_successes + local_successes
+    failures = lesson.factory_failures + local_failures
+    return {
+        "state": str(current_status(user_db, lesson, seen[0] if seen else lesson.version)),
+        "successes": successes, "failures": failures,
+        "confidence": round(confidence(successes, failures), 2),
+    }
+
+
+def reject_lesson(user_db: Path, app: str, name: str) -> None:
+    """Human action: stop trusting this lesson. Works for factory lessons too (the mark lives in the user file)."""
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute(STATE_SCHEMA)
+        db.execute("INSERT OR IGNORE INTO lesson_state (app, name) VALUES (?, ?)", (app, name))
+        db.execute("UPDATE lesson_state SET rejected = 1, restored = 0 WHERE app = ? AND name = ?", (app, name))
