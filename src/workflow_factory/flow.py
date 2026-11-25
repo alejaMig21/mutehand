@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from workflow_factory.consent import is_permitted
 from workflow_factory.desktop import Desktop
 from workflow_factory.lessons import (
     Status,
@@ -76,6 +77,9 @@ def run_flow(
             if status in (Status.REJECTED, Status.TO_REVALIDATE):
                 blocked[node.id] = str(status)
                 continue
+            if not is_permitted(user_db, lesson):  # before any desktop call
+                blocked[node.id] = "no_consent"
+                continue
             if lesson.frame and not lesson.frame.matches(desktop.frame(), lesson.mask):
                 blocked[node.id] = "out_of_frame"
                 continue
@@ -83,8 +87,14 @@ def run_flow(
             control = desktop.find(loc.role, loc.name, loc.automation_id)
             if control is None:
                 raise ControlNotFound(f"{loc.role} {loc.name!r}")
+            if not control.readable:  # unreadable means blocked, whatever the consent
+                blocked[node.id] = "unreadable"
+                continue
             before = set(desktop.snapshot())
-            desktop.click(control)
+            if lesson.action == "type_secret":
+                desktop.type_secret(control, lesson.secret_ref)  # the value never enters the core
+            else:
+                desktop.click(control)
             after = set(desktop.snapshot())
             if after - before:
                 effect = Effect.REVEALED

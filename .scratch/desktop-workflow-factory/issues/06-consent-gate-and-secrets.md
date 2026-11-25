@@ -4,11 +4,11 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A sensitive lesson without consent is blocked and never reaches the desktop port
-- [ ] A granted consent is stored with its scope and the lesson then runs freely
-- [ ] Revoking a consent blocks the lesson again
-- [ ] An unreadable control is blocked even with a broad consent
-- [ ] Factory lessons in sensitive categories ship without active consent
-- [ ] No recorded fake-desktop call contains a secret value
+- [x] A sensitive lesson without consent is blocked and never reaches the desktop port
+- [x] A granted consent is stored with its scope and the lesson then runs freely
+- [x] Revoking a consent blocks the lesson again
+- [x] An unreadable control is blocked even with a broad consent
+- [x] Factory lessons in sensitive categories ship without active consent
+- [x] No recorded fake-desktop call contains a secret value

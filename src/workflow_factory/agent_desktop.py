@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import time
 import winreg
+from ctypes import wintypes
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -90,6 +91,30 @@ def system_frame_fields() -> dict:
     }
 
 
+class _Credential(ctypes.Structure):
+    _fields_ = [
+        ("Flags", wintypes.DWORD), ("Type", wintypes.DWORD), ("TargetName", wintypes.LPWSTR),
+        ("Comment", wintypes.LPWSTR), ("LastWritten", wintypes.FILETIME),
+        ("CredentialBlobSize", wintypes.DWORD), ("CredentialBlob", ctypes.POINTER(ctypes.c_ubyte)),
+        ("Persist", wintypes.DWORD), ("AttributeCount", wintypes.DWORD),
+        ("Attributes", ctypes.c_void_p), ("TargetAlias", wintypes.LPWSTR),
+        ("UserName", wintypes.LPWSTR),
+    ]
+
+
+def read_secret(ref: str) -> str:
+    """Value of a generic Windows Credential Manager entry. Only the adapter ever holds it."""
+    pointer = ctypes.POINTER(_Credential)()
+    if not ctypes.windll.advapi32.CredReadW(ref, 1, 0, ctypes.byref(pointer)):  # CRED_TYPE_GENERIC
+        raise AgentDesktopError("SECRET_NOT_FOUND", ref)
+    try:
+        credential = pointer.contents
+        raw = ctypes.string_at(credential.CredentialBlob, credential.CredentialBlobSize)
+        return raw.decode("utf-16-le")
+    finally:
+        ctypes.windll.advapi32.CredFree(pointer)
+
+
 def _native_id(raw) -> str:
     # real CLI publishes {"kind": "automation_id", "value": "Save"}
     return raw.get("value", "") if isinstance(raw, dict) else raw or ""
@@ -111,10 +136,12 @@ class AgentDesktop:
     def __init__(
         self, app: str, runner: Runner = _run_cli, settle_seconds: float = 0.5,
         version_of=version_of_pid, system_frame_fields=system_frame_fields,
+        read_secret=read_secret,
     ):
         self._app = app
         self._version_of = version_of
         self._system_frame_fields = system_frame_fields
+        self._read_secret = read_secret
         self._runner = runner
         self._settle = settle_seconds  # ponytail: fixed pause, poll for stability if apps repaint slower
 
@@ -143,6 +170,8 @@ class AgentDesktop:
             name=match.get("name", ""),
             automation_id=_native_id(match.get("native_id")) or automation_id or "",
             ref=match.get("ref_id", ""),
+            # ponytail: "secure" state is a guess until research ticket 23 confirms how the CLI marks secure fields
+            readable="secure" not in match.get("states", []),
         )
 
     def click(self, control: Control) -> None:
@@ -151,6 +180,13 @@ class AgentDesktop:
 
     def type_text(self, control: Control, text: str) -> None:
         self._call(["type", control.ref, "--stdin"], stdin=text)
+
+    def type_secret(self, control: Control, secret_ref: str) -> None:
+        try:
+            self._call(["type", control.ref, "--stdin"], stdin=self._read_secret(secret_ref))
+        except AgentDesktopError as error:
+            # the CLI message could echo what was typed: keep the code, drop the text
+            raise AgentDesktopError(error.code, "typing a secret failed; details withheld") from None
 
     def snapshot(self) -> tuple[Control, ...]:
         for attempt in range(1, SNAPSHOT_ATTEMPTS + 1):

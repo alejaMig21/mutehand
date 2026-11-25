@@ -6,6 +6,7 @@ from workflow_factory.agent_desktop import (
     SNAPSHOT_ATTEMPTS,
     AgentDesktop,
     AgentDesktopError,
+    read_secret,
     resolve_binary,
     system_frame_fields,
     version_of_pid,
@@ -243,3 +244,86 @@ def test_minimized_and_full_screen_windows_report_their_window_state():
 
     assert frame_of({"bounds": {"x": 0, "y": 0, "width": 1920, "height": 1040}, "minimized": False}).window_state == "maximized"
     assert frame_of({"bounds": {"x": 0, "y": 0, "width": 300, "height": 200}, "minimized": True}).window_state == "minimized"
+
+
+def test_type_secret_reads_the_credential_store_and_pipes_the_value_through_stdin():
+    runner = FakeRunner(ok({}))
+    desktop = AgentDesktop("mspaint.exe", runner, settle_seconds=0, read_secret=lambda ref: f"value-of-{ref}")
+
+    desktop.type_secret(Control("textfield", "Password", ref="@s1:e2"), "login")
+
+    args, stdin = runner.calls[0]
+    assert args == ["type", "@s1:e2", "--stdin"]
+    assert stdin == "value-of-login"
+    assert all("value-of-login" not in a for a in args)
+
+
+def test_find_reports_a_secure_control_as_unreadable():
+    runner = FakeRunner(ok({"snapshot_id": "s1", "matches": [
+        {"ref_id": "@s1:e5", "role": "textfield", "name": "Password", "states": ["enabled", "secure"]}]}))
+
+    control = AgentDesktop("mspaint.exe", runner, settle_seconds=0).find("textfield", "Password")
+
+    assert control.readable is False
+
+
+@pytest.mark.live
+def test_credential_store_round_trip_keeps_the_value_out_of_the_reference():
+    import uuid
+
+    ref = f"dwf-live-test-{uuid.uuid4().hex}"
+    _credential_write(ref, "s3cret-value")
+    try:
+        assert read_secret(ref) == "s3cret-value"
+    finally:
+        _credential_delete(ref)
+    with pytest.raises(AgentDesktopError) as caught:
+        read_secret(ref)
+    assert caught.value.code == "SECRET_NOT_FOUND"
+
+
+@pytest.mark.live
+def test_real_cli_accepts_text_on_stdin_and_reports_a_stale_ref_as_typed_error():
+    desktop = AgentDesktop("mspaint.exe", settle_seconds=0)
+
+    with pytest.raises(AgentDesktopError) as caught:
+        desktop.type_text(Control("textfield", "x", ref="@sdeadbeef000000:e1"), "plain text on stdin")
+
+    assert caught.value.code != "INVALID_ARGS"
+
+
+def _credential_write(ref, value):
+    import ctypes
+    from ctypes import wintypes
+
+    class Credential(ctypes.Structure):
+        _fields_ = [("Flags", wintypes.DWORD), ("Type", wintypes.DWORD), ("TargetName", wintypes.LPWSTR),
+                    ("Comment", wintypes.LPWSTR), ("LastWritten", wintypes.FILETIME),
+                    ("CredentialBlobSize", wintypes.DWORD), ("CredentialBlob", ctypes.POINTER(ctypes.c_ubyte)),
+                    ("Persist", wintypes.DWORD), ("AttributeCount", wintypes.DWORD),
+                    ("Attributes", ctypes.c_void_p), ("TargetAlias", wintypes.LPWSTR),
+                    ("UserName", wintypes.LPWSTR)]
+
+    blob = value.encode("utf-16-le")
+    buffer = (ctypes.c_ubyte * len(blob)).from_buffer_copy(blob)
+    credential = Credential(Type=1, TargetName=ref, CredentialBlobSize=len(blob),
+                            CredentialBlob=buffer, Persist=1, UserName="dwf-live-test")
+    assert ctypes.windll.advapi32.CredWriteW(ctypes.byref(credential), 0)
+
+
+def _credential_delete(ref):
+    import ctypes
+
+    ctypes.windll.advapi32.CredDeleteW(ref, 1, 0)
+
+
+def test_a_cli_error_while_typing_a_secret_never_repeats_the_cli_message():
+    leaky = {"ok": False, "error": {"code": "ACTION_FAILED", "message": "could not type hunter2"}}
+    desktop = AgentDesktop("mspaint.exe", FakeRunner(leaky), settle_seconds=0,
+                           read_secret=lambda ref: "hunter2")
+
+    with pytest.raises(AgentDesktopError) as caught:
+        desktop.type_secret(Control("textfield", "Password", ref="@s1:e2"), "login")
+
+    assert caught.value.code == "ACTION_FAILED"
+    assert "hunter2" not in str(caught.value)

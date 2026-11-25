@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS lessons (
     frame TEXT,    -- JSON of Frame, NULL = replay anywhere
     mask TEXT,     -- JSON list of the frame fields that matter
     capture BLOB,  -- canvas pixels, numpy .npy bytes
+    sensitive TEXT,  -- Sensitivity category or NULL
+    secret_ref TEXT, -- reference into the Windows credential store, never the value
     PRIMARY KEY (app, name)
 )
 """
@@ -47,7 +49,7 @@ CREATE TABLE IF NOT EXISTS lesson_state (
 """
 COLUMNS = (
     "app, version, name, precondition, action, role, control_name, automation_id,"
-    " effect, origin, status, factory_successes, factory_failures, frame, mask, capture"
+    " effect, origin, status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref"
 )
 PLACEHOLDERS = ", ".join("?" * (COLUMNS.count(",") + 1))
 # Below REJECTED_BELOW a lesson is rejected; everything else that is not trusted is suspect.
@@ -59,6 +61,15 @@ class Status(StrEnum):
     SUSPECT = "suspect"
     REJECTED = "rejected"
     TO_REVALIDATE = "to_revalidate"
+
+
+class Sensitivity(StrEnum):
+    """Categories of sensitive action that need a consent record."""
+
+    PASSWORD_FIELD = "password_field"
+    SYSTEM_SHORTCUT = "system_shortcut"
+    OUTWARD_ACTION = "outward_action"
+    VETO_TEXT = "veto_text"
 
 
 class Origin(StrEnum):
@@ -89,6 +100,8 @@ class Lesson:
     frame: Frame | None = None
     mask: tuple[str, ...] = FRAME_FIELDS
     capture: np.ndarray | None = field(default=None, compare=False)
+    sensitive: Sensitivity | None = None
+    secret_ref: str | None = None
 
 
 def _pack(capture):
@@ -105,7 +118,7 @@ def _unpack(blob):
 
 def _row_to_lesson(row) -> Lesson:
     (app, version, name, precondition, action, role, control, automation_id, effect, origin,
-     status, factory_successes, factory_failures, frame, mask, capture) = row
+     status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref) = row
     return Lesson(
         app=app, version=version, name=name, precondition=precondition, action=action,
         locator=Locator(role, control, automation_id), effect=effect,
@@ -114,10 +127,13 @@ def _row_to_lesson(row) -> Lesson:
         frame=Frame(**json.loads(frame)) if frame else None,
         mask=tuple(json.loads(mask)) if mask else FRAME_FIELDS,
         capture=_unpack(capture),
+        sensitive=Sensitivity(sensitive) if sensitive else None, secret_ref=secret_ref,
     )
 
 
 def save_lesson(db_path: Path, lesson: Lesson) -> None:
+    if lesson.secret_ref and lesson.sensitive != Sensitivity.PASSWORD_FIELD:
+        raise ValueError("a lesson that types a secret must be marked as a password_field")
     unknown = [name for name in lesson.mask if name not in FRAME_FIELDS]
     if unknown:
         raise ValueError(f"mask names unknown frame fields: {', '.join(unknown)}")
@@ -130,7 +146,8 @@ def save_lesson(db_path: Path, lesson: Lesson) -> None:
              loc.role, loc.name, loc.automation_id, lesson.effect, str(lesson.origin),
              str(lesson.status), lesson.factory_successes, lesson.factory_failures,
              json.dumps(asdict(lesson.frame)) if lesson.frame else None,
-             json.dumps(list(lesson.mask)), _pack(lesson.capture)),
+             json.dumps(list(lesson.mask)), _pack(lesson.capture),
+             str(lesson.sensitive) if lesson.sensitive else None, lesson.secret_ref),
         )
 
 
