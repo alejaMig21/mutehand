@@ -67,7 +67,7 @@ The Telegram step works end to end through accessibility, tested live in the per
 | Open the chat | `click` the chat option whose name starts with `Group, Nube, ` (the accessible name is "kind, title, status, preview": match the prefix, never the bare title; a second chat "Nube srt" exists) | worked |
 | Write the text | `set-value` on the `Ui::InputField::Inner` ("Write a message...") | `delivered_verified`; the send button label changed from "Record Voice Message" to "Send" |
 | Send | `click` the `Ui::SendButton` | `delivered_unverified`; the message arrived (found afterwards with `find --value`) |
-| Delete the test message | `right-click` on its row or on its option | **not possible without physical input**: `AMBIGUOUS_TARGET` on the row, `POLICY_DENIED` on the option (physical fallback denied). The test message `WF-test-19-0001` stays in the chat until the person deletes it |
+| Delete the test message | needs **real mouse input**: `right-click` without `--headed` gives `AMBIGUOUS_TARGET` on the row and `POLICY_DENIED` on the option. With the person's go-ahead for that chat: `agent-desktop --headed right-click <option ref from find --role option --text>` (`SendInput.click`), then the Qt popup (read it with `snapshot --surface menu --app Telegram.exe --include-bounds`) exposes only "Select" with a name; its semantic `click` times out, so `--headed mouse-click --xy` on the item's centre worked | worked: the selection bar then offers Cancel, Forward and **Delete** (named, semantic `click` works), and the `DeleteMessagesBox` has a "Delete for everyone" checkbox that comes **already checked** (a click un-checks it: read the state before and after) and a Delete button; afterwards no node held the marker |
 
 Rules that follow for the flow:
 - The `Ui::SendButton` is a **voice recorder while the box is empty**. A node must click it only after
@@ -76,5 +76,9 @@ Rules that follow for the flow:
   person's private chats: reading it is a consent question for the flow, not a technical limit.
 - Refs from a snapshot are not stable and several elements are "not proven unique": locate by `find` with a
   value or by a prefix, and refuse when the match is not exactly one.
+- Deleting a message is a physical-input node: the cursor jumps to the window and the app takes the foreground; save
+  the cursor position first and put it back afterwards (it was restored exactly in this test). The scope of
+  the person's permission was one named chat; the live-testing no-disturb rule only protects software under
+  development, not a task the person asks for in their own app.
 - Sending is an acting node (research 20, ticket 24): it runs alone under the input lock and pauses while the
   person is working; the click and `set-value` can pull Telegram to the foreground.
