@@ -4,10 +4,10 @@
 
 **Blocked by:** 10
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Requests without the token are rejected; the server binds only to loopback
-- [ ] The palette lists lessons from the user and factory databases
-- [ ] A flow built in the editor is saved to SQLite and runs
-- [ ] Live per-node status updates while a flow runs
-- [ ] Frontend tested separately against the local API
+- [x] Requests without the token are rejected; the server binds only to loopback
+- [x] The palette lists lessons from the user and factory databases
+- [x] A flow built in the editor is saved to SQLite and runs
+- [x] Live per-node status updates while a flow runs
+- [x] Frontend tested separately against the local API

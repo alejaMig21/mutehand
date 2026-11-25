@@ -9,7 +9,7 @@ from workflow_factory.flow import (
     RunResult,
     run_flow,
 )
-from workflow_factory.flows import load_flow, save_flow
+from workflow_factory.flows import list_flows, load_flow, save_flow
 from workflow_factory.hotkey import EmergencyHotkey
 from workflow_factory.tutor import (
     StudyStep,
@@ -33,6 +33,7 @@ from workflow_factory.lessons import (
     Status,
     Template,
     find_lesson,
+    list_lessons,
     restore_lesson,
     save_lesson,
 )
@@ -40,7 +41,7 @@ from workflow_factory.lessons import (
 __all__ = [
     "EmergencyHotkey",
     "USER_IDLE_SECONDS", "clear_emergency_stop", "emergency_stop",
-    "load_flow", "save_flow",
+    "list_flows", "list_lessons", "load_flow", "save_flow",
     "StudyStep", "answer_doubt_by_teaching", "list_open_doubts", "mark_private", "observe",
     "record_consent", "set_study_order", "study_status", "teach_lesson",
     "Template",

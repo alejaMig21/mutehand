@@ -374,3 +374,20 @@ def restore_lesson(user_db: Path, app: str, name: str) -> None:
             "UPDATE lessons SET status = ? WHERE app = ? AND name = ? AND status = ?",
             (str(Status.SUSPECT), app, name, str(Status.REJECTED)),
         )
+
+
+def list_lessons(user_db: Path, factory_db: Path | None) -> list[Lesson]:
+    """Every lesson the apprentice could use: the user's, plus factory ones they do not shadow."""
+    found: dict[tuple[str, str], Lesson] = {}
+    if factory_db is not None and factory_db.exists():
+        with closing(sqlite3.connect(f"{factory_db.resolve().as_uri()}?mode=ro", uri=True)) as db:
+            has_lessons = db.execute("SELECT 1 FROM sqlite_master WHERE name = 'lessons'").fetchone()
+            for row in db.execute(f"SELECT {COLUMNS} FROM lessons") if has_lessons else []:
+                lesson = _row_to_lesson(row)
+                found[(lesson.app, lesson.name)] = lesson
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute(SCHEMA)
+        for row in db.execute(f"SELECT {COLUMNS} FROM lessons"):
+            lesson = _row_to_lesson(row)
+            found[(lesson.app, lesson.name)] = lesson  # the user's lesson shadows the factory's
+    return sorted(found.values(), key=lambda lesson: (lesson.app, lesson.name))

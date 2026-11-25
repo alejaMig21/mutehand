@@ -17,10 +17,14 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "playwright>=1.65.2",
     "pytest>=9.2.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-m 'not live'"
-markers = ["live: real agent-desktop smoke tests, opt-in with -m live"]
+addopts = "-m 'not live and not web'"
+markers = [
+    "live: real agent-desktop smoke tests, opt-in with -m live",
+    "web: headless-browser tests of the built editor, opt-in with -m web",
+]

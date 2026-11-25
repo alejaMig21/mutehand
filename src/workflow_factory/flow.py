@@ -273,9 +273,10 @@ def _seconds_between(start: str, end: str) -> float:
 class _Run:
     """One call of run_flow: everything a node needs, so helpers stay short."""
 
-    def __init__(self, flow, desktop, user_db, factory_db, state):
+    def __init__(self, flow, desktop, user_db, factory_db, state, progress=None):
         self.flow, self.desktop, self.user_db, self.factory_db, self.state = (
             flow, desktop, user_db, factory_db, state)
+        self.progress = progress or (lambda node_id, status: None)  # live per-node status for the editor
         self.key = desktop.app_key()
         self.effects, self.blocked, self.statuses = {}, {}, {}
         self.lock = threading.RLock()  # parallel nodes share the state and its checkpoint
@@ -363,12 +364,14 @@ class _Run:
             capture = {}  # the desktop is what failed: nothing to summarise
         with self.lock:
             self.blocked[node.id] = reason
+            self.progress(node.id, "blocked")
             record_doubt(self.user_db, self.flow.key, node.id, node.lesson, DOUBT_REASON[reason], capture)
             self.save()
 
     def finish(self, node: Node) -> None:
         with self.lock:
             self.state.done.add(node.id)
+            self.progress(node.id, "done")
             self.save()
 
 
@@ -436,6 +439,7 @@ def _verdict(node_id: str, flow: Flow, nodes: dict, state: _State) -> str:
 
 def _guarded(run: _Run, node: Node, runner) -> None:
     """A typed desktop failure stops this node with a doubt; it never takes the flow down."""
+    run.progress(node.id, "running")
     try:
         runner(run, node)
     except _EmergencyStop:
@@ -446,7 +450,7 @@ def _guarded(run: _Run, node: Node, runner) -> None:
 
 def run_flow(
     flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path | None = None,
-    context: dict | None = None,
+    context: dict | None = None, progress=None,
 ) -> RunResult:
     if EMERGENCY_STOP.is_set():
         return RunResult({}, {}, {}, emergency=True)
@@ -457,7 +461,7 @@ def run_flow(
     saved = load_checkpoint(user_db, flow.key, flow.definition)
     state = _State.load(saved) if saved else _State()
     state.context.update(context or {})
-    run = _Run(flow, desktop, user_db, factory_db, state)
+    run = _Run(flow, desktop, user_db, factory_db, state, progress)
     nodes = {node.id: node for node in flow.nodes}
     runners = {"lesson": _run_lesson, "loop": _run_loop, "if": _run_if,
                "join": lambda current, node: current.finish(node)}
@@ -477,6 +481,7 @@ def run_flow(
             progressed = True
             if verdict == "skip":
                 state.skipped.add(node.id)
+                run.progress(node.id, "skipped")
             else:
                 wave.append(node)
         if wave:  # everything ready together; PHYSICAL_INPUT serialises the nodes that need it

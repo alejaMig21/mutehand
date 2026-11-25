@@ -302,3 +302,23 @@ def test_effect_names_in_a_flow_must_be_part_of_the_closed_vocabulary():
         Node("c", kind="if", on="a", equals="revealled", then="b")
     with pytest.raises(ValueError, match="nothing"):
         Node("l", "x", kind="loop", max_iterations=2, max_seconds=5, stop_when_effect="nothing")
+
+
+def test_progress_reports_every_node_as_running_then_done_blocked_or_skipped(tmp_path):
+    user_db = tmp_path / "user.db"
+    teach(user_db, a="Alpha", b="Beta", c="Gamma", z="Missing")
+    flow = Flow(id="f", nodes=[Node("a", "a"), Node("choose", kind="if", on="a", equals="revealed",
+                                                    then="b", otherwise="c"),
+                               Node("b", "b"), Node("c", "c"), Node("z", "z")],
+                edges=[("a", "choose")])
+    desktop = FakeDesktop(controls=[button(n) for n in ("Alpha", "Beta", "Gamma")],
+                          reveals={("button", "Alpha"): [button("New")]})
+    events = []
+
+    run_flow(flow, desktop=desktop, user_db=user_db, progress=lambda node, status: events.append((node, status)))
+
+    final = {}
+    for node, status in events:
+        final[node] = status
+    assert final == {"a": "done", "choose": "done", "b": "done", "c": "skipped", "z": "blocked"}
+    assert events.index(("a", "running")) < events.index(("a", "done"))

@@ -1,0 +1,18 @@
+html, body, #root { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+.app { display: grid; grid-template-columns: 260px 1fr 280px; height: 100%; }
+.panel { padding: 12px; overflow: auto; border-right: 1px solid #ddd; background: #fafafa; }
+.panel.right { border-right: 0; border-left: 1px solid #ddd; }
+.panel h2 { font-size: 14px; margin: 12px 0 6px; }
+.palette-item { display: block; width: 100%; text-align: left; margin: 4px 0; padding: 6px; border: 1px solid #ccc; background: #fff; cursor: pointer; border-radius: 4px; }
+.palette-item small { color: #777; }
+.palette-item.sensitive { border-color: #c77; }
+.canvas { height: 100%; }
+.react-flow__node.status-pending { background: #eee; }
+.react-flow__node.status-running { background: #cfe3ff; border-color: #2a6; }
+.react-flow__node.status-done { background: #cdeccd; }
+.react-flow__node.status-blocked { background: #f4c7c7; }
+.react-flow__node.status-skipped { background: #fff; border-style: dashed; }
+.row { display: flex; gap: 4px; margin: 4px 0; }
+.row input, .row select { flex: 1; min-width: 0; }
+.error { color: #b00; }
+.status-line { margin-top: 8px; font-weight: 600; }
