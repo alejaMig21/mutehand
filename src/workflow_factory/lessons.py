@@ -1,10 +1,16 @@
 """Lesson store: one table per SQLite file (user knowledge, factory knowledge)."""
 
+import io
+import json
 import sqlite3
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from pathlib import Path
+
+import numpy as np
+
+from workflow_factory.desktop import FRAME_FIELDS, Frame
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS lessons (
@@ -21,6 +27,9 @@ CREATE TABLE IF NOT EXISTS lessons (
     status TEXT NOT NULL,
     factory_successes INTEGER NOT NULL DEFAULT 0,
     factory_failures INTEGER NOT NULL DEFAULT 0,
+    frame TEXT,    -- JSON of Frame, NULL = replay anywhere
+    mask TEXT,     -- JSON list of the frame fields that matter
+    capture BLOB,  -- canvas pixels, numpy .npy bytes
     PRIMARY KEY (app, name)
 )
 """
@@ -38,7 +47,7 @@ CREATE TABLE IF NOT EXISTS lesson_state (
 """
 COLUMNS = (
     "app, version, name, precondition, action, role, control_name, automation_id,"
-    " effect, origin, status, factory_successes, factory_failures"
+    " effect, origin, status, factory_successes, factory_failures, frame, mask, capture"
 )
 PLACEHOLDERS = ", ".join("?" * (COLUMNS.count(",") + 1))
 # Below REJECTED_BELOW a lesson is rejected; everything else that is not trusted is suspect.
@@ -77,20 +86,41 @@ class Lesson:
     status: Status = Status.SUSPECT
     factory_successes: int = 0
     factory_failures: int = 0
+    frame: Frame | None = None
+    mask: tuple[str, ...] = FRAME_FIELDS
+    capture: np.ndarray | None = field(default=None, compare=False)
+
+
+def _pack(capture):
+    if capture is None:
+        return None
+    buffer = io.BytesIO()
+    np.save(buffer, capture, allow_pickle=False)
+    return buffer.getvalue()
+
+
+def _unpack(blob):
+    return None if blob is None else np.load(io.BytesIO(blob), allow_pickle=False)
 
 
 def _row_to_lesson(row) -> Lesson:
     (app, version, name, precondition, action, role, control, automation_id, effect, origin,
-     status, factory_successes, factory_failures) = row
+     status, factory_successes, factory_failures, frame, mask, capture) = row
     return Lesson(
         app=app, version=version, name=name, precondition=precondition, action=action,
         locator=Locator(role, control, automation_id), effect=effect,
         origin=Origin(origin), status=Status(status),
         factory_successes=factory_successes, factory_failures=factory_failures,
+        frame=Frame(**json.loads(frame)) if frame else None,
+        mask=tuple(json.loads(mask)) if mask else FRAME_FIELDS,
+        capture=_unpack(capture),
     )
 
 
 def save_lesson(db_path: Path, lesson: Lesson) -> None:
+    unknown = [name for name in lesson.mask if name not in FRAME_FIELDS]
+    if unknown:
+        raise ValueError(f"mask names unknown frame fields: {', '.join(unknown)}")
     with closing(sqlite3.connect(db_path)) as db, db:
         db.execute(SCHEMA)
         loc = lesson.locator
@@ -98,7 +128,9 @@ def save_lesson(db_path: Path, lesson: Lesson) -> None:
             f"INSERT OR REPLACE INTO lessons ({COLUMNS}) VALUES ({PLACEHOLDERS})",
             (lesson.app, lesson.version, lesson.name, lesson.precondition, lesson.action,
              loc.role, loc.name, loc.automation_id, lesson.effect, str(lesson.origin),
-             str(lesson.status), lesson.factory_successes, lesson.factory_failures),
+             str(lesson.status), lesson.factory_successes, lesson.factory_failures,
+             json.dumps(asdict(lesson.frame)) if lesson.frame else None,
+             json.dumps(list(lesson.mask)), _pack(lesson.capture)),
         )
 
 

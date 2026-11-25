@@ -7,10 +7,11 @@ from workflow_factory.agent_desktop import (
     AgentDesktop,
     AgentDesktopError,
     resolve_binary,
+    system_frame_fields,
     version_of_pid,
 )
 from fake_desktop import FakeDesktop
-from workflow_factory.desktop import AppKey, Control, Desktop
+from workflow_factory.desktop import AppKey, Control, Desktop, Frame
 
 FORBIDDEN_FLAGS = {"--force", "--trace", "--trace-strict", "--screenshot", "--debug"}
 
@@ -205,3 +206,40 @@ def test_app_name_matches_regardless_of_case():
     desktop = AgentDesktop("mspaint.exe", runner, settle_seconds=0, version_of=lambda pid: "1.0")
 
     assert desktop.app_key() == AppKey("mspaint.exe", "1.0")
+
+
+@pytest.mark.live
+def test_system_frame_fields_reads_resolution_scale_language_and_theme():
+    context = system_frame_fields()
+
+    assert context["resolution_width"] >= 800 and context["resolution_height"] >= 600
+    assert context["scale"] >= 1.0
+    assert context["theme"] in ("light", "dark")
+    assert re.fullmatch(r"[A-Za-z]{2,3}(-[A-Za-z0-9]+)*", context["language"])
+
+
+def test_frame_combines_window_geometry_from_the_cli_with_system_frame_fields():
+    windows = ok([  # the real CLI answers list-windows with a bare list
+        {"app_name": "other.exe", "bounds": {"x": 0, "y": 0, "width": 1, "height": 1}, "minimized": False},
+        {"app_name": "mspaint.exe", "bounds": {"x": 5, "y": 6, "width": 800, "height": 600}, "minimized": False},
+    ])
+    context = {"resolution_width": 1920, "resolution_height": 1080, "scale": 1.25,
+               "language": "es-AR", "theme": "dark"}
+    desktop = AgentDesktop("mspaint.exe", FakeRunner(windows), settle_seconds=0,
+                           system_frame_fields=lambda: context)
+
+    assert desktop.frame() == Frame(
+        window_state="normal", window_width=800, window_height=600, resolution_width=1920,
+        resolution_height=1080, scale=1.25, language="es-AR", theme="dark")
+
+
+def test_minimized_and_full_screen_windows_report_their_window_state():
+    context = {"resolution_width": 1920, "resolution_height": 1080, "scale": 1.0,
+               "language": "en-US", "theme": "light"}
+
+    def frame_of(window):
+        runner = FakeRunner(ok([{"app_name": "mspaint.exe", **window}]))
+        return AgentDesktop("mspaint.exe", runner, system_frame_fields=lambda: context).frame()
+
+    assert frame_of({"bounds": {"x": 0, "y": 0, "width": 1920, "height": 1040}, "minimized": False}).window_state == "maximized"
+    assert frame_of({"bounds": {"x": 0, "y": 0, "width": 300, "height": 200}, "minimized": True}).window_state == "minimized"

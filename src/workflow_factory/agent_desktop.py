@@ -9,11 +9,12 @@ import json
 import shutil
 import subprocess
 import time
+import winreg
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from workflow_factory.desktop import AppKey, Control
+from workflow_factory.desktop import AppKey, Control, Frame
 
 Runner = Callable[[list[str], str | None], str]
 SNAPSHOT_ATTEMPTS = 5
@@ -67,6 +68,28 @@ def version_of_pid(pid: int) -> str:
     return f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
 
 
+def system_frame_fields() -> dict:
+    """Resolution (physical px), scale, UI language and app theme of this Windows session."""
+    user32, gdi32, shcore, kernel = (ctypes.windll.user32, ctypes.windll.gdi32,
+                                     ctypes.windll.shcore, ctypes.windll.kernel32)
+    hdc = user32.GetDC(0)
+    width, height = gdi32.GetDeviceCaps(hdc, 118), gdi32.GetDeviceCaps(hdc, 117)  # DESKTOPHORZRES/VERTRES
+    user32.ReleaseDC(0, hdc)
+    locale = ctypes.create_unicode_buffer(85)
+    kernel.GetUserDefaultLocaleName(locale, 85)
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize") as key:
+            light = winreg.QueryValueEx(key, "AppsUseLightTheme")[0]
+    except OSError:
+        light = 1  # value absent on older Windows: light is the platform default
+    return {
+        "resolution_width": width, "resolution_height": height,
+        "scale": shcore.GetScaleFactorForDevice(0) / 100,
+        "language": locale.value, "theme": "light" if light else "dark",
+    }
+
+
 def _native_id(raw) -> str:
     # real CLI publishes {"kind": "automation_id", "value": "Save"}
     return raw.get("value", "") if isinstance(raw, dict) else raw or ""
@@ -87,10 +110,11 @@ def _walk(node: dict):
 class AgentDesktop:
     def __init__(
         self, app: str, runner: Runner = _run_cli, settle_seconds: float = 0.5,
-        version_of=version_of_pid,
+        version_of=version_of_pid, system_frame_fields=system_frame_fields,
     ):
         self._app = app
         self._version_of = version_of
+        self._system_frame_fields = system_frame_fields
         self._runner = runner
         self._settle = settle_seconds  # ponytail: fixed pause, poll for stability if apps repaint slower
 
@@ -146,6 +170,18 @@ class AgentDesktop:
             if app.get("name", "").lower() == self._app.lower():  # Windows process names ignore case
                 return AppKey(self._app, self._version_of(app["pid"]))
         raise AgentDesktopError("APP_NOT_FOUND", self._app)
+
+    def frame(self) -> Frame:
+        fields = self._system_frame_fields()
+        for window in self._call(["list-windows", "--app", self._app]):
+            if window.get("app_name", "").lower() == self._app.lower():
+                bounds = window["bounds"]
+                full = (bounds["width"] >= 0.98 * fields["resolution_width"]
+                        and bounds["height"] >= 0.9 * fields["resolution_height"])
+                state = "minimized" if window.get("minimized") else "maximized" if full else "normal"
+                return Frame(window_state=state, window_width=bounds["width"],
+                             window_height=bounds["height"], **fields)
+        raise AgentDesktopError("WINDOW_NOT_FOUND", self._app)
 
     def now(self) -> str:
         return datetime.now(UTC).isoformat()

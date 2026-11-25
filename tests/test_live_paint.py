@@ -24,7 +24,8 @@ def test_click_paint_open_settings_through_run_flow_stores_a_measured_effect(tmp
     db_path = tmp_path / "user.db"
     save_lesson(db_path, Lesson(
         app=key.process, version=key.version, name="open-settings",
-        locator=Locator(role="button", name="Open settings", automation_id="SettingsButton")))
+        locator=Locator(role="button", name="Open settings", automation_id="SettingsButton"),
+        frame=desktop.frame()))
     flow = Flow(nodes=[Node(id="open-settings", lesson="open-settings")])
 
     result = run_flow(flow, desktop=desktop, user_db=db_path)

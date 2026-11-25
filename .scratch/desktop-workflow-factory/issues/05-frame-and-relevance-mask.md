@@ -4,9 +4,9 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A lesson replays when the current frame matches within tolerance on the masked fields
-- [ ] A change in a masked field (for example scale) prevents replay; a change in an unmasked field does not
-- [ ] Distance between frames uses a numeric vector view; canvas captures are stored as pixel arrays
-- [ ] Out-of-frame outcome is observable through the public entry point
+- [x] A lesson replays when the current frame matches within tolerance on the masked fields
+- [x] A change in a masked field (for example scale) prevents replay; a change in an unmasked field does not
+- [x] Distance between frames uses a numeric vector view; canvas captures are stored as pixel arrays
+- [x] Out-of-frame outcome is observable through the public entry point

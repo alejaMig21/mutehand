@@ -76,6 +76,9 @@ def run_flow(
             if status in (Status.REJECTED, Status.TO_REVALIDATE):
                 blocked[node.id] = str(status)
                 continue
+            if lesson.frame and not lesson.frame.matches(desktop.frame(), lesson.mask):
+                blocked[node.id] = "out_of_frame"
+                continue
             loc = lesson.locator
             control = desktop.find(loc.role, loc.name, loc.automation_id)
             if control is None:

@@ -1,14 +1,15 @@
 """Fake desktop port: the single test seam. No real screen access."""
 
 from workflow_factory import Lesson, Locator
-from workflow_factory.desktop import AppKey, Control
+from workflow_factory.desktop import AppKey, Control, Frame
 
 
 class FakeDesktop:
     def __init__(
         self, controls, reveals=None, removes=None, now_value="2026-01-01T00:00:00Z",
-        app="paint.exe", version="1.0",
+        app="paint.exe", version="1.0", frame=None,
     ):
+        self._frame = frame or Frame()
         self._app_key = AppKey(app, version)
         self._controls = list(controls)
         self._reveals = reveals or {}  # (role, name) -> controls shown after a click
@@ -39,6 +40,9 @@ class FakeDesktop:
 
     def app_key(self):
         return self._app_key
+
+    def frame(self):
+        return self._frame
 
     def now(self):
         return self._now

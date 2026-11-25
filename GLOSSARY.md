@@ -29,7 +29,7 @@ The measured change a lesson causes, drawn from a closed vocabulary (closed dial
 _Avoid_: Result, outcome
 
 **Frame**:
-The exact context in which a lesson was measured: app and version, window state and size, resolution, scale, language, theme. A lesson replays only inside its frame.
+The exact conditions in which a lesson was measured: window state and size, resolution, scale, language, theme. The app and its version belong to the App key, not the frame. A lesson replays only inside its frame.
 _Avoid_: Environment, context, setup
 
 **Relevance mask**:
