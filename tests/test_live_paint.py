@@ -8,7 +8,7 @@ import sqlite3
 from contextlib import closing
 
 import pytest
-from workflow_factory import Effect, Flow, Locator, Node, run_flow
+from workflow_factory import Effect, Flow, Lesson, Locator, Node, run_flow, save_lesson
 from workflow_factory.agent_desktop import AgentDesktop, AgentDesktopError
 
 pytestmark = pytest.mark.live
@@ -20,9 +20,12 @@ def test_click_paint_open_settings_through_run_flow_stores_a_measured_effect(tmp
         desktop.snapshot()
     except AgentDesktopError as error:
         pytest.fail(f"Paint must be running on the secondary monitor first: {error}")
-    flow = Flow(nodes=[Node(id="open-settings", locator=Locator(
-        role="button", name="Open settings", automation_id="SettingsButton"))])
+    key = desktop.app_key()
     db_path = tmp_path / "user.db"
+    save_lesson(db_path, Lesson(
+        app=key.process, version=key.version, name="open-settings",
+        locator=Locator(role="button", name="Open settings", automation_id="SettingsButton")))
+    flow = Flow(nodes=[Node(id="open-settings", lesson="open-settings")])
 
     result = run_flow(flow, desktop=desktop, user_db=db_path)
 

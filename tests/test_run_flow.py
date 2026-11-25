@@ -2,12 +2,17 @@ import sqlite3
 from contextlib import closing
 
 import pytest
-from fake_desktop import FakeDesktop, button
-from workflow_factory import ControlNotFound, Flow, Locator, Node, run_flow
+from fake_desktop import FakeDesktop, button, lesson
+from workflow_factory import ControlNotFound, Flow, Node, run_flow, save_lesson
 
 
-def one_node_flow(name="Open menu"):
-    return Flow(nodes=[Node(id="n1", locator=Locator(role="button", name=name))])
+def one_node_flow():
+    return Flow(nodes=[Node(id="n1", lesson="open-menu")])
+
+
+def taught(db_path, control_name="Open menu"):
+    save_lesson(db_path, lesson("open-menu", control_name))
+    return db_path
 
 
 def stored_effects(db_path):
@@ -20,7 +25,7 @@ def test_one_node_flow_clicks_located_control_and_stores_revealed_effect(tmp_pat
         controls=[button("Open menu", "menuBtn")],
         reveals={("button", "Open menu"): [button("Save as")]},
     )
-    db_path = tmp_path / "user.db"
+    db_path = taught(tmp_path / "user.db")
 
     result = run_flow(one_node_flow(), desktop=desktop, user_db=db_path)
 
@@ -34,7 +39,7 @@ def test_click_that_removes_a_control_is_stored_as_closed_dialog(tmp_path):
         controls=[button("Open menu"), button("Dialog OK")],
         removes={("button", "Open menu"): [button("Dialog OK")]},
     )
-    db_path = tmp_path / "user.db"
+    db_path = taught(tmp_path / "user.db")
 
     run_flow(one_node_flow(), desktop=desktop, user_db=db_path)
 
@@ -43,16 +48,17 @@ def test_click_that_removes_a_control_is_stored_as_closed_dialog(tmp_path):
 
 def test_missing_control_stops_the_flow_without_clicking(tmp_path):
     desktop = FakeDesktop(controls=[button("Something else")])
+    db_path = taught(tmp_path / "user.db")
 
     with pytest.raises(ControlNotFound):
-        run_flow(one_node_flow(), desktop=desktop, user_db=tmp_path / "user.db")
+        run_flow(one_node_flow(), desktop=desktop, user_db=db_path)
 
     assert desktop.clicks == []
 
 
 def test_click_that_changes_nothing_is_stored_as_no_change(tmp_path):
     desktop = FakeDesktop(controls=[button("Open menu")])
-    db_path = tmp_path / "user.db"
+    db_path = taught(tmp_path / "user.db")
 
     run_flow(one_node_flow(), desktop=desktop, user_db=db_path)
 

@@ -4,6 +4,7 @@ Deliberately has no way to pass --force, --trace or screenshot flags (consent
 gate, see ADR-0002). Text goes through stdin so it never lands in process args.
 """
 
+import ctypes
 import json
 import shutil
 import subprocess
@@ -12,7 +13,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from workflow_factory.desktop import Control
+from workflow_factory.desktop import AppKey, Control
 
 Runner = Callable[[list[str], str | None], str]
 SNAPSHOT_ATTEMPTS = 5
@@ -42,6 +43,30 @@ def _run_cli(args: list[str], stdin: str | None = None) -> str:
     return done.stdout
 
 
+def version_of_pid(pid: int) -> str:
+    """Executable file version (a.b.c.d) of a running process, via the Windows version resource."""
+    kernel, version = ctypes.windll.kernel32, ctypes.windll.version
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        raise AgentDesktopError("VERSION_UNAVAILABLE", f"cannot open process {pid}")
+    try:
+        size = ctypes.c_ulong(1024)
+        path = ctypes.create_unicode_buffer(size.value)
+        if not kernel.QueryFullProcessImageNameW(ctypes.c_void_p(handle), 0, path, ctypes.byref(size)):
+            raise AgentDesktopError("VERSION_UNAVAILABLE", f"no image path for process {pid}")
+    finally:
+        kernel.CloseHandle(ctypes.c_void_p(handle))
+    length = version.GetFileVersionInfoSizeW(path.value, None)
+    block = ctypes.create_string_buffer(length)
+    if not length or not version.GetFileVersionInfoW(path.value, 0, length, block):
+        raise AgentDesktopError("VERSION_UNAVAILABLE", f"no version resource in {path.value}")
+    info, info_len = ctypes.c_void_p(), ctypes.c_uint()
+    version.VerQueryValueW(block, "\\", ctypes.byref(info), ctypes.byref(info_len))
+    ms, ls = ctypes.cast(info.value + 8, ctypes.POINTER(ctypes.c_uint * 2)).contents
+    return f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
+
+
 def _native_id(raw) -> str:
     # real CLI publishes {"kind": "automation_id", "value": "Save"}
     return raw.get("value", "") if isinstance(raw, dict) else raw or ""
@@ -60,8 +85,12 @@ def _walk(node: dict):
 
 
 class AgentDesktop:
-    def __init__(self, app: str, runner: Runner = _run_cli, settle_seconds: float = 0.5):
+    def __init__(
+        self, app: str, runner: Runner = _run_cli, settle_seconds: float = 0.5,
+        version_of=version_of_pid,
+    ):
         self._app = app
+        self._version_of = version_of
         self._runner = runner
         self._settle = settle_seconds  # ponytail: fixed pause, poll for stability if apps repaint slower
 
@@ -111,6 +140,12 @@ class AgentDesktop:
                 if error.code != "AMBIGUOUS_TARGET" or attempt == SNAPSHOT_ATTEMPTS:
                     raise
                 time.sleep(self._settle)
+
+    def app_key(self) -> AppKey:
+        for app in self._call(["list-apps"]).get("apps", []):
+            if app.get("name", "").lower() == self._app.lower():  # Windows process names ignore case
+                return AppKey(self._app, self._version_of(app["pid"]))
+        raise AgentDesktopError("APP_NOT_FOUND", self._app)
 
     def now(self) -> str:
         return datetime.now(UTC).isoformat()

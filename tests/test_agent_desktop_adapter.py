@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 from workflow_factory.agent_desktop import (
@@ -6,9 +7,10 @@ from workflow_factory.agent_desktop import (
     AgentDesktop,
     AgentDesktopError,
     resolve_binary,
+    version_of_pid,
 )
 from fake_desktop import FakeDesktop
-from workflow_factory.desktop import Control, Desktop
+from workflow_factory.desktop import AppKey, Control, Desktop
 
 FORBIDDEN_FLAGS = {"--force", "--trace", "--trace-strict", "--screenshot", "--debug"}
 
@@ -181,3 +183,25 @@ def test_find_reports_the_native_id_of_the_matched_control():
     control = AgentDesktop("mspaint.exe", runner, settle_seconds=0).find("button", "Save")
 
     assert control == Control("button", "Save", "Save")
+
+
+def test_executable_version_of_a_running_process_has_four_numeric_parts():
+    import os
+
+    assert re.fullmatch(r"\d+\.\d+\.\d+\.\d+", version_of_pid(os.getpid()))
+
+
+def test_app_key_is_process_name_plus_executable_version():
+    runner = FakeRunner(ok({"apps": [
+        {"name": "other.exe", "pid": 1}, {"name": "mspaint.exe", "pid": 42}]}))
+    desktop = AgentDesktop("mspaint.exe", runner, settle_seconds=0, version_of=lambda pid: f"v{pid}")
+
+    assert desktop.app_key() == AppKey("mspaint.exe", "v42")
+    assert runner.calls == [(["list-apps"], None)]
+
+
+def test_app_name_matches_regardless_of_case():
+    runner = FakeRunner(ok({"apps": [{"name": "MSPaint.exe", "pid": 7}]}))
+    desktop = AgentDesktop("mspaint.exe", runner, settle_seconds=0, version_of=lambda pid: "1.0")
+
+    assert desktop.app_key() == AppKey("mspaint.exe", "1.0")

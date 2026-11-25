@@ -1,10 +1,15 @@
 """Fake desktop port: the single test seam. No real screen access."""
 
-from workflow_factory.desktop import Control
+from workflow_factory import Lesson, Locator
+from workflow_factory.desktop import AppKey, Control
 
 
 class FakeDesktop:
-    def __init__(self, controls, reveals=None, removes=None, now_value="2026-01-01T00:00:00Z"):
+    def __init__(
+        self, controls, reveals=None, removes=None, now_value="2026-01-01T00:00:00Z",
+        app="paint.exe", version="1.0",
+    ):
+        self._app_key = AppKey(app, version)
         self._controls = list(controls)
         self._reveals = reveals or {}  # (role, name) -> controls shown after a click
         self._removes = removes or {}  # (role, name) -> controls hidden after a click
@@ -32,9 +37,19 @@ class FakeDesktop:
     def snapshot(self):
         return tuple(self._controls)
 
+    def app_key(self):
+        return self._app_key
+
     def now(self):
         return self._now
 
 
 def button(name, automation_id=""):
     return Control(role="button", name=name, automation_id=automation_id)
+
+
+def lesson(name, control_name, version="1.0", origin="local", app="paint.exe", **kw):
+    return Lesson(
+        app=app, version=version, name=name, origin=origin,
+        locator=Locator(role="button", name=control_name), **kw,
+    )

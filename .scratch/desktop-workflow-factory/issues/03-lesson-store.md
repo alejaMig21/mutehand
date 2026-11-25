@@ -4,10 +4,10 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A local lesson shadows a factory lesson for the same situation
-- [ ] The factory database is opened read-only and is never written
-- [ ] A version change marks that app's lessons to revalidate; nothing is deleted
-- [ ] Lessons whose status is to revalidate are not replayed until re-measured
-- [ ] Tests run through the public entry point with a fake desktop and temp SQLite files
+- [x] A local lesson shadows a factory lesson for the same situation
+- [x] The factory database is opened read-only and is never written
+- [x] A version change marks that app's lessons to revalidate; nothing is deleted
+- [x] Lessons whose status is to revalidate are not replayed until re-measured
+- [x] Tests run through the public entry point with a fake desktop and temp SQLite files
