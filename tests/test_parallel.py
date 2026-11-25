@@ -40,17 +40,19 @@ def test_two_physical_input_nodes_in_parallel_branches_never_overlap_in_time(tmp
     assert desktop.max_active == 1
 
 
-def test_accessibility_only_nodes_in_parallel_branches_may_overlap(tmp_path):
+def test_an_accessibility_click_still_takes_the_machine_so_two_of_them_never_overlap(tmp_path):
+    # research 20: a click or set-value through accessibility can take the foreground window, so it is
+    # not free of physical input even when the lesson uses no coordinates
     user_db = tmp_path / "user.db"
     save_lesson(user_db, lesson("a", "Alpha"))
     save_lesson(user_db, lesson("b", "Beta"))
     flow = Flow(nodes=[Node("a", "a"), Node("b", "b")], **TWO_PARALLEL_BRANCHES)
     desktop = desktop_for_parallel()
-    desktop.rendezvous = threading.Barrier(2)  # both clicks must be in flight at the same moment
 
-    run_flow(flow, desktop=desktop, user_db=user_db)
+    result = run_flow(flow, desktop=desktop, user_db=user_db)
 
-    assert len(desktop.clicks) == 2 and desktop.max_active == 2
+    assert result.stopped is None and len(desktop.clicks) == 2
+    assert desktop.max_active == 1
 
 
 ANCHOR = Locator(role="icon", name="Recycle Bin")

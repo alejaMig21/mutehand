@@ -17,4 +17,8 @@ user-coexistence pause, yet it can steal the person's focus.
 
 **Blocked by:** 20
 
-**Status:** needs-decision
+**Status:** resolved
+
+## Answer
+
+Option 1 chosen by the person on 2026-11-25: every lesson action takes the machine-wide input lock and pauses while the person is active (`Lesson.uses_physical_input` is always true). Parallel waves now overlap only non-acting work.

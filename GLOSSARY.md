@@ -97,7 +97,7 @@ A saved point in a running flow from which it can resume after a stop.
 _Avoid_: Snapshot, save state
 
 **Physical input**:
-Real mouse, keyboard or focus use, as opposed to accessibility actions that need none. Nodes that need it cannot run at the same time as each other.
+Anything that acts on an app: mouse, keyboard, or an accessibility click or set-value, because all of them can take the foreground window (research 20). Every lesson node needs it, so acting nodes never run at the same time as each other and pause while the person is active. Only reads (snapshot, find, get, capture) are free of it.
 _Avoid_: Headed mode (a tool detail), UI input
 
 ### Safety

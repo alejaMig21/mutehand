@@ -153,9 +153,9 @@ class Lesson:
 
     @property
     def uses_physical_input(self) -> bool:
-        """Mouse or keyboard input is possible: a drag, typing, or a rung that clicks at a point."""
-        return (self.action in ("drag", "type_value", "type_secret")
-                or self.derived is not None or self.template is not None)
+        """Every lesson action acts on the app. Research 20: even an accessibility click or set-value can take
+        the foreground window, so no action is free of the machine-wide input lock and the pause for the person."""
+        return True
 
     @property
     def endpoint(self) -> Endpoint:
