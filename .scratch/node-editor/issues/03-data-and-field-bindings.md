@@ -4,8 +4,17 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Data flows from one node to the next in a run and is checkpointed
-- [ ] A saved flow with fixed and referenced fields loads, runs and round-trips
-- [ ] The stored field form has room for expressions without a migration
+- [x] Data flows from one node to the next in a run and is checkpointed
+- [x] A saved flow with fixed and referenced fields loads, runs and round-trips
+- [x] The stored field form has room for expressions without a migration
+
+## Answer
+
+`src/workflow_factory/data.py` defines the binding forms: a node's `fields` map a name to exactly one of `{"value": ...}`,
+`{"ref": {"node": id, "field": name}}` (node `run` is the Data a workday starts with) or `{"expression": "..."}`.
+Each finished step records `{"effect": ...}` as its output Data, saved in the checkpoint (`outputs`), and a type_value node
+takes its text from a `text` field (the older typed `inputs` still work). Expressions are stored and round-trip, but
+`run_flow` refuses to start with one. Tests: `tests/test_data.py`. Not done here, by design: the Data of steps that read
+values out of an app (ticket 07) and the system nodes (tickets 04, 05).

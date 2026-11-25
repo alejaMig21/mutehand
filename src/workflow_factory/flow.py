@@ -26,6 +26,7 @@ from itertools import pairwise
 from pathlib import Path
 
 from workflow_factory.consent import is_permitted
+from workflow_factory.data import RUN, MissingData, check_binding, expressions, references, resolve
 from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.ladder import locate
 from workflow_factory.queue import (
@@ -106,8 +107,11 @@ class Node:
     stop_after_failures: int = 3  # loop: consecutive failures that stop it and queue a doubt
     stop_when_effect: str | None = None  # loop: ends normally when an iteration measures this
     exclusive_input: bool = False  # needs the mouse, keyboard or focus: never overlaps another such node
+    fields: dict = field(default_factory=dict, hash=False)  # field name -> binding (see data.py)
 
     def __post_init__(self):
+        for name, binding in self.fields.items():
+            check_binding(name, binding)
         if self.kind not in KINDS:
             raise ValueError(f"unknown node kind {self.kind!r}")
         for name, type_name in self.inputs:
@@ -141,6 +145,12 @@ class Flow:
             raise ValueError("a flow id may only use letters, digits, '_', '.' and '-'")
         ids = [node.id for node in self.nodes]
         known = set(ids)
+        for node in self.nodes:
+            for name, target in references(node.fields):
+                if target == node.id:
+                    raise ValueError(f"field {name!r} of node {node.id!r} points at itself")
+                if target not in known and target != RUN:
+                    raise ValueError(f"field {name!r} of node {node.id!r} points at an unknown node {target!r}")
         for source, target in self.all_edges:
             if source not in known or target not in known:
                 raise ValueError(f"edge {source!r} -> {target!r} names an unknown node")
@@ -214,16 +224,17 @@ class _State:
     effects: dict = field(default_factory=dict)  # node id -> last measured effect
     choices: dict = field(default_factory=dict)  # if node id -> the target it routed to
     loops: dict = field(default_factory=dict)  # loop node id -> {"iteration", "failures"}
-    context: dict = field(default_factory=dict)  # typed run context values
+    context: dict = field(default_factory=dict)  # the Data a workday starts with
+    outputs: dict = field(default_factory=dict)  # node id -> the Data the node gave out
 
     def dump(self) -> dict:
         return {"done": sorted(self.done), "skipped": sorted(self.skipped), "effects": self.effects,
-                "choices": self.choices, "loops": self.loops, "context": self.context}
+                "choices": self.choices, "loops": self.loops, "context": self.context, "outputs": self.outputs}
 
     @classmethod
     def load(cls, data: dict) -> _State:
         return cls(set(data["done"]), set(data["skipped"]), data["effects"], data["choices"],
-                   data["loops"], data["context"])
+                   data["loops"], data["context"], data.get("outputs", {}))
 
 
 def _gate(step, user_db, key, desktop):
@@ -257,10 +268,23 @@ def effect_of(before, after) -> Effect:
     return Effect.NO_CHANGE
 
 
-def _input_problem(node: Node, step, context: dict) -> str | None:
-    """A node does not start while a typed input is missing or of the wrong type."""
-    if step.action == "type_value" and not node.inputs:
+def _text_of(node: Node, state) -> str:
+    """The text a type_value node types: its `text` field, else its first typed input."""
+    if "text" in node.fields:
+        return str(resolve(node.fields["text"], state.outputs, state.context))
+    return str(state.context[node.inputs[0][0]])
+
+
+def _input_problem(node: Node, step, state) -> str | None:
+    """A node does not start while a bound field points at nothing, or a typed input is missing or of the wrong type."""
+    context = state.context
+    if step.action == "type_value" and not node.inputs and "text" not in node.fields:
         return "missing_input"
+    for binding in node.fields.values():
+        try:
+            resolve(binding, state.outputs, context)
+        except MissingData:
+            return "missing_input"
     for name, type_name in node.inputs:
         if name not in context:
             return "missing_input"
@@ -340,7 +364,7 @@ class _Run:
         physical = node.exclusive_input or step.uses_physical_input
         if EMERGENCY_STOP.is_set():
             raise _EmergencyStop
-        reason = _input_problem(node, step, self.state.context)
+        reason = _input_problem(node, step, self.state)
         if reason is None:
             reason, targets = _gate(step, self.user_db, self.key, desktop)
         if reason:
@@ -356,7 +380,7 @@ class _Run:
         if step.action == "type_secret":
             desktop.type_secret(target.control, step.secret_ref)  # the value never enters the core
         elif step.action == "type_value":
-            desktop.type_text(target.control, str(self.state.context[node.inputs[0][0]]))
+            desktop.type_text(target.control, _text_of(node, self.state))
         elif step.action == "drag":
             desktop.drag(target.control, target.point, targets[1].control, targets[1].point)
         elif target.point:
@@ -399,6 +423,7 @@ def _run_step(run: _Run, node: Node) -> None:
         return
     with run.lock:
         run.state.effects[node.id] = str(effect)
+        run.state.outputs[node.id] = {"effect": str(effect)}
     run.finish(node)
 
 
@@ -469,6 +494,9 @@ def run_flow(
     flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path | None = None,
     context: dict | None = None, progress=None,
 ) -> RunResult:
+    for node in flow.nodes:
+        if expressions(node.fields):
+            raise ValueError(f"node {node.id!r} uses an expression, which is stored but not run yet")
     if EMERGENCY_STOP.is_set():
         return RunResult({}, {}, {}, emergency=True)
     if has_open_doubt(user_db, flow.key):  # a stopped flow waits for the tutor
