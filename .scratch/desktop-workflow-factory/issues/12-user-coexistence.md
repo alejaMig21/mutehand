@@ -4,11 +4,11 @@
 
 **Blocked by:** 11
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A moved cursor or recent user input pauses the flow before the next physical action
-- [ ] After idle time the flow re-verifies preconditions before resuming
-- [ ] Keys are not sent when the target window is not foreground
-- [ ] The emergency hotkey stops all running flows
-- [ ] Mouse movement humanisation is reused from the predecessor code, parameters calibrated here
-- [ ] All of it is tested through the fake input detector and clock
+- [x] A moved cursor or recent user input pauses the flow before the next physical action
+- [x] After idle time the flow re-verifies preconditions before resuming
+- [x] Keys are not sent when the target window is not foreground
+- [x] The emergency hotkey stops all running flows
+- [x] Mouse movement humanisation is reused from the predecessor code, parameters calibrated here
+- [x] All of it is tested through the fake input detector and clock

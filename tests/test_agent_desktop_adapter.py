@@ -333,9 +333,12 @@ def test_click_at_turns_a_fraction_of_the_anchor_into_a_physical_click_inside_it
     bounds = ok({"value": {"x": 2620.0, "y": 75.0, "width": 32.0, "height": 32.0}})
     runner = FakeRunner(bounds, ok({}))
 
-    AgentDesktop("mspaint.exe", runner, settle_seconds=0).click_at(
+    path = []
+    AgentDesktop("mspaint.exe", runner, settle_seconds=0, move_cursor=path.append,
+                 cursor_position=lambda: (0, 0), glide_pause=lambda _: None).click_at(
         Control("icon", "Recycle Bin", ref="@s1:e5"), 0.5, 0.25)
 
+    assert path[0] == (0, 0) and path[-1] == (2636, 83)  # the cursor glided from where it was
     assert runner.calls == [
         (["get", "@s1:e5", "--property", "bounds"], None),
         (["--headed", "mouse-click", "--xy", "2636,83"], None),  # 2620 + 16, 75 + 8
@@ -347,10 +350,13 @@ def test_drag_computes_both_ends_from_their_own_anchors_and_centres_when_no_frac
     destination = ok({"value": {"x": 1000.0, "y": 500.0, "width": 100.0, "height": 100.0}})
     runner = FakeRunner(source, destination, ok({}))
 
-    AgentDesktop("explorer.exe", runner, settle_seconds=0).drag(
+    path = []
+    AgentDesktop("explorer.exe", runner, settle_seconds=0, move_cursor=path.append,
+                 cursor_position=lambda: (0, 0), glide_pause=lambda _: None).drag(
         Control("listitem", "Report.docx", ref="@s1:e1"), None,
         Control("pane", "Desktop", ref="@s1:e9"), (0.9, 0.5))
 
+    assert path[-1] == (120, 210)  # it glides to where the drag starts
     assert runner.calls[2] == (
         ["--headed", "drag", "--from-xy", "120,210", "--to-xy", "1090,550"], None)
 
@@ -360,3 +366,86 @@ def test_app_key_process_name_is_lowercased_so_lessons_and_consents_never_split_
     desktop = AgentDesktop("MSPaint.exe", runner, settle_seconds=0, version_of=lambda pid: "1.0")
 
     assert desktop.app_key() == AppKey("mspaint.exe", "1.0")
+
+
+@pytest.mark.live
+def test_input_detector_reads_cursor_last_input_and_foreground_without_touching_anything():
+    desktop = AgentDesktop("mspaint.exe", settle_seconds=0)
+
+    (x, y), last_input = desktop.input_fingerprint()
+    foreground = desktop.foreground_app()
+
+    assert isinstance(x, int) and isinstance(y, int) and last_input >= 0
+    assert desktop.idle_seconds() >= 0
+    assert foreground == foreground.lower() and foreground.endswith(".exe")
+
+
+@pytest.mark.live
+def test_the_emergency_hotkey_listener_calls_back_when_its_hotkey_message_arrives():
+    import threading
+
+    from workflow_factory.hotkey import EmergencyHotkey
+
+    pressed = threading.Event()
+    hotkey = EmergencyHotkey(pressed.set)
+    hotkey.start()
+    try:
+        hotkey.simulate_press()  # posts the WM_HOTKEY message: no keyboard input is sent
+        assert pressed.wait(timeout=3)
+    finally:
+        hotkey.stop()
+
+
+@pytest.mark.live
+def test_the_cursor_is_read_in_physical_pixels_even_from_a_dpi_unaware_thread():
+    import ctypes
+    from ctypes import wintypes
+
+    from workflow_factory.agent_desktop import _get_cursor_pos
+
+    user32 = ctypes.windll.user32
+    user32.SetThreadDpiAwarenessContext.restype = ctypes.c_void_p
+    unaware, per_monitor = ctypes.c_void_p(-1), ctypes.c_void_p(-4)
+
+    def raw_read():
+        point = wintypes.POINT()
+        user32.GetCursorPos(ctypes.byref(point))
+        return point.x, point.y
+
+    previous = user32.SetThreadDpiAwarenessContext(per_monitor)
+    try:
+        physical = raw_read()
+        user32.SetThreadDpiAwarenessContext(unaware)
+        virtualised, through_adapter = raw_read(), _get_cursor_pos()
+    finally:
+        user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(previous))
+
+    if virtualised == physical:
+        pytest.skip("this setup does not virtualise the cursor (100% scale there), nothing to correct")
+    assert through_adapter == physical
+@pytest.mark.live
+def test_pressing_the_emergency_hotkey_stops_a_flow_that_is_about_to_run(tmp_path):
+    import threading
+
+    from fake_desktop import FakeDesktop, button, lesson
+    from workflow_factory import EmergencyHotkey, Flow, Node, emergency_stop, run_flow, save_lesson
+
+    pressed = threading.Event()
+
+    def on_press():
+        emergency_stop()
+        pressed.set()
+
+    hotkey = EmergencyHotkey(on_press)
+    hotkey.start()
+    try:
+        hotkey.simulate_press()
+        assert pressed.wait(timeout=3)
+    finally:
+        hotkey.stop()
+    save_lesson(tmp_path / "user.db", lesson("a", "Alpha"))
+    desktop = FakeDesktop(controls=[button("Alpha")])
+
+    result = run_flow(Flow(id="f", nodes=[Node("a", "a")]), desktop=desktop, user_db=tmp_path / "user.db")
+
+    assert result.emergency is True and desktop.clicks == []

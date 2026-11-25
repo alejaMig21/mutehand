@@ -4,8 +4,10 @@ Deliberately has no way to pass --force, --trace or screenshot flags (consent
 gate, see ADR-0002). Text goes through stdin so it never lands in process args.
 """
 
+import contextlib
 import ctypes
 import json
+import random
 import shutil
 import subprocess
 import time
@@ -18,6 +20,7 @@ from pathlib import Path
 import numpy as np
 
 from workflow_factory.desktop import AppKey, Control, DesktopError, Frame
+from workflow_factory.humanize import glide
 
 Runner = Callable[[list[str], str | None], str]
 SNAPSHOT_ATTEMPTS = 5
@@ -47,28 +50,76 @@ def _run_cli(args: list[str], stdin: str | None = None) -> str:
     return done.stdout
 
 
-def version_of_pid(pid: int) -> str:
-    """Executable file version (a.b.c.d) of a running process, via the Windows version resource."""
-    kernel, version = ctypes.windll.kernel32, ctypes.windll.version
+def _image_path(pid: int) -> str:
+    """Full path of a running process' executable."""
+    kernel = ctypes.windll.kernel32
     kernel.OpenProcess.restype = ctypes.c_void_p
     handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
     if not handle:
-        raise AgentDesktopError("VERSION_UNAVAILABLE", f"cannot open process {pid}")
+        raise AgentDesktopError("PROCESS_UNAVAILABLE", f"cannot open process {pid}")
     try:
         size = ctypes.c_ulong(1024)
         path = ctypes.create_unicode_buffer(size.value)
         if not kernel.QueryFullProcessImageNameW(ctypes.c_void_p(handle), 0, path, ctypes.byref(size)):
-            raise AgentDesktopError("VERSION_UNAVAILABLE", f"no image path for process {pid}")
+            raise AgentDesktopError("PROCESS_UNAVAILABLE", f"no image path for process {pid}")
+        return path.value
     finally:
         kernel.CloseHandle(ctypes.c_void_p(handle))
-    length = version.GetFileVersionInfoSizeW(path.value, None)
+
+
+def version_of_pid(pid: int) -> str:
+    """Executable file version (a.b.c.d) of a running process, via the Windows version resource."""
+    version, path = ctypes.windll.version, _image_path(pid)
+    length = version.GetFileVersionInfoSizeW(path, None)
     block = ctypes.create_string_buffer(length)
-    if not length or not version.GetFileVersionInfoW(path.value, 0, length, block):
-        raise AgentDesktopError("VERSION_UNAVAILABLE", f"no version resource in {path.value}")
+    if not length or not version.GetFileVersionInfoW(path, 0, length, block):
+        raise AgentDesktopError("VERSION_UNAVAILABLE", f"no version resource in {path}")
     info, info_len = ctypes.c_void_p(), ctypes.c_uint()
     version.VerQueryValueW(block, "\\", ctypes.byref(info), ctypes.byref(info_len))
     ms, ls = ctypes.cast(info.value + 8, ctypes.POINTER(ctypes.c_uint * 2)).contents
     return f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
+
+
+@contextlib.contextmanager
+def _physical_pixels():
+    """This thread sees physical screen pixels (per-monitor DPI v2), the same units agent-desktop uses."""
+    user32 = ctypes.windll.user32
+    user32.SetThreadDpiAwarenessContext.restype = ctypes.c_void_p
+    previous = user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))
+    try:
+        yield
+    finally:
+        user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(previous))
+
+
+def _get_cursor_pos() -> tuple[int, int]:
+    point = wintypes.POINT()
+    with _physical_pixels():
+        ctypes.windll.user32.GetCursorPos(ctypes.byref(point))
+    return point.x, point.y
+
+
+def _set_cursor_pos(point: tuple[int, int]) -> None:
+    with _physical_pixels():
+        ctypes.windll.user32.SetCursorPos(point[0], point[1])
+
+
+class _LastInputInfo(ctypes.Structure):
+    _fields_ = [("cbSize", wintypes.UINT), ("dwTime", wintypes.DWORD)]
+
+
+def _last_input_tick() -> int:
+    info = _LastInputInfo(ctypes.sizeof(_LastInputInfo))
+    ctypes.windll.user32.GetLastInputInfo(ctypes.byref(info))
+    return info.dwTime
+
+
+def foreground_process_name() -> str:
+    """Lower-case executable name of the app that owns the foreground window."""
+    user32 = ctypes.windll.user32
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), ctypes.byref(pid))
+    return Path(_image_path(pid.value)).name.lower()
 
 
 def system_frame_fields() -> dict:
@@ -176,12 +227,16 @@ class AgentDesktop:
     def __init__(
         self, app: str, runner: Runner = _run_cli, settle_seconds: float = 0.5,
         version_of=version_of_pid, system_frame_fields=system_frame_fields,
-        read_secret=read_secret,
+        read_secret=read_secret, move_cursor=None, cursor_position=None,
+        glide_pause=time.sleep, rng=random,
     ):
         self._app = app
         self._version_of = version_of
         self._system_frame_fields = system_frame_fields
         self._read_secret = read_secret
+        self._move_cursor = move_cursor  # None: the real cursor (looked up at call time)
+        self._cursor_position = cursor_position or _get_cursor_pos
+        self._glide_pause, self._rng = glide_pause, rng
         self._runner = runner
         self._settle = settle_seconds  # ponytail: fixed pause, poll for stability if apps repaint slower
 
@@ -224,14 +279,33 @@ class AgentDesktop:
         box = self._call(["get", anchor.ref, "--property", "bounds"])["value"]
         return round(box["x"] + fx * box["width"]), round(box["y"] + fy * box["height"])
 
+    def _glide_to(self, point: tuple[int, int]) -> None:
+        """Move the real cursor to the point like a hand would, not in one jump."""
+        move = self._move_cursor or _set_cursor_pos
+        glide(self._cursor_position(), point, move, rng=self._rng, sleep=self._glide_pause)
+
+    def input_fingerprint(self) -> tuple:
+        return self._cursor_position(), _last_input_tick()
+
+    def idle_seconds(self) -> float:
+        return ((ctypes.windll.kernel32.GetTickCount() - _last_input_tick()) & 0xFFFFFFFF) / 1000
+
+    def foreground_app(self) -> str:
+        return foreground_process_name()
+
+    def sleep(self, seconds: float) -> None:
+        time.sleep(seconds)
+
     def click_at(self, anchor: Control, fx: float, fy: float) -> None:
         """Physical click inside the anchor (never an absolute point from the caller)."""
         x, y = self._point(anchor, (fx, fy))
+        self._glide_to((x, y))
         self._call(["--headed", "mouse-click", "--xy", f"{x},{y}"])
         time.sleep(self._settle)
 
     def drag(self, source: Control, source_point, destination: Control, destination_point) -> None:
         (x1, y1), (x2, y2) = self._point(source, source_point), self._point(destination, destination_point)
+        self._glide_to((x1, y1))
         self._call(["--headed", "drag", "--from-xy", f"{x1},{y1}", "--to-xy", f"{x2},{y2}"])
         time.sleep(self._settle)
 

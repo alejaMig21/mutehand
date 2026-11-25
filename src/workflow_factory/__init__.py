@@ -1,5 +1,8 @@
 from workflow_factory.consent import Consent, consents, grant_consent, revoke_consent
 from workflow_factory.flow import (
+    USER_IDLE_SECONDS,
+    clear_emergency_stop,
+    emergency_stop,
     Effect,
     Flow,
     Node,
@@ -7,6 +10,7 @@ from workflow_factory.flow import (
     run_flow,
 )
 from workflow_factory.flows import load_flow, save_flow
+from workflow_factory.hotkey import EmergencyHotkey
 from workflow_factory.tutor import (
     StudyStep,
     answer_doubt_by_teaching,
@@ -34,6 +38,8 @@ from workflow_factory.lessons import (
 )
 
 __all__ = [
+    "EmergencyHotkey",
+    "USER_IDLE_SECONDS", "clear_emergency_stop", "emergency_stop",
     "load_flow", "save_flow",
     "StudyStep", "answer_doubt_by_teaching", "list_open_doubts", "mark_private", "observe",
     "record_consent", "set_study_order", "study_status", "teach_lesson",

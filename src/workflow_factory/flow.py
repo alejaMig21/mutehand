@@ -55,6 +55,25 @@ INPUT_TYPES = {"str": str, "int": int, "float": float, "bool": bool}
 MAX_LOOP_SECONDS = 8 * 3600
 MAX_PARALLEL_NODES = 4
 PHYSICAL_INPUT = threading.Lock()  # one mouse, one keyboard, one focus for the whole machine
+USER_IDLE_SECONDS = 5.0  # how long the person must leave mouse and keyboard alone before we resume
+MAX_USER_WAIT_SECONDS = 600.0  # a person who never stops ends in a doubt, not an endless wait
+KEY_ACTIONS = ("type_value", "type_secret")
+EMERGENCY_STOP = threading.Event()  # set by the global hotkey: every running flow stops at once
+
+
+def emergency_stop() -> None:
+    EMERGENCY_STOP.set()
+
+
+def clear_emergency_stop() -> None:
+    EMERGENCY_STOP.clear()
+
+
+_USER_ACTIVE = object()  # _replay found the person at the mouse or keyboard: pause, then retry
+
+
+class _EmergencyStop(Exception):
+    """Raised inside a node when the emergency stop is on; the flow stops without a doubt."""
 
 
 class Effect(StrEnum):
@@ -151,6 +170,7 @@ class RunResult:
     statuses: dict[str, Status]  # node id -> lesson status after the run
     stopped: str | None = None  # first node that stopped and left a doubt
     waiting: bool = False  # the flow has an open doubt, so it did not run
+    emergency: bool = False  # a human pressed the emergency stop; the checkpoint allows resuming
 
 
 # Detailed block reason -> the fixed doubt vocabulary
@@ -166,6 +186,8 @@ DOUBT_REASON = {
     "effect_mismatch": Reason.PRECONDITION_NOT_MET,
     "lesson_missing": Reason.PRECONDITION_NOT_MET,
     "action_failed": Reason.PRECONDITION_NOT_MET,
+    "wrong_window": Reason.PRECONDITION_NOT_MET,
+    "user_active": Reason.PRECONDITION_NOT_MET,
 }
 
 
@@ -257,6 +279,8 @@ class _Run:
         self.key = desktop.app_key()
         self.effects, self.blocked, self.statuses = {}, {}, {}
         self.lock = threading.RLock()  # parallel nodes share the state and its checkpoint
+        self.baseline = None  # cursor and last-input time right after our own last physical action
+        self.emergency = False
 
     def save(self) -> None:
         with self.lock:
@@ -267,16 +291,51 @@ class _Run:
         lesson = find_lesson(self.user_db, self.factory_db, self.key.process, node.lesson)
         if lesson is None:  # a flow naming a lesson nobody taught: a doubt, not a crash
             return "lesson_missing", None, None
-        with PHYSICAL_INPUT if node.exclusive_input or lesson.uses_physical_input else nullcontext():
-            return self._replay(node, lesson)
+        lock = PHYSICAL_INPUT if node.exclusive_input or lesson.uses_physical_input else nullcontext()
+        while True:
+            with lock:
+                outcome = self._replay(node, lesson)
+            if outcome is not _USER_ACTIVE:
+                return outcome
+            # the person is using the PC: wait for idle with the lock free, then verify again
+            if not self._wait_for_idle():
+                return "user_active", None, lesson
+
+    def _user_active(self) -> bool:
+        """Did the person touch mouse or keyboard since our last physical action?"""
+        if self.baseline is None:  # nothing of ours to compare with: only recent input counts
+            return self.desktop.idle_seconds() < USER_IDLE_SECONDS
+        return self.desktop.input_fingerprint() != self.baseline
+
+    def _wait_for_idle(self) -> bool:
+        waited = 0.0
+        while self.desktop.idle_seconds() < USER_IDLE_SECONDS:
+            if EMERGENCY_STOP.is_set():
+                raise _EmergencyStop
+            if waited >= MAX_USER_WAIT_SECONDS:
+                return False
+            self.desktop.sleep(1.0)
+            waited += 1.0
+        self.baseline = self.desktop.input_fingerprint()
+        return True
 
     def _replay(self, node: Node, lesson):
+        desktop = self.desktop
+        physical = node.exclusive_input or lesson.uses_physical_input
+        if EMERGENCY_STOP.is_set():
+            raise _EmergencyStop
         reason = _input_problem(node, lesson, self.state.context)
         if reason is None:
-            reason, targets = _gate(lesson, self.user_db, self.key, self.desktop)
+            reason, targets = _gate(lesson, self.user_db, self.key, desktop)
         if reason:
             return reason, None, lesson
-        desktop, target = self.desktop, targets[0]
+        if physical and self._user_active():
+            return _USER_ACTIVE
+        if lesson.action in KEY_ACTIONS and desktop.foreground_app().lower() != self.key.process:
+            return "wrong_window", None, lesson  # keys must never land in another app
+        if EMERGENCY_STOP.is_set():
+            raise _EmergencyStop
+        target = targets[0]
         before = set(desktop.snapshot())
         if lesson.action == "type_secret":
             desktop.type_secret(target.control, lesson.secret_ref)  # the value never enters the core
@@ -288,6 +347,8 @@ class _Run:
             desktop.click_at(target.control, *target.point)
         else:
             desktop.click(target.control)
+        if physical:
+            self.baseline = desktop.input_fingerprint()
         effect = effect_of(before, set(desktop.snapshot()))
         self.effects[node.id] = effect
         if lesson.effect:  # nothing taught to compare against means nothing to count
@@ -377,6 +438,8 @@ def _guarded(run: _Run, node: Node, runner) -> None:
     """A typed desktop failure stops this node with a doubt; it never takes the flow down."""
     try:
         runner(run, node)
+    except _EmergencyStop:
+        run.emergency = True
     except DesktopError:
         run.block(node, "action_failed")
 
@@ -385,6 +448,8 @@ def run_flow(
     flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path | None = None,
     context: dict | None = None,
 ) -> RunResult:
+    if EMERGENCY_STOP.is_set():
+        return RunResult({}, {}, {}, emergency=True)
     if has_open_doubt(user_db, flow.key):  # a stopped flow waits for the tutor
         return RunResult({}, {}, {}, waiting=True)
     key = desktop.app_key()
@@ -397,8 +462,11 @@ def run_flow(
     runners = {"lesson": _run_lesson, "loop": _run_loop, "if": _run_if,
                "join": lambda current, node: current.finish(node)}
     progressed = True
-    while progressed:
+    while progressed and not run.emergency:
         progressed = False
+        if EMERGENCY_STOP.is_set():
+            run.emergency = True
+            break
         wave = []
         for node in flow.nodes:
             if node.id in state.done or node.id in state.skipped or node.id in run.blocked:
@@ -415,6 +483,8 @@ def run_flow(
             with ThreadPoolExecutor(max_workers=min(len(wave), MAX_PARALLEL_NODES)) as pool:
                 list(pool.map(lambda node: _guarded(run, node, runners[node.kind]), wave))
     effects = {node_id: Effect(effect) for node_id, effect in run.effects.items()}
+    if run.emergency:  # no doubt, no cleanup: the checkpoint lets the flow resume after the stop
+        return RunResult(effects, run.blocked, run.statuses, emergency=True)
     if run.blocked:
         first = next(node.id for node in flow.nodes if node.id in run.blocked)  # flow order, not timing
         return RunResult(effects, run.blocked, run.statuses, stopped=first)
