@@ -70,8 +70,8 @@ def run(data_dir: Path | None = None, open_browser: Callable[[str], object] = we
     pending = state.with_suffix(".tmp")
     pending.write_text(json.dumps({"url": address}), encoding="utf-8")
     pending.replace(state)  # a second launch never reads a half-written file
-    open_browser(address)
     try:
+        open_browser(address)
         server.quit_requested.wait()
     finally:
         state.unlink(missing_ok=True)

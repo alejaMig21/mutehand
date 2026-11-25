@@ -4,7 +4,7 @@
 
 **Blocked by:** none
 
-**Status:** done except running the installer on the person's real Desktop and Start Menu, which waits for their approval
+**Status:** resolved. The person does not like shortcuts, so the front door is the file `Workflow Factory.cmd` in the project folder; `Install.cmd` is optional and is never run for them.
 
 - [x] A second launch while one runs opens the same editor and starts nothing new
 - [x] A Quit button in the editor stops the server and the process

@@ -126,3 +126,15 @@ def test_another_program_on_the_old_port_is_not_mistaken_for_the_editor(tmp_path
     finally:
         stranger.shutdown()
         stranger.server_close()
+
+
+def test_a_browser_that_cannot_be_opened_leaves_no_editor_or_state_behind(tmp_path):
+    import pytest
+
+    def no_browser(address):
+        raise RuntimeError("no browser")
+
+    with pytest.raises(RuntimeError):
+        app.run(data_dir=tmp_path, open_browser=no_browser, desktop_for=lambda name: FakeDesktop(), hotkey=False)
+
+    assert not (tmp_path / "app.json").exists()
