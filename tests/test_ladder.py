@@ -206,3 +206,55 @@ def test_a_template_that_appears_twice_is_ambiguous_and_queues_a_doubt_instead_o
     assert result.stopped == "n1"
     assert [d.reason for d in list_doubts(user_db)] == ["template_no_match"]
     assert not any(call[0] == "click_at" for call in desktop.calls)
+
+
+# --- template search on a full screen (research ticket 21: the row scan took 34 s at 1920x1080) -----------
+
+def big_region(template, at, width=1920, height=1080):
+    rng = np.random.default_rng(11)
+    pixels = np.full((height, width, 3), 235, dtype=np.uint8)
+    pixels += rng.integers(0, 4, pixels.shape, dtype=np.uint8)  # a lightly noisy flat screen
+    x, y = at
+    pixels[y:y + template.shape[0], x:x + template.shape[1]] = template
+    return pixels
+
+
+ICON = np.random.default_rng(3).integers(0, 255, (32, 32, 3), dtype=np.uint8)
+
+
+def test_a_template_is_found_in_a_full_hd_region_in_well_under_a_second_budget():
+    import time
+
+    from workflow_factory.ladder import match_template
+
+    region = big_region(ICON, (1233, 567))
+    started = time.perf_counter()
+
+    point = match_template(region, ICON, 0.95)
+
+    assert time.perf_counter() - started < 3.0  # was 34 s with the row scan
+    assert point == ((1233 + 16) / 1920, (567 + 16) / 1080)
+
+
+@pytest.mark.parametrize("at", [(0, 0), (1888, 1048), (5, 1040), (1000, 3)], ids=["top-left", "bottom-right", "bottom", "top"])
+def test_a_template_at_the_edges_of_a_large_region_is_still_found_exactly(at):
+    from workflow_factory.ladder import match_template
+
+    point = match_template(big_region(ICON, at), ICON, 0.95)
+
+    assert point == ((at[0] + 16) / 1920, (at[1] + 16) / 1080)
+
+
+def test_two_copies_far_apart_on_a_large_region_are_ambiguous_not_a_guess():
+    from workflow_factory.ladder import match_template
+
+    region = big_region(ICON, (300, 200))
+    region[800:832, 1500:1532] = ICON
+
+    assert match_template(region, ICON, 0.95) is None
+
+
+def test_a_template_that_is_not_on_a_large_region_is_not_found():
+    from workflow_factory.ladder import match_template
+
+    assert match_template(big_region(ICON, (300, 200)), 255 - ICON, 0.95) is None
