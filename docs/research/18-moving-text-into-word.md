@@ -1,48 +1,64 @@
-# Research 18: moving text into Word (partial)
+# Research 18: moving text into Word
 
 Date: 2026-11-25. Question: does setting a value through accessibility work in Word, or is the clipboard
 route needed, and what does each cost in physical input?
 
-Status: **partial**. The accessibility routes were measured; the two routes that need real keyboard or the
-person's clipboard were **not run** (see "Not run").
-
 ## Method
 
-Word was started by the guarded helper as a new, blank instance (`WINWORD.EXE /w /q`; no Word process existed
-before, so nothing of the person's was open). One window, placed on the secondary monitor, read with
-`snapshot --max-depth 30`, and closed normally afterwards. Nothing was typed, so the document stayed
-unmodified: the close needed no dialog and left no recovery file.
+Word was started by the guarded helper as a new, blank instance of my own (`WINWORD.EXE /w /q`; no Word process
+existed before, so nothing of the person's was open), placed on the secondary monitor, and driven with
+`agent-desktop`. The person authorized real typing and the clipboard route on that instance. Their clipboard
+was backed up first and restored afterwards (see "Clipboard"). Delivery was checked with a screenshot of that
+window alone, because Word does not expose the page text (below).
 
 ## Results
 
-| Probe | Result |
+| Route | Result |
 |---|---|
-| Controls of the blank document window | `document` (actions `Scroll`, `SetFocus`; state `focused`) and a `textfield` with automation id `Body` (action `ScrollTo` only), plus the ribbon (47 buttons, 9 tabs, a Tell Me box) |
-| `set-value` on `Body` | `ACTION_NOT_SUPPORTED`: "SetValue is not available" |
-| `set-value` on `document` | `ACTION_NOT_SUPPORTED`: "role document is not editable", "SetValue is not available" |
-| `type` on `Body` without `--headed` | `POLICY_DENIED`: "semantic action is unavailable and focus fallback is denied" |
-| Text boxes that do accept `SetValue` | only ribbon fields (the Tell Me box and two combo-like fields), not the page |
+| `set-value` on the page (`Body` text field or `document`) | `ACTION_NOT_SUPPORTED`: neither offers `SetValue`; the document "is not editable" for that command |
+| `type` without `--headed` | `POLICY_DENIED`: "semantic action is unavailable and focus fallback is denied" |
+| `--headed type` on `Body` | `ACTION_FAILED`: "target element lost focus before physical input delivery"; on `document`: `ACTION_NOT_SUPPORTED` (not editable). `type` cannot target a Word page |
+| `focus` on `document` | `POLICY_DENIED`: "SetFocus moves the desktop foreground window on Windows" |
+| **Real keys** with `--headed press <key>`, one call per key | **works**: "wfword18" in 8 calls, 0.7 s (about 0.09 s per key), all delivered; the page showed "Wfword18" (Word auto-capitalised the first letter) |
+| **Clipboard**: `clipboard-set` then `--headed press ctrl+v` | **works**: the marker appeared on the page; the paste itself took 0.1 s |
+| Mouse cursor moved by either route | no |
+| Reading the page back | **not possible by accessibility**: `get --property value` returns an empty string and `--property text` returns the label "Page 1 content", never the typed text. Delivery was verified with `desktop-window.ps1 shot` |
 
-## Verdict so far
+Both real-input routes act on **the foreground window**, not on a chosen element: `press` sends keys to
+whichever window has the focus. In these runs my Word was already in the foreground.
 
-- **Setting a value through accessibility does not work in the Word page.** Neither the document element nor
-  its `Body` exposes `SetValue`, and a semantic insert is refused without focus. A node that must put text
-  into a Word page cannot be a silent accessibility action.
-- The remaining routes both need real input: (1) typing with real keystrokes into the focused page, which
-  takes the keyboard and the foreground window; (2) pasting from the clipboard (`Ctrl+V`), which also takes
-  the keyboard and the foreground window and **overwrites the person's clipboard**. In both cases the node
-  would need exclusive physical input (research 20, ticket 24: every acting node already takes the input
-  lock and pauses while the person is active).
+## Clipboard
 
-## Not run, and why
+The person's clipboard was backed up (text, plus any copied files with their copy or cut flag) before the
+test, my marker was placed in it, and afterwards it was restored only after checking that it still held only my
+marker, then compared with the backup: identical. Limits: only text and a file list are restored; a richer
+format (HTML, an image) would be lost. A dry-run restore done earlier, with no need, had already rewritten the
+clipboard as plain text, so a richer format it may have held was lost then.
 
-- Real typing (`--headed type`): the permission system blocked the command, and I did not work around it.
-- The clipboard route: the clipboard belongs to the person; it needs their explicit permission and a plan to
-  save and restore what it holds.
-Both are waiting for the person's decision.
+## Verdict
+
+- **Setting a value through accessibility does not work in a Word page**, and no semantic insert is available.
+  Text reaches the page only through real input.
+- **Typing** is slow (about 0.09 s per key, so about 90 s per 1000 characters), is changed by Word's autocorrect
+  and autoformat (capitalisation, quotes, lists), and cannot send every character as a single key press.
+- **Paste** is instant and exact, but it overwrites the person's clipboard, so it needs a backup and restore
+  step and loses rich formats. Recommended for any text longer than a few words.
+- **Either way the node needs exclusive physical input**: the keys go to the foreground window, so the node must
+  first make sure that window is Word (raising it needs `--headed`, which takes the person's focus), then run
+  alone under the input lock and pause while the person is working (research 20, ticket 24).
+- **A node must refuse to send keys when the foreground window is not the one it opened.** A wrong window
+  would receive the text, and the result cannot be read back by accessibility; the check is a screenshot of the
+  window or the status bar.
+
+## Side effect and cleanup
+
+Closing a modified Word asks to save; answering "Don't Save" (`InvokePattern.Invoke` on the button) exited
+cleanly. Word still leaves a copy of every unsaved document in
+`%LOCALAPPDATA%\Microsoft\Office\UnsavedFiles` (`*.asd`), and those files **cannot be deleted by this user**
+(`PermissionDenied`), so each test run leaves two or three empty recovery files that Word will offer to recover
+at its next start. Do not run Word-driving tests on a machine whose owner will open Word without being told.
 
 ## Impact on the "Vivaldi to Word to Telegram" example flow
 
-The Word step cannot be a silent node. It needs exclusive physical input in the Word window; the text must
-be handed over through the run context (research 17), and a flow should avoid the clipboard unless the person
-allows it.
+The Word step is a physical-input node that pastes the text read from Vivaldi (research 17), after backing up
+and restoring the clipboard. Reading back what Word received is not possible by accessibility.
