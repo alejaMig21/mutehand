@@ -4,9 +4,9 @@
 
 **Blocked by:** 10
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Two physical-input nodes in parallel branches never overlap in time
-- [ ] Accessibility-only nodes in parallel branches may overlap
-- [ ] The flag is stored per node and visible to the editor
-- [ ] Parallel accessibility actions on different windows are marked as an unverified risk (see research tickets)
+- [x] Two physical-input nodes in parallel branches never overlap in time
+- [x] Accessibility-only nodes in parallel branches may overlap
+- [x] The flag is stored per node and visible to the editor
+- [x] Parallel accessibility actions on different windows are marked as an unverified risk (see research tickets)

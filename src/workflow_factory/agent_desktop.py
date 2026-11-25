@@ -17,13 +17,13 @@ from pathlib import Path
 
 import numpy as np
 
-from workflow_factory.desktop import AppKey, Control, Frame
+from workflow_factory.desktop import AppKey, Control, DesktopError, Frame
 
 Runner = Callable[[list[str], str | None], str]
 SNAPSHOT_ATTEMPTS = 5
 
 
-class AgentDesktopError(Exception):
+class AgentDesktopError(DesktopError):
     def __init__(self, code: str, message: str):
         super().__init__(f"{code}: {message}")
         self.code = code

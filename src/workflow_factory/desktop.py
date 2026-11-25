@@ -18,6 +18,10 @@ class Control:
     bounds: tuple[float, float, float, float] | None = field(default=None, compare=False)  # adapter-side only
 
 
+class DesktopError(Exception):
+    """Something the desktop port could not do. A flow turns it into a doubt instead of crashing."""
+
+
 FRAME_FIELDS = (
     "window_state", "window_width", "window_height", "resolution_width", "resolution_height",
     "scale", "language", "theme",

@@ -1,22 +1,30 @@
 """Run a flow: a graph of nodes with branching, IF on a measured effect, joins and capped loops.
 
-Nodes run one at a time here, in a deterministic order; running independent branches in
-parallel is not implemented yet. A blocked node leaves a doubt and halts its own branch only: the other
-branches finish, and the flow then waits for the tutor. State is checkpointed after every node
-and every loop iteration, so a stopped flow resumes where it was.
+Nodes whose predecessors are done run together in waves; physical input (mouse, keyboard,
+focus) is one machine-wide resource, so nodes that need it take PHYSICAL_INPUT and never overlap,
+while accessibility-only nodes may. A blocked node leaves a doubt and halts its own branch only:
+the other branches finish, and the flow then waits for the tutor. State is checkpointed after
+every node and every loop iteration, so a stopped flow resumes where it was.
+
+Unverified risk (research ticket 20): whether accessibility actions on different windows are
+really safe to run in parallel has not been measured on this machine. Known limit: a flow drives
+one app, and an effect is a before/after snapshot of it, so two accessibility-only nodes acting at
+once on that same app can disturb each other's measured effect.
 """
 
 import hashlib
 import sqlite3
+import threading
 from collections import Counter
-from contextlib import closing
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing, nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 
 from workflow_factory.consent import is_permitted
-from workflow_factory.desktop import Desktop
+from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.ladder import locate
 from workflow_factory.lessons import (
     Status,
@@ -45,6 +53,8 @@ CREATE TABLE IF NOT EXISTS node_results (
 KINDS = ("lesson", "if", "join", "loop")
 INPUT_TYPES = {"str": str, "int": int, "float": float, "bool": bool}
 MAX_LOOP_SECONDS = 8 * 3600
+MAX_PARALLEL_NODES = 4
+PHYSICAL_INPUT = threading.Lock()  # one mouse, one keyboard, one focus for the whole machine
 
 
 class Effect(StrEnum):
@@ -71,6 +81,7 @@ class Node:
     max_seconds: int | None = None
     stop_after_failures: int = 3  # loop: consecutive failures that stop it and queue a doubt
     stop_when_effect: str | None = None  # loop: ends normally when an iteration measures this
+    exclusive_input: bool = False  # needs the mouse, keyboard or focus: never overlaps another such node
 
     def __post_init__(self):
         if self.kind not in KINDS:
@@ -154,6 +165,7 @@ DOUBT_REASON = {
     "missing_input": Reason.PRECONDITION_NOT_MET,
     "effect_mismatch": Reason.PRECONDITION_NOT_MET,
     "lesson_missing": Reason.PRECONDITION_NOT_MET,
+    "action_failed": Reason.PRECONDITION_NOT_MET,
 }
 
 
@@ -244,15 +256,21 @@ class _Run:
             flow, desktop, user_db, factory_db, state)
         self.key = desktop.app_key()
         self.effects, self.blocked, self.statuses = {}, {}, {}
+        self.lock = threading.RLock()  # parallel nodes share the state and its checkpoint
 
     def save(self) -> None:
-        save_checkpoint(self.user_db, self.flow.key, self.state.dump(), self.flow.definition)
+        with self.lock:
+            save_checkpoint(self.user_db, self.flow.key, self.state.dump(), self.flow.definition)
 
     def attempt(self, node: Node):
         """One replay of the node's lesson: (blocked reason or None, effect, lesson)."""
         lesson = find_lesson(self.user_db, self.factory_db, self.key.process, node.lesson)
         if lesson is None:  # a flow naming a lesson nobody taught: a doubt, not a crash
             return "lesson_missing", None, None
+        with PHYSICAL_INPUT if node.exclusive_input or lesson.uses_physical_input else nullcontext():
+            return self._replay(node, lesson)
+
+    def _replay(self, node: Node, lesson):
         reason = _input_problem(node, lesson, self.state.context)
         if reason is None:
             reason, targets = _gate(lesson, self.user_db, self.key, self.desktop)
@@ -278,14 +296,19 @@ class _Run:
         return None, effect, lesson
 
     def block(self, node: Node, reason: str) -> None:
-        self.blocked[node.id] = reason
-        capture = dict(Counter(c.role for c in self.desktop.snapshot()))  # roles and counts only
-        record_doubt(self.user_db, self.flow.key, node.id, node.lesson, DOUBT_REASON[reason], capture)
-        self.save()
+        try:
+            capture = dict(Counter(c.role for c in self.desktop.snapshot()))  # roles and counts only
+        except DesktopError:
+            capture = {}  # the desktop is what failed: nothing to summarise
+        with self.lock:
+            self.blocked[node.id] = reason
+            record_doubt(self.user_db, self.flow.key, node.id, node.lesson, DOUBT_REASON[reason], capture)
+            self.save()
 
     def finish(self, node: Node) -> None:
-        self.state.done.add(node.id)
-        self.save()
+        with self.lock:
+            self.state.done.add(node.id)
+            self.save()
 
 
 def _run_lesson(run: _Run, node: Node) -> None:
@@ -293,7 +316,8 @@ def _run_lesson(run: _Run, node: Node) -> None:
     if reason:
         run.block(node, reason)
         return
-    run.state.effects[node.id] = str(effect)
+    with run.lock:
+        run.state.effects[node.id] = str(effect)
     run.finish(node)
 
 
@@ -302,13 +326,15 @@ def _run_if(run: _Run, node: Node) -> None:
         run.block(node, "missing_input")
         return
     matched = run.state.effects[node.on] == node.equals
-    run.state.choices[node.id] = node.then if matched else node.otherwise
+    with run.lock:
+        run.state.choices[node.id] = node.then if matched else node.otherwise
     run.finish(node)
 
 
 def _run_loop(run: _Run, node: Node) -> None:
-    progress = run.state.loops.setdefault(
-        node.id, {"iteration": 0, "failures": 0, "elapsed": 0.0, "effect": str(Effect.NO_CHANGE)})
+    with run.lock:
+        progress = run.state.loops.setdefault(
+            node.id, {"iteration": 0, "failures": 0, "elapsed": 0.0, "effect": str(Effect.NO_CHANGE)})
     while progress["iteration"] < node.max_iterations and progress["elapsed"] < node.max_seconds:
         began = run.desktop.now()
         reason, effect, lesson = run.attempt(node)  # preconditions are re-verified every iteration
@@ -327,7 +353,8 @@ def _run_loop(run: _Run, node: Node) -> None:
             return
         if wanted:
             break
-    run.state.effects[node.id] = progress["effect"]
+    with run.lock:
+        run.state.effects[node.id] = progress["effect"]
     run.finish(node)
 
 
@@ -344,6 +371,14 @@ def _verdict(node_id: str, flow: Flow, nodes: dict, state: _State) -> str:
         elif source not in state.skipped:
             return "wait"  # pending, or blocked and waiting for the tutor
     return "run" if live else "skip"
+
+
+def _guarded(run: _Run, node: Node, runner) -> None:
+    """A typed desktop failure stops this node with a doubt; it never takes the flow down."""
+    try:
+        runner(run, node)
+    except DesktopError:
+        run.block(node, "action_failed")
 
 
 def run_flow(
@@ -364,6 +399,7 @@ def run_flow(
     progressed = True
     while progressed:
         progressed = False
+        wave = []
         for node in flow.nodes:
             if node.id in state.done or node.id in state.skipped or node.id in run.blocked:
                 continue
@@ -374,9 +410,13 @@ def run_flow(
             if verdict == "skip":
                 state.skipped.add(node.id)
             else:
-                runners[node.kind](run, node)
+                wave.append(node)
+        if wave:  # everything ready together; PHYSICAL_INPUT serialises the nodes that need it
+            with ThreadPoolExecutor(max_workers=min(len(wave), MAX_PARALLEL_NODES)) as pool:
+                list(pool.map(lambda node: _guarded(run, node, runners[node.kind]), wave))
     effects = {node_id: Effect(effect) for node_id, effect in run.effects.items()}
     if run.blocked:
-        return RunResult(effects, run.blocked, run.statuses, stopped=next(iter(run.blocked)))
+        first = next(node.id for node in flow.nodes if node.id in run.blocked)  # flow order, not timing
+        return RunResult(effects, run.blocked, run.statuses, stopped=first)
     clear_checkpoint(user_db, flow.key)
     return RunResult(effects, {}, run.statuses)

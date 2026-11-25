@@ -149,6 +149,12 @@ class Lesson:
     drag_to: Endpoint | None = None  # the destination of a drag, located with its own ladder
 
     @property
+    def uses_physical_input(self) -> bool:
+        """Mouse or keyboard input is possible: a drag, typing, or a rung that clicks at a point."""
+        return (self.action in ("drag", "type_value", "type_secret")
+                or self.derived is not None or self.template is not None)
+
+    @property
     def endpoint(self) -> Endpoint:
         return Endpoint(self.locator, self.derived, self.template)
 

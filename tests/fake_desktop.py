@@ -1,9 +1,11 @@
 """Fake desktop port: the single test seam. No real screen access."""
 
+import threading
+import time
 from datetime import UTC, datetime, timedelta
 
 from workflow_factory import Lesson, Locator
-from workflow_factory.desktop import AppKey, Control, Frame
+from workflow_factory.desktop import AppKey, Control, DesktopError, Frame
 
 
 class FakeDesktop:
@@ -23,6 +25,11 @@ class FakeDesktop:
         self._seconds_per_action = seconds_per_action  # the fake clock advances with every action
         self._vanish_after = vanish_after  # after this many clicks every control disappears
         self._actions = 0
+        self.click_seconds = 0.0  # how long an action takes, so overlap between threads is observable
+        self._busy = threading.Lock()
+        self._active = self.max_active = 0  # actions in progress now / the most at the same time
+        self.fail_on = set()  # control names whose click fails with a DesktopError
+        self.rendezvous = None  # a Barrier: every action waits for its peers, forcing a real overlap
         self.clicks = []
         self.typed = []
         self.hits = []  # absolute screen points the fake derived internally; the core never sees them
@@ -36,7 +43,20 @@ class FakeDesktop:
                     return c
         return None
 
+    def _acting(self):
+        with self._busy:
+            self._active += 1
+            self.max_active = max(self.max_active, self._active)
+        if self.rendezvous is not None:
+            self.rendezvous.wait(timeout=2)  # BrokenBarrierError if the peers never run together
+        time.sleep(self.click_seconds)
+        with self._busy:
+            self._active -= 1
+
     def click(self, control):
+        self._acting()
+        if control.name in self.fail_on:
+            raise DesktopError(f"cannot click {control.name}")
         self._actions += 1
         if self._vanish_after is not None and self._actions >= self._vanish_after:
             self._controls = []
@@ -48,11 +68,13 @@ class FakeDesktop:
         self._controls.extend(self._reveals.get(key, []))
 
     def click_at(self, anchor, fx, fy):
+        self._acting()
         self.calls.append(("click_at", anchor.name, fx, fy))
         x, y, w, h = anchor.bounds
         self.hits.append((x + fx * w, y + fy * h))
 
     def drag(self, source, source_point, destination, destination_point):
+        self._acting()
         self.calls.append(("drag", source.name, source_point, destination.name, destination_point))
 
     def capture(self, anchor):
@@ -60,10 +82,12 @@ class FakeDesktop:
         return self._captures[anchor.name]
 
     def type_text(self, control, text):
+        self._acting()
         self.calls.append(("type_text", control.name))
         self.typed.append((control, text))
 
     def type_secret(self, control, secret_ref):
+        self._acting()
         self.calls.append(("type_secret", control.name, secret_ref))
         self.delivered.append((control.name, self._secrets[secret_ref]))
 
