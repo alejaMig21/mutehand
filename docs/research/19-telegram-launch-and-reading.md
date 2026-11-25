@@ -58,9 +58,23 @@ agent-desktop snapshot --window-id <w-id> --max-depth 30
 
 ## Impact on the "Vivaldi to Word to Telegram" example flow
 
-The Telegram step can launch and its chat list and search box are reachable by role and Qt class. Sending
-the text is still untested at the last step: it needs one chat opened (a click that can mark messages as
-read), after which the message box and send button should be read. A harmless candidate is the person's own
-"Saved Messages" chat, which messages nobody; that needs the person's go-ahead for the click. Typing is an
-acting node (research 20, ticket 24), so it runs alone under the input lock and pauses while the person is
-working.
+The Telegram step works end to end through accessibility, tested live in the person's own scratch chat
+(their words: a chat "Nube" inside the folder "Nubes", where doing and undoing is allowed):
+
+| Step | How | Result |
+|---|---|---|
+| Go to the folder | `click` the `Ui::SideBarButton` option named exactly "Nubes" | worked, `InvokePattern.Invoke` |
+| Open the chat | `click` the chat option whose name starts with `Group, Nube, ` (the accessible name is "kind, title, status, preview": match the prefix, never the bare title; a second chat "Nube srt" exists) | worked |
+| Write the text | `set-value` on the `Ui::InputField::Inner` ("Write a message...") | `delivered_verified`; the send button label changed from "Record Voice Message" to "Send" |
+| Send | `click` the `Ui::SendButton` | `delivered_unverified`; the message arrived (found afterwards with `find --value`) |
+| Delete the test message | `right-click` on its row or on its option | **not possible without physical input**: `AMBIGUOUS_TARGET` on the row, `POLICY_DENIED` on the option (physical fallback denied). The test message `WF-test-19-0001` stays in the chat until the person deletes it |
+
+Rules that follow for the flow:
+- The `Ui::SendButton` is a **voice recorder while the box is empty**. A node must click it only after
+  reading that its label is "Send"; it must refuse otherwise.
+- Message text is readable through accessibility (the row's `value` and the option's name), including the
+  person's private chats: reading it is a consent question for the flow, not a technical limit.
+- Refs from a snapshot are not stable and several elements are "not proven unique": locate by `find` with a
+  value or by a prefix, and refuse when the match is not exactly one.
+- Sending is an acting node (research 20, ticket 24): it runs alone under the input lock and pauses while the
+  person is working; the click and `set-value` can pull Telegram to the foreground.

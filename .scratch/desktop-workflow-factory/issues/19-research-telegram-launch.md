@@ -6,11 +6,11 @@
 
 **Blocked by:** 02
 
-**Status:** resolved (message box in an open chat not checked)
+**Status:** resolved
 
 - [x] A working launch route recorded, or a verdict that none exists
 - [x] Which controls are reachable by accessibility, as roles and counts
 
 ## Answer
 
-See `docs/research/19-telegram-launch-and-reading.md`. Launch route works: `agent-desktop launch "<abs path>" --arg=-workdir --arg=<dir> --arg=-many` (own instance, window in about 10 s, no --activate). Accessibility exposes Telegram widgets by name and Qt class (login screen: 25 nodes, 7 buttons). Logged-in profile read with the person's go-ahead (roles, counts and Qt classes only): chat list and search box are reachable; the message box and send button appear only inside an open chat, not checked (a click on a chat needs a new go-ahead).
+See `docs/research/19-telegram-launch-and-reading.md`. Launch route works: `agent-desktop launch "<abs path>" --arg=-workdir --arg=<dir> --arg=-many` (own instance, window in about 10 s, no --activate). Accessibility exposes Telegram widgets by name and Qt class (login screen: 25 nodes, 7 buttons). Done with the person's go-ahead on their own scratch chat (folder Nubes, chat Nube): folder and chat are reachable, the compose box takes `set-value` (verified), the send button says "Send" only when there is text and its `click` sends (it is a voice recorder when empty), and the message arrives. A sent message cannot be deleted without physical input, so the test message WF-test-19-0001 stays in that chat.
