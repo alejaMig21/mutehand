@@ -4,8 +4,8 @@
 
 **Blocked by:** 10
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A command-line entry runs a named flow headlessly and exits with a status
-- [ ] The report lists nodes, outcomes and stop reasons only
-- [ ] A value appears in the report only when the user enables it
+- [x] A command-line entry runs a named flow headlessly and exits with a status
+- [x] The report lists nodes, outcomes and stop reasons only
+- [x] A value appears in the report only when the user enables it

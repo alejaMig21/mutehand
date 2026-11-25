@@ -13,12 +13,13 @@ once on that same app can disturb each other's measured effect.
 """
 
 import hashlib
+import re
 import sqlite3
 import threading
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing, nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
@@ -35,11 +36,13 @@ from workflow_factory.lessons import (
 )
 from workflow_factory.queue import (
     Reason,
+    acquire_run_lock,
     clear_checkpoint,
     has_open_doubt,
     load_checkpoint,
     record_doubt,
     record_run,
+    release_run_lock,
     save_checkpoint,
 )
 
@@ -133,6 +136,8 @@ class Flow:
     edges: list[tuple[str, str]] | None = None  # None: the nodes run one after another
 
     def __post_init__(self):
+        if self.id is not None and not re.fullmatch(r"[\w.-]+", self.id):
+            raise ValueError("a flow id may only use letters, digits, '_', '.' and '-'")
         ids = [node.id for node in self.nodes]
         known = set(ids)
         for source, target in self.all_edges:
@@ -172,10 +177,12 @@ class RunResult:
     stopped: str | None = None  # first node that stopped and left a doubt
     waiting: bool = False  # the flow has an open doubt, so it did not run
     emergency: bool = False  # a human pressed the emergency stop; the checkpoint allows resuming
+    run_id: int | None = None  # the run history row of this run, when one was recorded
+    busy: bool = False  # another live run of this flow holds it, so this one did not start
 
     @property
     def status(self) -> str:
-        return ("emergency" if self.emergency else "waiting" if self.waiting
+        return ("busy" if self.busy else "emergency" if self.emergency else "waiting" if self.waiting
                 else "stopped" if self.stopped else "finished")
 
 
@@ -465,6 +472,15 @@ def run_flow(
         return RunResult({}, {}, {}, emergency=True)
     if has_open_doubt(user_db, flow.key):  # a stopped flow waits for the tutor
         return RunResult({}, {}, {}, waiting=True)
+    if not acquire_run_lock(user_db, flow.key):  # two runs of one flow would race on its checkpoint
+        return RunResult({}, {}, {}, busy=True)
+    try:
+        return _run_locked(flow, desktop, user_db, factory_db, context, progress)
+    finally:
+        release_run_lock(user_db, flow.key)
+
+
+def _run_locked(flow, desktop, user_db, factory_db, context, progress) -> RunResult:
     key = desktop.app_key()
     revalidate_changed_versions(user_db, key.process, key.version)
     saved = load_checkpoint(user_db, flow.key, flow.definition)
@@ -514,8 +530,8 @@ def run_flow(
     else:
         clear_checkpoint(user_db, flow.key)
         result = RunResult(effects, {}, run.statuses)
-    record_run(user_db, flow.key, started_at, desktop.now(), result.status, result.stopped, [
+    run_id = record_run(user_db, flow.key, started_at, desktop.now(), result.status, result.stopped, [
         {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1],
          "effect": str(effects[node.id]) if node.id in effects else None}
         for node in flow.nodes if node.id in run.node_status])
-    return result
+    return replace(result, run_id=run_id)

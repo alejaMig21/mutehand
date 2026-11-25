@@ -322,3 +322,22 @@ def test_progress_reports_every_node_as_running_then_done_blocked_or_skipped(tmp
         final[node] = status
     assert final == {"a": "done", "choose": "done", "b": "done", "c": "skipped", "z": "blocked"}
     assert events.index(("a", "running")) < events.index(("a", "done"))
+
+
+def test_a_second_run_of_the_same_flow_is_refused_while_the_first_is_alive_but_a_dead_ones_lock_is_ignored(tmp_path):
+    from workflow_factory.queue import acquire_run_lock, release_run_lock
+
+    user_db = tmp_path / "user.db"
+    save_lesson(user_db, lesson("a", "Alpha"))  # no taught effect: nothing to count against it
+    flow = Flow(id="f", nodes=[Node("a", "a")])
+
+    assert acquire_run_lock(user_db, "f")  # a live run (this very process)
+    busy = run_flow(flow, desktop=desktop_with("Alpha"), user_db=user_db)
+    release_run_lock(user_db, "f")
+    assert acquire_run_lock(user_db, "f", pid=4_000_001)  # a run whose process died without cleaning up
+    stale = desktop_with("Alpha")
+    ran = run_flow(flow, desktop=stale, user_db=user_db)
+    again = run_flow(flow, desktop=desktop_with("Alpha"), user_db=user_db)  # the lock was released after the run
+
+    assert busy.busy is True and busy.status == "busy"
+    assert ran.status == "finished" and clicked(stale) == ["Alpha"] and again.status == "finished"

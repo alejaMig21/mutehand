@@ -1,10 +1,13 @@
 """Tutor queue (doubts the apprentice leaves) and flow checkpoints, in the user database."""
 
+import ctypes
 import json
+import os
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from enum import StrEnum
+from ctypes import wintypes
 from pathlib import Path
 
 
@@ -45,6 +48,10 @@ CREATE TABLE IF NOT EXISTS run_nodes (  -- what each node did: never any data va
     effect TEXT
 );
 CREATE INDEX IF NOT EXISTS run_nodes_by_run ON run_nodes (run_id);
+CREATE TABLE IF NOT EXISTS run_locks (  -- which process is running a flow right now
+    flow_id TEXT PRIMARY KEY,
+    pid INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS checkpoints (
     flow_id TEXT PRIMARY KEY,
     state TEXT NOT NULL,  -- JSON: done nodes, effects, loop progress, run context
@@ -167,3 +174,40 @@ def list_runs(user_db: Path, flow_id: str | None = None, limit: int = 50) -> lis
                     "SELECT node_id, status, reason, effect FROM run_nodes WHERE run_id = ? ORDER BY rowid",
                     (run["id"],))]
     return runs
+
+
+def _pid_alive(pid: int) -> bool:
+    kernel = ctypes.windll.kernel32
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return False
+    try:
+        code = wintypes.DWORD()
+        return bool(kernel.GetExitCodeProcess(ctypes.c_void_p(handle), ctypes.byref(code))) and code.value == 259
+    finally:
+        kernel.CloseHandle(ctypes.c_void_p(handle))
+
+
+def acquire_run_lock(user_db: Path, flow_id: str, pid: int | None = None) -> bool:
+    """Claim the right to run a flow. False while another live run holds it; a dead process's claim is ignored."""
+    pid = pid or os.getpid()
+    with closing(_connect(user_db)) as db:
+        db.isolation_level = None  # manual transaction: check and claim must be one step
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            row = db.execute("SELECT pid FROM run_locks WHERE flow_id = ?", (flow_id,)).fetchone()
+            if row and _pid_alive(row[0]):
+                db.execute("ROLLBACK")
+                return False
+            db.execute("INSERT OR REPLACE INTO run_locks VALUES (?, ?)", (flow_id, pid))
+            db.execute("COMMIT")
+            return True
+        except Exception:
+            db.execute("ROLLBACK")
+            raise
+
+
+def release_run_lock(user_db: Path, flow_id: str, pid: int | None = None) -> None:
+    with closing(_connect(user_db)) as db, db:
+        db.execute("DELETE FROM run_locks WHERE flow_id = ? AND pid = ?", (flow_id, pid or os.getpid()))
