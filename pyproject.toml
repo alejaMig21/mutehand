@@ -1,0 +1,23 @@
+[project]
+name = "workflow-factory"
+version = "0.1.0"
+description = "Deterministic apprentice that replays taught lessons across Windows desktop apps"
+authors = [
+    { name = "alejaMig21", email = "108048421+alejaMig21@users.noreply.github.com" }
+]
+requires-python = ">=3.14"
+dependencies = []
+
+[build-system]
+requires = ["uv_build>=0.9.17,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-m 'not live'"
+markers = ["live: real agent-desktop smoke tests, opt-in with -m live"]
