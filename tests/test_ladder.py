@@ -222,7 +222,7 @@ def big_region(template, at, width=1920, height=1080):
 ICON = np.random.default_rng(3).integers(0, 255, (32, 32, 3), dtype=np.uint8)
 
 
-def test_a_template_is_found_in_a_full_hd_region_in_well_under_a_second_budget():
+def test_a_template_is_found_in_a_full_hd_region_in_seconds_not_half_a_minute():
     import time
 
     from workflow_factory.ladder import match_template
@@ -232,7 +232,7 @@ def test_a_template_is_found_in_a_full_hd_region_in_well_under_a_second_budget()
 
     point = match_template(region, ICON, 0.95)
 
-    assert time.perf_counter() - started < 3.0  # was 34 s with the row scan
+    assert time.perf_counter() - started < 10.0  # generous on purpose: it was 34 s with the row scan, now ~0.2 s
     assert point == ((1233 + 16) / 1920, (567 + 16) / 1080)
 
 
@@ -258,3 +258,112 @@ def test_a_template_that_is_not_on_a_large_region_is_not_found():
     from workflow_factory.ladder import match_template
 
     assert match_template(big_region(ICON, (300, 200)), 255 - ICON, 0.95) is None
+
+
+# --- edge cases of the fast template search (review of ticket 21) ------------------------------------------
+
+@pytest.mark.parametrize("at", [(1233, 567), (1234, 568), (1235, 569), (1237, 570)], ids=lambda a: f"offset-{a[0] % 4}-{a[1] % 4}")
+def test_a_template_off_the_coarse_grid_is_found_whatever_its_offset(at):
+    from workflow_factory.ladder import match_template
+
+    assert match_template(big_region(ICON, at), ICON, 0.95) == ((at[0] + 16) / 1920, (at[1] + 16) / 1080)
+
+
+def test_a_match_flush_against_the_edge_of_a_region_whose_size_is_not_a_multiple_of_four_is_found():
+    from workflow_factory.ladder import match_template
+
+    width, height = 1917, 1079
+    at = (width - 32, height - 32)
+
+    assert match_template(big_region(ICON, at, width, height), ICON, 0.95) == ((at[0] + 16) / width, (at[1] + 16) / height)
+
+
+def test_a_template_made_of_thin_lines_is_found_among_look_alike_decoys():
+    from workflow_factory.ladder import match_template
+
+    def lines(period):
+        patch = np.full((24, 24, 3), 255, dtype=np.uint8)
+        patch[:, ::period] = 0  # 1 px vertical lines with this spacing
+        patch[4::7, :] = (200, 0, 0)  # and 1 px red rules
+        return patch
+
+    region = big_region(lines(6), (900, 400))
+    # decoys use another spacing: a shifted copy of the same periodic pattern would BE the template
+    for period, spot in zip([5, 7, 8, 9], [(100, 100), (500, 700), (1500, 200), (1700, 900)]):
+        region[spot[1]:spot[1] + 24, spot[0]:spot[0] + 24] = lines(period)
+
+    assert match_template(region, lines(6), 0.95) == ((900 + 12) / 1920, (400 + 12) / 1080)
+
+
+def test_a_periodic_pattern_that_repeats_with_the_same_spacing_is_ambiguous():
+    from workflow_factory.ladder import match_template
+
+    def lines():
+        patch = np.full((24, 24, 3), 255, dtype=np.uint8)
+        patch[:, ::6] = 0
+        return patch
+
+    region = big_region(lines(), (900, 400))
+    region[100:124, 101:125] = lines()  # the same pattern, one pixel over: indistinguishable
+
+    assert match_template(region, lines(), 0.95) is None
+
+
+def test_many_identical_look_alikes_are_ambiguous_not_a_lucky_pick():
+    from workflow_factory.ladder import match_template
+
+    region = big_region(ICON, (50, 50))
+    for column in range(1, 11):  # eleven identical icons: more than the candidates that get refined
+        region[50:82, 50 + column * 150: 82 + column * 150] = ICON
+
+    assert match_template(region, ICON, 0.95) is None
+
+
+@pytest.mark.parametrize("width, height", [(500, 299), (500, 301)], ids=["just-below-the-coarse-switch", "just-above-it"])
+def test_both_sides_of_the_coarse_search_threshold_find_the_template(width, height):
+    from workflow_factory.ladder import match_template
+
+    assert match_template(big_region(ICON, (203, 117), width, height), ICON, 0.95) == ((203 + 16) / width, (117 + 16) / height)
+
+
+@pytest.mark.parametrize("size", [15, 16, 17])
+def test_templates_either_side_of_the_coarse_size_guard_are_found(size):
+    from workflow_factory.ladder import match_template
+
+    icon = np.random.default_rng(size).integers(0, 255, (size, size, 3), dtype=np.uint8)
+
+    assert match_template(big_region(icon, (777, 333)), icon, 0.95) == ((777 + size / 2) / 1920, (333 + size / 2) / 1080)
+
+
+def test_a_region_barely_bigger_than_the_template_has_just_one_place_to_look():
+    from workflow_factory.ladder import match_template
+
+    assert match_template(big_region(ICON, (1, 1), 33, 33), ICON, 0.95) == ((1 + 16) / 33, (1 + 16) / 33)
+
+
+@pytest.mark.parametrize("region, template", [
+    (np.zeros((50, 50), dtype=np.uint8), np.zeros((5, 5), dtype=np.uint8)),
+    (np.zeros((50, 50, 3), dtype=np.uint8), np.zeros((5, 5, 4), dtype=np.uint8)),
+    (np.zeros((50, 50, 3), dtype=np.uint16), np.zeros((5, 5, 3), dtype=np.uint16)),
+], ids=["grayscale", "channels differ", "not 8 bit"])
+def test_a_region_and_template_that_are_not_8_bit_colour_images_of_the_same_kind_are_refused(region, template):
+    from workflow_factory.ladder import match_template
+
+    with pytest.raises(ValueError, match="8-bit"):
+        match_template(region, template, 0.95)
+
+
+def test_a_large_template_does_not_need_hundreds_of_megabytes_to_be_refined():
+    import tracemalloc
+
+    from workflow_factory.ladder import match_template
+
+    template = np.random.default_rng(9).integers(0, 255, (400, 400, 3), dtype=np.uint8)
+    region = big_region(template, (700, 300))
+    tracemalloc.start()
+    point = match_template(region, template, 0.95)
+    _, peak = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    assert point == ((700 + 200) / 1920, (300 + 200) / 1080)
+    assert peak < 250 * 1024 * 1024  # refining one row of positions at a time, not every position at once

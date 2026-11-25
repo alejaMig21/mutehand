@@ -28,34 +28,44 @@ uv run python scripts/bench_template_search.py            # numpy and the shippe
 
 ## Results: does it find the template? (1920x1080, 32x32 template planted at (1234, 567))
 
-| scenario | numpy (all) | OpenCV SQDIFF | OpenCV CCOEFF_NORMED |
+Score is 1 - mean absolute difference / 255 at the reported spot (OpenCV `TM_SQDIFF` has no such score:
+the script prints a constant 1.00 for it, so ignore that number; `TM_CCOEFF_NORMED` is its own scale).
+A frame scaled to 125 % moves the template to about (1542, 708); the check accepts that spot.
+
+| scenario | shipped `match_template` score | OpenCV SQDIFF | OpenCV CCOEFF_NORMED |
 |---|---|---|---|
-| exact | found | found | found |
-| brightness +30 | found (score 0.89) | found | found |
-| inverted theme | missed | missed | missed |
-| scaled 125% | missed | missed | missed |
-| 37% of the template covered | found (0.82-0.90) | found | found (0.78) |
-| noise sigma 8 | found (0.97) | found | found |
+| exact | 1.00, found | found | found |
+| brightness +30 | 0.89 | found | found |
+| inverted theme | 0.00, missed | missed | missed |
+| scaled 125% | 0.76 at best, missed | missed | missed |
+| 37% of the template covered | 0.90 | found | found (0.78) |
+| noise sigma 8 | 0.98, found | found | found |
 
 ## Verdict
 
-- **Adopt numpy; do not add OpenCV.** The shipped numpy search is within 2x of OpenCV at full HD
-  (0.13-0.18 s against 0.08-0.10 s) and needs no 45 MB dependency. The gap does not matter: a
-  template search runs once per ladder rung attempt, bounded to one anchor's region and three attempts.
+- **Adopt numpy; do not add OpenCV.** The shipped search takes 0.13-0.18 s at full HD against
+  0.08-0.10 s for OpenCV: about 2x slower, a gap that does not matter because a template search runs
+  once per ladder attempt, inside one anchor's region. It needs no 45 MB dependency. The comparison is
+  rough: the shipped code also refines each candidate exactly and checks ambiguity, OpenCV only returns
+  its best position; one 32x32 template, one frame.
 - **The first implementation was a real defect**: scanning every position took 34 s at 1920x1080
-  (1.7 s at 400x300). It was replaced in this ticket. Region size is the main cost, so the ladder
-  keeps searching only inside an anchor's area, never the whole screen.
-- **Sensitivity** (the same for every method tried): a template matches through noise, a lighter or
-  darker theme of up to about +30 levels, and a partly covered target. It does **not** match when the
-  theme is inverted or the display scale changes. That is why a lesson stores its frame (scale,
-  theme) and replays only inside it, and why `min_score` should stay high (default 0.95; a flat
-  background already scores about 0.6, so any threshold near that makes every position look ambiguous).
-- Ambiguity (the same icon twice) is kept as "no match": two separate places that both score at or
+  (1.7 s at 400x300). It was replaced in this ticket. The ladder keeps searching only inside an
+  anchor's area, never the whole screen.
+- **Sensitivity.** Noise is harmless. A brighter or darker theme (+30 levels) scores 0.89 and partial
+  occlusion (37 %) scores about 0.90: both are **below the default `min_score` of 0.95, so they are
+  rejected unless a lesson lowers the threshold** (a flat background already scores about 0.6, so keep
+  it well above that). An inverted theme and a 125 % scale score 0.00 and 0.76: never a match. That is
+  why a lesson stores its frame (scale, theme) and replays only inside it.
+- **Ambiguity** (the same icon twice) is kept as "no match": two separate places that both score at or
   above the threshold return nothing instead of guessing.
+- **Known limits, covered by tests**: candidates come from a 4x smaller copy, so templates under 16 px
+  are searched at full size; more than 6 identical look-alikes are reported ambiguous; inputs must be
+  8-bit colour images with equal channels (otherwise `ValueError`); the exact refinement runs one row of
+  positions at a time so memory stays small for big templates.
 
 ## Impact on the project
 
 `ladder.match_template` now finds candidates with FFTs on a 4x smaller copy (regions above 150 000
 pixels), scores each candidate exactly at full size, and keeps the earlier contract (colour counts,
-ambiguity is a doubt). Tests: `tests/test_ladder.py` (full HD under 3 s, edges of a large region,
-two copies far apart, template absent).
+ambiguity is a doubt). Tests: `tests/test_ladder.py` (full HD under 10 s, any offset to the coarse grid, flush to the edges,
+thin lines among decoys, look-alikes, both sides of the size guards, invalid inputs, memory).

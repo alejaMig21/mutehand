@@ -102,7 +102,7 @@ def opencv_ccoeff(region, template):
 
 
 def available_methods():
-    methods = {"numpy fft_ssd": fft_ssd, "numpy coarse_to_fine": coarse_to_fine}
+    methods = {"prototype fft_ssd": fft_ssd, "prototype coarse_to_fine": coarse_to_fine}  # pre-ship forks, kept for comparison
     try:
         from workflow_factory.ladder import match_template  # noqa: F401
 
@@ -169,14 +169,17 @@ def robustness(methods):
     def noisy(image):
         return np.clip(image.astype(np.int16) + RNG.normal(0, 8, image.shape), 0, 255).astype(np.uint8)
 
-    scenarios = {"exact": clean, "brighter +30": brighter(clean), "inverted theme": inverted(clean),
-                 "scaled 125%": scaled(clean), "37% occluded": occluded(clean), "noise sigma 8": noisy(clean)}
+    # Where the template should be reported: a scaled frame moves it (the template itself stays at 100 %).
+    scaled_at = (int(at[0] * 1.25), int(at[1] * 1.25))
+    scenarios = {"exact": (clean, at), "brighter +30": (brighter(clean), at), "inverted theme": (inverted(clean), at),
+                 "scaled 125%": (scaled(clean), scaled_at), "37% occluded": (occluded(clean), at),
+                 "noise sigma 8": (noisy(clean), at)}
     print(f"{'scenario':18s}" + "".join(f"{name[:26]:28s}" for name in methods))
-    for scenario, image in scenarios.items():
+    for scenario, (image, expected) in scenarios.items():
         row = f"{scenario:18s}"
         for name, method in methods.items():
             location, score = method(image, template)
-            hit = location is not None and abs(location[0] - at[0]) <= 1 and abs(location[1] - at[1]) <= 1
+            hit = location is not None and abs(location[0] - expected[0]) <= 3 and abs(location[1] - expected[1]) <= 3
             row += f"{('FOUND' if hit else 'missed') + f' score {score:.2f}':28s}"
         print(row)
 

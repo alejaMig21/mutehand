@@ -14,4 +14,4 @@
 
 ## Answer
 
-See `docs/research/21-template-search-speed.md`. Verdict: adopt numpy (shipped coarse-to-fine search, 0.13-0.18 s at 1920x1080 against 0.08-0.10 s for OpenCV); do not add OpenCV. The first row-scan implementation took 34 s and was replaced in this ticket. Sensitivity: noise, brightness up to about +30 and partial occlusion survive; an inverted theme or a scale change does not.
+See `docs/research/21-template-search-speed.md`. Verdict: adopt numpy (shipped search, 0.13-0.18 s at 1920x1080 against 0.08-0.10 s for OpenCV); do not add OpenCV. The first row-scan implementation took 34 s and was replaced in this ticket. Sensitivity: noise is harmless; +30 brightness (0.89) and 37% occlusion (0.90) fall below the default min_score 0.95 and are rejected unless a lesson lowers it; an inverted theme or a 125% scale never match.

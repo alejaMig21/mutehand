@@ -12,4 +12,4 @@ Every action endpoint is found through the locator ladder: accessibility identit
 
 ## Consequences
 
-Template matching is done by our own code on a screenshot and is sensitive to theme, scale and occlusion. Its speed at 1920x1080 is not yet measured.
+Template matching is done by our own code on a screenshot and is sensitive to theme, scale and occlusion. Measured in research ticket 21: about 0.2 s at 1920x1080 with numpy (a first row-by-row version took 34 s and was replaced); noise is harmless, a +30 brightness shift or 37% occlusion score 0.89-0.90 (below the default 0.95 threshold), an inverted theme or a scale change never match. See `docs/research/21-template-search-speed.md`.

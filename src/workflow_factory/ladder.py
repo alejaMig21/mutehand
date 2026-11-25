@@ -68,11 +68,16 @@ def _refine(region: np.ndarray, template: np.ndarray, around: tuple[int, int], r
     th, tw = template.shape[:2]
     x0, y0 = max(0, around[0] - radius), max(0, around[1] - radius)
     x1, y1 = min(region.shape[1] - tw, around[0] + radius), min(region.shape[0] - th, around[1] + radius)
-    block = region[y0: y1 + th, x0: x1 + tw].astype(np.int16)
-    windows = sliding_window_view(block, template.shape)[:, :, 0]
-    scores = 1 - np.abs(windows - template.astype(np.int16)).mean(axis=(2, 3, 4)) / 255
-    y, x = np.unravel_index(scores.argmax(), scores.shape)
-    return float(scores[y, x]), x0 + int(x), y0 + int(y)
+    template16 = template.astype(np.int16)
+    best = (-1.0, x0, y0)
+    for y in range(y0, y1 + 1):  # one row of positions at a time keeps memory small for big templates
+        band = region[y: y + th, x0: x1 + tw].astype(np.int16)
+        windows = sliding_window_view(band, template.shape)[0, :, 0]  # (positions, h, w, channels)
+        scores = 1 - np.abs(windows - template16).mean(axis=(1, 2, 3)) / 255
+        x = int(scores.argmax())
+        if scores[x] > best[0]:
+            best = (float(scores[x]), x0 + x, y)
+    return best
 
 
 def match_template(region: np.ndarray, template: np.ndarray, min_score: float):
@@ -83,9 +88,14 @@ def match_template(region: np.ndarray, template: np.ndarray, min_score: float):
 
     Candidates come from FFTs, on a 4x smaller copy for big regions; each candidate is then scored
     exactly at full size. Measured (scripts/bench_template_search.py, research ticket 21): 1920x1080
-    in ~0.03 s, where scanning every position took 34 s. Matching still depends on theme, scale
+    in 0.13-0.18 s, where scanning every position took 34 s. Matching still depends on theme, scale
     and occlusion: an inverted theme or a 125% scale will not match.
     """
+    for image in (region, template):
+        if image.ndim != 3 or image.dtype != np.uint8:
+            raise ValueError("the region and the template must be 8-bit colour images (height x width x channels)")
+    if region.shape[2] != template.shape[2]:
+        raise ValueError("the region and the template must be 8-bit colour images with the same channels")
     th, tw = template.shape[:2]
     if th > region.shape[0] or tw > region.shape[1]:
         return None
