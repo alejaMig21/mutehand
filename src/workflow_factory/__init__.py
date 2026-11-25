@@ -7,6 +7,17 @@ from workflow_factory.flow import (
     RunResult,
     run_flow,
 )
+from workflow_factory.tutor import (
+    StudyStep,
+    answer_doubt_by_teaching,
+    list_open_doubts,
+    mark_private,
+    observe,
+    record_consent,
+    set_study_order,
+    study_status,
+    teach_lesson,
+)
 from workflow_factory.queue import Doubt, Reason, answer_doubt, dismiss_doubt, list_doubts
 from workflow_factory.lessons import (
     Derived,
@@ -23,6 +34,8 @@ from workflow_factory.lessons import (
 )
 
 __all__ = [
+    "StudyStep", "answer_doubt_by_teaching", "list_open_doubts", "mark_private", "observe",
+    "record_consent", "set_study_order", "study_status", "teach_lesson",
     "Template",
     "Derived", "Endpoint",
     "Consent", "Sensitivity", "consents", "grant_consent", "revoke_consent",

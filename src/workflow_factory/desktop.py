@@ -14,6 +14,7 @@ class Control:
     automation_id: str = ""
     ref: str = field(default="", compare=False)  # adapter handle, changes per snapshot
     readable: bool = field(default=True, compare=False)  # False: the apprentice cannot perceive it
+    secure: bool = field(default=False, compare=False)  # a password-type field: takes secrets only
     bounds: tuple[float, float, float, float] | None = field(default=None, compare=False)  # adapter-side only
 
 

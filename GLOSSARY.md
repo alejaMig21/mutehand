@@ -132,6 +132,10 @@ _Avoid_: Issue, error, question
 A summary of the screen made of roles and counts only, with no text, so private content never leaves the machine.
 _Avoid_: Screenshot, dump
 
+**Private app**:
+An app whose content must not reach the tutor (chats, browsers, anything the user marks). When the tutor observes one it receives a structural capture instead of control names.
+_Avoid_: Sensitive app, protected app
+
 ### Coexistence
 
 **User pause**:

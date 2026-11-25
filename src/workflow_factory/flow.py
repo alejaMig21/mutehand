@@ -107,11 +107,13 @@ def _gate(lesson, user_db, key, desktop):
             return reason, None
         if not target.control.readable:  # unreadable means blocked, whatever the consent
             return "unreadable", None
+        if target.control.secure and lesson.action != "type_secret":  # password fields take secrets only
+            return "unreadable", None
         targets.append(target)
     return None, targets
 
 
-def _effect_of(before, after) -> Effect:
+def effect_of(before, after) -> Effect:
     if after - before:
         return Effect.REVEALED
     if before - after:
@@ -157,7 +159,7 @@ def run_flow(
             desktop.click_at(target.control, *target.point)
         else:
             desktop.click(target.control)
-        effect = _effect_of(before, set(desktop.snapshot()))
+        effect = effect_of(before, set(desktop.snapshot()))
         effects[node.id] = effect
         if lesson.effect:  # nothing taught to compare against means nothing to count
             statuses[node.id] = record_outcome(user_db, lesson, effect == lesson.effect)

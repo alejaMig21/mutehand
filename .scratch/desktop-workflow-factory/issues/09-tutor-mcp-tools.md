@@ -4,10 +4,10 @@
 
 **Blocked by:** 06, 07
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Observe returns a summarized snapshot; private apps return roles and counts only
-- [ ] A lesson is saved as soon as its effect is measured; an interrupted study resumes
-- [ ] Listing doubts returns only open ones; answering marks them answered
-- [ ] Meeting a sensitive category stops the tutor flow and asks for consent before saving
-- [ ] The tool surface contains no force option and no screenshot-tracing option
+- [x] Observe returns a summarized snapshot; private apps return roles and counts only
+- [x] A lesson is saved as soon as its effect is measured; an interrupted study resumes
+- [x] Listing doubts returns only open ones; answering marks them answered
+- [x] Meeting a sensitive category stops the tutor flow and asks for consent before saving
+- [x] The tool surface contains no force option and no screenshot-tracing option

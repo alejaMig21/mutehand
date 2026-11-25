@@ -258,13 +258,13 @@ def test_type_secret_reads_the_credential_store_and_pipes_the_value_through_stdi
     assert all("value-of-login" not in a for a in args)
 
 
-def test_find_reports_a_secure_control_as_unreadable():
+def test_find_reports_a_secure_control_as_secure_but_still_readable():
     runner = FakeRunner(ok({"snapshot_id": "s1", "matches": [
         {"ref_id": "@s1:e5", "role": "textfield", "name": "Password", "states": ["enabled", "secure"]}]}))
 
     control = AgentDesktop("mspaint.exe", runner, settle_seconds=0).find("textfield", "Password")
 
-    assert control.readable is False
+    assert control.secure is True and control.readable is True
 
 
 @pytest.mark.live
@@ -353,3 +353,10 @@ def test_drag_computes_both_ends_from_their_own_anchors_and_centres_when_no_frac
 
     assert runner.calls[2] == (
         ["--headed", "drag", "--from-xy", "120,210", "--to-xy", "1090,550"], None)
+
+
+def test_app_key_process_name_is_lowercased_so_lessons_and_consents_never_split_by_case():
+    runner = FakeRunner(ok({"apps": [{"name": "MSPaint.exe", "pid": 7}]}))
+    desktop = AgentDesktop("MSPaint.exe", runner, settle_seconds=0, version_of=lambda pid: "1.0")
+
+    assert desktop.app_key() == AppKey("mspaint.exe", "1.0")

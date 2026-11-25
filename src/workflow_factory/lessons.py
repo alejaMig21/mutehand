@@ -228,18 +228,30 @@ def _row_to_lesson(row) -> Lesson:
     )
 
 
-def save_lesson(db_path: Path, lesson: Lesson) -> None:
+ACTIONS = ("click", "drag", "type_secret")
+
+
+def validate_lesson(lesson: Lesson) -> None:
+    """Everything that would make save_lesson refuse, so callers can check before acting."""
+    if lesson.action not in ACTIONS:
+        raise ValueError(f"unknown action {lesson.action!r}; use one of {', '.join(ACTIONS)}")
+    if (lesson.action == "type_secret") != bool(lesson.secret_ref):
+        raise ValueError("a secret reference goes with the type_secret action, and only with it")
+    if lesson.secret_ref and lesson.sensitive != Sensitivity.PASSWORD_FIELD:
+        raise ValueError("a lesson that types a secret must be marked as a password_field")
+    unknown = [name for name in lesson.mask if name not in FRAME_FIELDS]
+    if unknown:
+        raise ValueError(f"mask names unknown frame fields: {', '.join(unknown)}")
     for endpoint in (lesson.endpoint, lesson.drag_to):
         derived = endpoint.derived if endpoint else None
         if derived and not (0 <= derived.fx <= 1 and 0 <= derived.fy <= 1):
             raise ValueError("a derived point is a fraction of its anchor (0..1), never a screen coordinate")
     if lesson.action == "drag" and lesson.drag_to is None:
         raise ValueError("a drag lesson needs a destination (drag_to)")
-    if lesson.secret_ref and lesson.sensitive != Sensitivity.PASSWORD_FIELD:
-        raise ValueError("a lesson that types a secret must be marked as a password_field")
-    unknown = [name for name in lesson.mask if name not in FRAME_FIELDS]
-    if unknown:
-        raise ValueError(f"mask names unknown frame fields: {', '.join(unknown)}")
+
+
+def save_lesson(db_path: Path, lesson: Lesson) -> None:
+    validate_lesson(lesson)
     with closing(sqlite3.connect(db_path)) as db, db:
         db.execute(SCHEMA)
         loc = lesson.locator

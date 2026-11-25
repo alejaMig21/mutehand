@@ -155,3 +155,22 @@ def test_typing_a_secret_needs_consent_even_when_a_factory_lesson_forgot_the_lab
 
     assert result.blocked == {"n1": "no_consent"}
     assert desktop.delivered == []
+
+
+def test_a_secure_field_takes_a_consented_secret_but_nothing_else(tmp_path):
+    user_db = tmp_path / "user.db"
+    save_lesson(user_db, secret_lesson())
+    grant_consent(user_db, app="paint.exe", control="Password", action="type_secret")
+    secure = FakeDesktop(controls=[button("Password", secure=True)], secrets={"login": "hunter2"})
+
+    typed = run_flow(FLOW, desktop=secure, user_db=user_db)
+
+    assert typed.blocked == {} and secure.delivered == [("Password", "hunter2")]
+
+    plain_user_db = tmp_path / "plain.db"
+    save_lesson(plain_user_db, lesson("send-message", "Password"))  # a plain click on the secure field
+    refused = FakeDesktop(controls=[button("Password", secure=True)])
+
+    result = run_flow(FLOW, desktop=refused, user_db=plain_user_db)
+
+    assert result.blocked == {"n1": "unreadable"} and refused.clicks == []

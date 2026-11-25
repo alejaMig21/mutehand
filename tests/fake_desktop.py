@@ -72,8 +72,8 @@ class FakeDesktop:
         return self._now
 
 
-def button(name, automation_id="", readable=True):
-    return Control(role="button", name=name, automation_id=automation_id, readable=readable)
+def button(name, automation_id="", readable=True, secure=False):
+    return Control(role="button", name=name, automation_id=automation_id, readable=readable, secure=secure)
 
 
 def lesson(name, control_name, version="1.0", origin="local", app="paint.exe", **kw):

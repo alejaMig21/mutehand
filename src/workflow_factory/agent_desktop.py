@@ -211,7 +211,7 @@ class AgentDesktop:
             automation_id=_native_id(match.get("native_id")) or automation_id or "",
             ref=match.get("ref_id", ""),
             # ponytail: "secure" state is a guess until research ticket 23 confirms how the CLI marks secure fields
-            readable="secure" not in match.get("states", []),
+            secure="secure" in match.get("states", []),
         )
 
     def click(self, control: Control) -> None:
@@ -266,7 +266,7 @@ class AgentDesktop:
     def app_key(self) -> AppKey:
         for app in self._call(["list-apps"]).get("apps", []):
             if app.get("name", "").lower() == self._app.lower():  # Windows process names ignore case
-                return AppKey(self._app, self._version_of(app["pid"]))
+                return AppKey(self._app.lower(), self._version_of(app["pid"]))
         raise AgentDesktopError("APP_NOT_FOUND", self._app)
 
     def frame(self) -> Frame:
