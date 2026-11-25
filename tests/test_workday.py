@@ -237,3 +237,14 @@ def test_a_workday_fires_the_trigger_it_was_started_by(tmp_path, extra, clicked)
     code = run(tmp_path, desktop, *extra)
 
     assert code == EXIT_FINISHED and [c.name for c in desktop.clicks] == clicked
+
+
+def test_the_report_never_holds_the_data_a_data_node_gave_out(tmp_path):
+    setup(tmp_path)
+    nodes = [Node("d", kind="data", op="fixed", fields={"value": {"value": "secret-page-text-1234"}})]
+    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=nodes))
+
+    code = run(tmp_path, FakeDesktop(controls=[]), "--with-values")  # even with values enabled: those are the run's input
+
+    (path,) = reports(tmp_path)
+    assert code == EXIT_FINISHED and "secret-page-text-1234" not in path.read_text(encoding="utf-8")

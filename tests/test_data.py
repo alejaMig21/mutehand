@@ -126,3 +126,34 @@ def test_an_expression_is_stored_but_a_run_refuses_to_start_with_one(tmp_path):
         run_flow(flow, desktop=desktop, user_db=tmp_path / "user.db", context={"name": "Ada"})
 
     assert desktop.typed == [] and desktop.calls == []  # nothing was touched
+
+
+def test_a_reference_makes_the_node_wait_for_the_one_it_points_at_whatever_the_listing_order(tmp_path):
+    teach(tmp_path / "user.db")
+    desktop = desktop_with("Down", "Notes")
+    flow = Flow(id="f", nodes=[Node("t", "typer", fields={"text": ref("scroll", "effect")}), Node("scroll", "scroll")],
+                edges=[])  # no explicit order: the reference alone says who goes first
+
+    run_flow(flow, desktop=desktop, user_db=tmp_path / "user.db")
+
+    assert [text for _, text in desktop.typed] == ["no_change"]
+
+
+def test_a_cycle_made_of_references_is_refused():
+    nodes = [Node("a", "x", fields={"text": ref("b", "effect")}), Node("b", "y", fields={"text": ref("a", "effect")})]
+    with pytest.raises(ValueError, match="cycle"):
+        Flow(id="f", nodes=nodes, edges=[])
+
+
+def test_a_body_of_for_each_may_read_the_item_and_a_later_node_may_read_the_body_without_extra_edges(tmp_path):
+    teach(tmp_path / "user.db")
+    desktop = desktop_with("Notes")
+    flow = Flow(id="f", nodes=[
+        Node("e", kind="foreach", body="t", fields={"items": fixed(["a"])}),
+        Node("t", "typer", fields={"text": ref("e", "item")}),
+        Node("after", "typer", fields={"text": ref("t", "effect")}),
+    ], edges=[])
+
+    result = run_flow(flow, desktop=desktop, user_db=tmp_path / "user.db")
+
+    assert [text for _, text in desktop.typed] == ["a", "no_change"] and result.status == "finished"

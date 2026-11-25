@@ -27,6 +27,7 @@ from pathlib import Path
 
 from workflow_factory.consent import is_permitted
 from workflow_factory.data import RUN, MissingData, check_binding, expressions, references, resolve
+from workflow_factory.dataops import DataError, apply, check_op
 from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.ladder import locate
 from workflow_factory.queue import (
@@ -56,7 +57,7 @@ CREATE TABLE IF NOT EXISTS node_results (
 )
 """
 
-KINDS = ("step", "if", "join", "loop", "trigger", "foreach", "wait", "stop")
+KINDS = ("step", "if", "join", "loop", "trigger", "foreach", "wait", "stop", "data")
 WAIT_SLICE_SECONDS = 1.0  # a wait sleeps in slices so the emergency stop is heard within a second
 CLOCK_TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 INPUT_TYPES = {"str": str, "int": int, "float": float, "bool": bool}
@@ -98,7 +99,7 @@ class Effect(StrEnum):
 class Node:
     id: str
     step: str = ""  # step and loop nodes: the step to replay
-    kind: str = "step"  # step | if | join | loop | trigger | foreach | wait | stop
+    kind: str = "step"  # step | if | join | loop | trigger | foreach | wait | stop | data
     inputs: tuple[tuple[str, str], ...] = ()  # (name, type) values the run context must hold
     on: str | None = None  # if: the node whose measured effect is tested
     equals: str | None = None
@@ -111,6 +112,7 @@ class Node:
     exclusive_input: bool = False  # needs the mouse, keyboard or focus: never overlaps another such node
     fields: dict = field(default_factory=dict, hash=False)  # field name -> binding (see data.py)
     body: str | None = None  # foreach: the one node it repeats, once per item
+    op: str | None = None  # data: which operation (see dataops.py)
 
     def __post_init__(self):
         for name, binding in self.fields.items():
@@ -122,7 +124,10 @@ class Node:
                 raise ValueError(f"input {name!r} has unknown type {type_name!r}")
         if self.kind in ("step", "loop") and not self.step:
             raise ValueError(f"a {self.kind} node needs a step")
-        if self.kind == "if" and not (self.on and self.equals and self.then):
+        if self.kind == "if" and "condition" in self.fields:
+            if not self.then:
+                raise ValueError("an if node needs then")
+        elif self.kind == "if" and not (self.on and self.equals and self.then):
             raise ValueError("an if node needs on, equals and then")
         vocabulary = {effect.value for effect in Effect}
         for effect_name in (self.equals, self.stop_when_effect):
@@ -154,6 +159,8 @@ def _check_system_node(node: Node) -> None:
             raise ValueError("a foreach node needs a body: the node it repeats")
         if "items" not in fields:
             raise ValueError("a foreach node needs an items field")
+    elif node.kind == "data":
+        check_op(node.op, fields)
     elif node.kind == "wait":
         binding = fields.get("seconds")
         if binding is None:
@@ -214,7 +221,15 @@ class Flow:
         for node in self.nodes:
             if node.kind == "if":  # it routes to its targets, and waits for the node it tests
                 edges += [(node.id, target) for target in (node.then, node.otherwise) if target]
-                edges.append((node.on, node.id))
+                if node.on:
+                    edges.append((node.on, node.id))
+        owner = {node.body: node.id for node in self.nodes if node.kind == "foreach" and node.body}
+        for node in self.nodes:  # a reference means "wait for that node"; a foreach body waits as its foreach does
+            consumer = owner.get(node.id, node.id)
+            for _, target in references(node.fields):
+                source = owner.get(target, target)
+                if target != RUN and source != consumer:
+                    edges.append((source, consumer))
         return list(dict.fromkeys(edges))
 
     @property
@@ -237,6 +252,7 @@ class RunResult:
     run_id: int | None = None  # the run history row of this run, when one was recorded
     busy: bool = False  # another live run of this flow holds it, so this one did not start
     halted_by: str | None = None  # the stop node that ended the flow early, on purpose
+    outputs: dict = field(default_factory=dict)  # node id -> the Data it gave out; in memory, never written to a report
 
     @property
     def status(self) -> str:
@@ -254,6 +270,7 @@ DOUBT_REASON = {
     "to_revalidate": Reason.PRECONDITION_NOT_MET,
     "template_no_match": Reason.TEMPLATE_NO_MATCH,
     "missing_input": Reason.PRECONDITION_NOT_MET,
+    "bad_data": Reason.PRECONDITION_NOT_MET,
     "effect_mismatch": Reason.PRECONDITION_NOT_MET,
     "step_missing": Reason.PRECONDITION_NOT_MET,
     "action_failed": Reason.PRECONDITION_NOT_MET,
@@ -554,7 +571,40 @@ def _fired_triggers(flow: Flow, fired: str) -> set[str]:
     return chosen or ({node.id for node in triggers} if fired == "manual" else set())
 
 
+def _run_data(run: _Run, node: Node) -> None:
+    try:
+        args = {name: resolve(binding, run.state.outputs, run.state.context) for name, binding in node.fields.items()}
+    except MissingData:
+        run.block(node, "missing_input")
+        return
+    try:
+        out = apply(node.op, args)
+    except DataError as error:
+        with run.lock:
+            run.state.outputs[node.id] = {"error": str(error)}  # the message never holds the value
+        run.block(node, "bad_data")
+        return
+    with run.lock:
+        run.state.outputs[node.id] = out
+    run.finish(node)
+
+
 def _run_if(run: _Run, node: Node) -> None:
+    if "condition" in node.fields:
+        try:
+            matched = resolve(node.fields["condition"], run.state.outputs, run.state.context)
+        except MissingData:
+            run.block(node, "missing_input")
+            return
+        if not isinstance(matched, bool):
+            with run.lock:
+                run.state.outputs[node.id] = {"error": "condition must be true or false"}
+            run.block(node, "bad_data")
+            return
+        with run.lock:
+            run.state.choices[node.id] = node.then if matched else node.otherwise
+        run.finish(node)
+        return
     if node.on not in run.state.effects:  # the tested node never ran
         run.block(node, "missing_input")
         return
@@ -646,7 +696,7 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="ma
     started_at = desktop.now()
     nodes = {node.id: node for node in flow.nodes}
     runners = {"step": _run_step, "loop": _run_loop, "if": _run_if, "trigger": _run_trigger, "foreach": _run_foreach,
-               "wait": _run_wait, "stop": _run_stop, "join": lambda current, node: current.finish(node)}
+               "wait": _run_wait, "stop": _run_stop, "data": _run_data, "join": lambda current, node: current.finish(node)}
     fire = _fired_triggers(flow, fired)
     try:
         progressed = True
@@ -687,13 +737,13 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="ma
         raise
     effects = {node_id: Effect(effect) for node_id, effect in run.effects.items()}
     if run.emergency:  # no doubt, no cleanup: the checkpoint lets the flow resume after the stop
-        result = RunResult(effects, run.blocked, run.statuses, emergency=True)
+        result = RunResult(effects, run.blocked, run.statuses, emergency=True, outputs=run.state.outputs)
     elif run.blocked:
         first = next(node.id for node in flow.nodes if node.id in run.blocked)  # flow order, not timing
-        result = RunResult(effects, run.blocked, run.statuses, stopped=first)
+        result = RunResult(effects, run.blocked, run.statuses, stopped=first, outputs=run.state.outputs)
     else:
         clear_checkpoint(user_db, flow.key)
-        result = RunResult(effects, {}, run.statuses, halted_by=run.halted)
+        result = RunResult(effects, {}, run.statuses, halted_by=run.halted, outputs=run.state.outputs)
     run_id = record_run(user_db, flow.key, started_at, desktop.now(), result.status, result.stopped, [
         {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1],
          "effect": str(effects[node.id]) if node.id in effects else None}
