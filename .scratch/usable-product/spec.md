@@ -25,9 +25,9 @@ tutor connection through `.mcp.json` (verified with a real MCP handshake: eight 
 
 ## Open work
 
-26 tutor playbook and a documented teaching session (the agent side); 27 the editor as a node editor (design grill,
-local prototype, then build); 28 schedule from the screen; 29 first-run check; 30 paste and key steps for apps that
-refuse `set-value` (Word).
+26 tutor playbook and a documented teaching session (the agent side); the editor moved to its own feature,
+`.scratch/node-editor/` (grill done, spec and twelve tickets written); 28 schedule from the screen; 29 first-run
+check; 30 paste and key steps for apps that refuse `set-value` (Word).
 
 ## Out of scope
 
