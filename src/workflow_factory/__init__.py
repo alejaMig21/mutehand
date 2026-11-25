@@ -13,10 +13,11 @@ from workflow_factory.lessons import (
     Origin,
     Status,
     find_lesson,
+    restore_lesson,
     save_lesson,
 )
 
 __all__ = [
     "ControlNotFound", "Effect", "Flow", "Lesson", "LessonNotFound", "Locator", "Node",
-    "Origin", "RunResult", "Status", "find_lesson", "run_flow", "save_lesson",
+    "Origin", "RunResult", "Status", "find_lesson", "restore_lesson", "run_flow", "save_lesson",
 ]

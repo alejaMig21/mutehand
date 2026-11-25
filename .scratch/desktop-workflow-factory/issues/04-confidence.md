@@ -4,9 +4,9 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A shipped factory lesson with high counters is not "trusted locally" until it has two own successes
-- [ ] Failures lower confidence and move the state to suspect then rejected at the thresholds
-- [ ] A rejected lesson is never replayed and only a human action restores it
-- [ ] Behaviour checked through run outcomes, not by reading internal counters directly
+- [x] A shipped factory lesson with high counters is not "trusted locally" until it has two own successes
+- [x] Failures lower confidence and move the state to suspect then rejected at the thresholds
+- [x] A rejected lesson is never replayed and only a human action restores it
+- [x] Behaviour checked through run outcomes, not by reading internal counters directly

@@ -7,7 +7,13 @@ from enum import StrEnum
 from pathlib import Path
 
 from workflow_factory.desktop import Desktop
-from workflow_factory.lessons import Status, find_lesson, revalidate_changed_versions
+from workflow_factory.lessons import (
+    Status,
+    current_status,
+    find_lesson,
+    record_outcome,
+    revalidate_changed_versions,
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS node_results (
@@ -51,12 +57,13 @@ class Flow:
 class RunResult:
     effects: dict[str, Effect]
     blocked: dict[str, str]  # node id -> why it did not run
+    statuses: dict[str, Status]  # node id -> lesson status after the run
 
 
 def run_flow(
     flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path | None = None
 ) -> RunResult:
-    effects, blocked = {}, {}
+    effects, blocked, statuses = {}, {}, {}
     key = desktop.app_key()
     revalidate_changed_versions(user_db, key.process, key.version)
     with closing(sqlite3.connect(user_db)) as db, db:
@@ -65,9 +72,9 @@ def run_flow(
             lesson = find_lesson(user_db, factory_db, key.process, node.lesson)
             if lesson is None:
                 raise LessonNotFound(node.lesson)
-            # a factory lesson measured on another version is not replayable either
-            if lesson.status == Status.TO_REVALIDATE or lesson.version != key.version:
-                blocked[node.id] = str(Status.TO_REVALIDATE)
+            status = current_status(user_db, lesson, key.version)
+            if status in (Status.REJECTED, Status.TO_REVALIDATE):
+                blocked[node.id] = str(status)
                 continue
             loc = lesson.locator
             control = desktop.find(loc.role, loc.name, loc.automation_id)
@@ -83,7 +90,9 @@ def run_flow(
             else:
                 effect = Effect.NO_CHANGE
             effects[node.id] = effect
+            if lesson.effect:  # nothing taught to compare against means nothing to count
+                statuses[node.id] = record_outcome(user_db, lesson, effect == lesson.effect)
             db.execute(
                 "INSERT INTO node_results VALUES (?, ?, ?)", (node.id, effect.value, desktop.now())
             )
-    return RunResult(effects=effects, blocked=blocked)
+    return RunResult(effects=effects, blocked=blocked, statuses=statuses)
