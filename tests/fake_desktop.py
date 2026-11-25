@@ -10,6 +10,7 @@ class FakeDesktop:
         self._removes = removes or {}  # (role, name) -> controls hidden after a click
         self._now = now_value
         self.clicks = []
+        self.typed = []
 
     def find(self, role, name, automation_id=None):
         for c in self._controls:
@@ -24,6 +25,9 @@ class FakeDesktop:
         gone = self._removes.get(key, [])
         self._controls = [c for c in self._controls if c not in gone]
         self._controls.extend(self._reveals.get(key, []))
+
+    def type_text(self, control, text):
+        self.typed.append((control, text))
 
     def snapshot(self):
         return tuple(self._controls)

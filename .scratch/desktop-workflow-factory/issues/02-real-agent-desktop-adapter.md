@@ -4,10 +4,10 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Real adapter implements the same port as the fake
-- [ ] Live test (marker `live`) drives Paint through the public entry point; it never runs by default
-- [ ] Adapter never exposes force or trace screenshots
-- [ ] Text for typing and secrets goes via stdin, never in process arguments
-- [ ] Failures from the CLI surface as typed errors, not raw output
+- [x] Real adapter implements the same port as the fake
+- [x] Live test (marker `live`) drives Paint through the public entry point; it never runs by default
+- [x] Adapter never exposes force or trace screenshots
+- [x] Text for typing and secrets goes via stdin, never in process arguments
+- [x] Failures from the CLI surface as typed errors, not raw output

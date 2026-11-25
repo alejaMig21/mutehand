@@ -1,0 +1,183 @@
+import json
+
+import pytest
+from workflow_factory.agent_desktop import (
+    SNAPSHOT_ATTEMPTS,
+    AgentDesktop,
+    AgentDesktopError,
+    resolve_binary,
+)
+from fake_desktop import FakeDesktop
+from workflow_factory.desktop import Control, Desktop
+
+FORBIDDEN_FLAGS = {"--force", "--trace", "--trace-strict", "--screenshot", "--debug"}
+
+
+class FakeRunner:
+    """Stands in for the agent-desktop process: records calls, replays canned JSON."""
+
+    def __init__(self, *replies):
+        self.replies = list(replies)
+        self.calls = []
+
+    def __call__(self, args, stdin=None):
+        assert not FORBIDDEN_FLAGS & set(args), args
+        self.calls.append((list(args), stdin))
+        return json.dumps(self.replies.pop(0))
+
+
+def ok(data):
+    return {"ok": True, "data": data}
+
+
+def test_find_builds_exact_query_and_returns_control_with_ref():
+    runner = FakeRunner(
+        ok({"snapshot_id": "s1", "matches": [
+            {"ref_id": "@s1:e5", "role": "button", "name": "Pencil", "states": []}]})
+    )
+
+    control = AgentDesktop("mspaint.exe", runner, settle_seconds=0).find("button", "Pencil", "PencilBtn")
+
+    assert control == Control(role="button", name="Pencil", automation_id="PencilBtn")
+    assert control.ref == "@s1:e5"
+    assert runner.calls == [(
+        ["find", "--app", "mspaint.exe", "--role", "button", "--name", "Pencil",
+         "--exact", "--native-id", "PencilBtn"], None)]
+
+
+def test_find_returns_none_when_nothing_matches():
+    runner = FakeRunner(ok({"snapshot_id": "s1", "matches": []}))
+
+    assert AgentDesktop("mspaint.exe", runner, settle_seconds=0).find("button", "Nope") is None
+
+
+def test_click_uses_the_control_ref():
+    runner = FakeRunner(ok({}))
+
+    AgentDesktop("mspaint.exe", runner, settle_seconds=0).click(Control("button", "Pencil", ref="@s1:e5"))
+
+    assert runner.calls == [(["click", "@s1:e5"], None)]
+
+
+def test_cli_failure_surfaces_as_typed_error():
+    runner = FakeRunner({"ok": False, "error": {"code": "STALE_REF", "message": "gone"}})
+
+    with pytest.raises(AgentDesktopError) as caught:
+        AgentDesktop("mspaint.exe", runner, settle_seconds=0).click(Control("button", "Pencil", ref="@s1:e5"))
+
+    assert caught.value.code == "STALE_REF"
+
+
+def test_type_text_goes_through_stdin_never_arguments():
+    runner = FakeRunner(ok({}))
+
+    AgentDesktop("notepad.exe", runner, settle_seconds=0).type_text(Control("edit", "Body", ref="@s1:e2"), "s3cret")
+
+    args, stdin = runner.calls[0]
+    assert args == ["type", "@s1:e2", "--stdin"]
+    assert stdin == "s3cret"
+    assert all("s3cret" not in a for a in args)
+
+
+def test_resolve_binary_skips_the_npm_cmd_shim_and_uses_the_real_exe(tmp_path):
+    shim = tmp_path / "agent-desktop.CMD"
+    shim.write_text("")
+    real = tmp_path / "node_modules" / "agent-desktop" / "bin" / "agent-desktop-win32-x64.exe"
+    real.parent.mkdir(parents=True)
+    real.write_text("")
+
+    assert resolve_binary(which=lambda name: str(shim)) == str(real)
+
+
+def test_resolve_binary_missing_install_is_a_typed_error():
+    with pytest.raises(AgentDesktopError) as caught:
+        resolve_binary(which=lambda name: None)
+
+    assert caught.value.code == "NOT_INSTALLED"
+
+
+def test_snapshot_retries_while_the_window_is_transiently_ambiguous():
+    transient = {"ok": False, "error": {"code": "AMBIGUOUS_TARGET", "message": "2 windows"}}
+    runner = FakeRunner(transient, ok({"snapshot_id": "s1", "tree": {"role": "window"}}))
+
+    controls = AgentDesktop("mspaint.exe", runner, settle_seconds=0).snapshot()
+
+    assert controls == (Control("window", ""),)
+    assert len(runner.calls) == 2
+
+
+def test_snapshot_gives_up_with_typed_error_after_bounded_retries():
+    transient = {"ok": False, "error": {"code": "AMBIGUOUS_TARGET", "message": "2 windows"}}
+    runner = FakeRunner(*[transient] * 10)
+
+    with pytest.raises(AgentDesktopError) as caught:
+        AgentDesktop("mspaint.exe", runner, settle_seconds=0).snapshot()
+
+    assert caught.value.code == "AMBIGUOUS_TARGET"
+    assert len(runner.calls) == SNAPSHOT_ATTEMPTS
+
+
+def test_snapshot_reads_native_id_published_as_kind_value_object():
+    tree = {"role": "window", "children": [
+        {"role": "button", "name": "Save", "ref_id": "@s1:e1",
+         "native_id": {"kind": "automation_id", "value": "Save"}}]}
+    runner = FakeRunner(ok({"snapshot_id": "s1", "tree": tree}))
+
+    controls = AgentDesktop("mspaint.exe", runner, settle_seconds=0).snapshot()
+
+    assert Control("button", "Save", "Save") in controls
+
+
+def test_snapshot_flattens_tree_into_controls():
+    tree = {"role": "window", "children": [
+        {"role": "toolbar", "children": [
+            {"role": "button", "name": "Pencil", "native_id": "PencilBtn", "ref_id": "@s1:e5"},
+            {"role": "button", "name": "Fill", "ref_id": "@s1:e6"}]}]}
+    runner = FakeRunner(ok({"snapshot_id": "s1", "tree": tree}))
+
+    controls = AgentDesktop("mspaint.exe", runner, settle_seconds=0).snapshot()
+
+    assert Control("button", "Pencil", "PencilBtn") in controls
+    assert Control("button", "Fill") in controls
+    assert runner.calls[0][0][:3] == ["snapshot", "--app", "mspaint.exe"]
+
+
+def test_non_json_output_surfaces_as_typed_error():
+    with pytest.raises(AgentDesktopError) as caught:
+        AgentDesktop("mspaint.exe", lambda args, stdin=None: "", settle_seconds=0).find("button", "x")
+
+    assert caught.value.code == "INVALID_RESPONSE"
+
+
+def test_reply_missing_expected_fields_surfaces_as_typed_error():
+    runner = FakeRunner(ok({"snapshot_id": "s1"}))
+
+    with pytest.raises(AgentDesktopError) as caught:
+        AgentDesktop("mspaint.exe", runner, settle_seconds=0).snapshot()
+
+    assert caught.value.code == "INVALID_RESPONSE"
+
+
+def test_process_that_cannot_start_surfaces_as_typed_error():
+    def broken(args, stdin=None):
+        raise FileNotFoundError("agent-desktop.exe")
+
+    with pytest.raises(AgentDesktopError) as caught:
+        AgentDesktop("mspaint.exe", broken, settle_seconds=0).click(Control("button", "x", ref="@a:e1"))
+
+    assert caught.value.code == "CLI_UNAVAILABLE"
+
+
+def test_real_adapter_and_fake_both_satisfy_the_desktop_port():
+    assert isinstance(AgentDesktop("mspaint.exe", FakeRunner()), Desktop)
+    assert isinstance(FakeDesktop(controls=[]), Desktop)
+
+
+def test_find_reports_the_native_id_of_the_matched_control():
+    runner = FakeRunner(ok({"snapshot_id": "s1", "matches": [
+        {"ref_id": "@s1:e5", "role": "button", "name": "Save",
+         "native_id": {"kind": "automation_id", "value": "Save"}}]}))
+
+    control = AgentDesktop("mspaint.exe", runner, settle_seconds=0).find("button", "Save")
+
+    assert control == Control("button", "Save", "Save")
