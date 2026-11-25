@@ -38,13 +38,29 @@ agent-desktop snapshot --window-id <w-id> --max-depth 30
   allows taking the focus.
 - **Accessibility reaches Telegram's own widgets** (Qt exposes name, role and class), so buttons and
   labels of the login and settings screens can be located at rung 1 by name or class.
-- **Not established** (needs the person's logged-in profile, which I did not open): whether the chat list,
-  the message box and the message history are reachable. Telegram draws parts of its chat view itself, so
-  the message box may need the lower ladder rungs. This part needs the person's explicit go-ahead to
-  start their own Telegram and read only roles and counts.
+- **Logged-in window, measured with the person's go-ahead** (their own profile started through the guarded
+  helper, window placed on the secondary monitor, read once with `snapshot`, then closed; only roles,
+  counts and Qt class names were read, never a name, a message or a value, and no chat was opened):
+
+  | What | Result |
+  |---|---|
+  | Window state at launch | chat list showing, no chat open |
+  | Structure | 224 nodes on the first read; the list grows as Telegram loads more chats, so counts are not fixed |
+  | Controls | 9 buttons (3 system buttons and `Ui::IconButton`), 11 `Ui::SideBarButton` options, 2 listboxes (`TabListLayout`, `Dialogs::InnerWidget`), 2 text fields (`Ui::InputField` and its `Inner`), hundreds of rows and options |
+  | Chat list | reachable: a listbox with one option per chat, each with a name |
+  | Search box | reachable: `Ui::InputField::Inner` offers `SetValue` and `SetFocus` |
+  | Message box and send button | **not visible** with no chat open: the compose controls exist only inside an open chat, so they were not checked |
+  | `-i` versus `--max-depth 30` | identical output (no truncation here) |
+
+- **Closing:** a normal close (`WindowPattern.Close`) left Telegram running in the **system tray**, so the
+  person's Telegram is set to close to the tray. A flow that must end Telegram has to stop the process the
+  helper started; a flow that only needs the window has to reopen it from the tray.
 
 ## Impact on the "Vivaldi to Word to Telegram" example flow
 
-The Telegram step can launch reliably and its fixed controls are reachable. Sending the text (finding the
-message box, typing, pressing send) is untested; typing is an acting node (research 20, ticket 24), so it
-runs alone under the input lock and pauses while the person is working.
+The Telegram step can launch and its chat list and search box are reachable by role and Qt class. Sending
+the text is still untested at the last step: it needs one chat opened (a click that can mark messages as
+read), after which the message box and send button should be read. A harmless candidate is the person's own
+"Saved Messages" chat, which messages nobody; that needs the person's go-ahead for the click. Typing is an
+acting node (research 20, ticket 24), so it runs alone under the input lock and pauses while the person is
+working.
