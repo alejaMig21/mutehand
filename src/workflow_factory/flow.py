@@ -457,7 +457,10 @@ class _Run:
             raise _EmergencyStop
         target = targets[0]
         before = set(desktop.snapshot())
-        if step.action == "type_secret":
+        if step.action == "read_value":
+            with self.lock:
+                self.state.outputs[node.id] = {"value": desktop.read_text(target.control)}
+        elif step.action == "type_secret":
             desktop.type_secret(target.control, step.secret_ref)  # the value never enters the core
         elif step.action == "type_value":
             desktop.type_text(target.control, _text_of(node, self.state))
@@ -522,7 +525,7 @@ def _run_step(run: _Run, node: Node) -> None:
         return
     with run.lock:
         run.state.effects[node.id] = str(effect)
-        run.state.outputs[node.id] = {"effect": str(effect)}
+        run.state.outputs[node.id] = {**run.state.outputs.get(node.id, {}), "effect": str(effect)}
     run.finish(node)
 
 

@@ -39,6 +39,13 @@ def effective_sensitivity(step: Step) -> Sensitivity | None:
     return None
 
 
+def _reads_private_app(user_db: Path, step: Step) -> bool:
+    """Reading what a private app shows needs consent like any sensitive action."""
+    from workflow_factory.tutor import _is_private  # tutor imports this module
+
+    return step.action == "read_value" and _is_private(user_db, step.app)
+
+
 def scope_of(step: Step) -> Consent:
     locator = step.locator
     return Consent(step.app, locator.automation_id or locator.name, step.action)
@@ -68,7 +75,7 @@ def consents(user_db: Path) -> list[Consent]:
 
 def is_permitted(user_db: Path, step: Step) -> bool:
     """No consent record means blocked. Sensitivity is decided here, not trusted from the label."""
-    if effective_sensitivity(step) is None:
+    if effective_sensitivity(step) is None and not _reads_private_app(user_db, step):
         return True
     scope = scope_of(step)
     with closing(sqlite3.connect(user_db)) as db, db:

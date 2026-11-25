@@ -333,6 +333,9 @@ class AgentDesktop:
     def type_text(self, control: Control, text: str) -> None:
         self._enter(control, text)
 
+    def read_text(self, control: Control) -> str:
+        return self._call(["get", control.ref, "--property", "value"]).get("value") or ""  # no focus, no input
+
     def type_secret(self, control: Control, secret_ref: str) -> None:
         try:
             self._enter(control, self._read_secret(secret_ref))

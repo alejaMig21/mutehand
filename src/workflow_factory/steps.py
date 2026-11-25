@@ -155,8 +155,8 @@ class Step:
     @property
     def uses_physical_input(self) -> bool:
         """Every step action acts on the app. Research 20: even an accessibility click or set-value can take
-        the foreground window, so no action is free of the machine-wide input lock and the pause for the person."""
-        return True
+        the foreground window, so only reading a value (a `get`, which acts on nothing) is free of the input lock."""
+        return self.action != "read_value"
 
     @property
     def endpoint(self) -> Endpoint:
@@ -253,7 +253,7 @@ def _row_to_step(row) -> Step:
     )
 
 
-ACTIONS = ("click", "drag", "type_secret", "type_value")
+ACTIONS = ("click", "drag", "type_secret", "type_value", "read_value")
 
 
 def validate_step(step: Step) -> None:

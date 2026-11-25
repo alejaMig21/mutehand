@@ -40,6 +40,8 @@ class FakeDesktop:
         self.rendezvous = None  # a Barrier: every action waits for its peers, forcing a real overlap
         self.clicks = []
         self.typed = []
+        self.texts = {}  # control name -> the text a read gives
+        self.reads = []  # names of the controls whose text was read
         self.hits = []  # absolute screen points the fake derived internally; the core never sees them
         self.calls = []  # every action call the apprentice made, in order (names and arguments)
 
@@ -106,6 +108,11 @@ class FakeDesktop:
         self.calls.append(("type_text", control.name))
         self.typed.append((control, text))
         self._after()
+
+    def read_text(self, control):
+        self.calls.append(("read_text", control.name))
+        self.reads.append(control.name)
+        return self.texts.get(control.name, "")
 
     def type_secret(self, control, secret_ref):
         self._acting()
