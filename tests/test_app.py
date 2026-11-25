@@ -78,15 +78,24 @@ def test_a_leftover_state_file_from_a_crashed_editor_does_not_block_a_new_one(tm
     thread.join(timeout=10)
 
 
-def test_the_launcher_writes_nothing_to_the_console(tmp_path, capsys):
+def test_the_launcher_tells_where_the_editor_is_and_how_to_stop_it(tmp_path, capsys):
     opened = []
     thread = launch(tmp_path, opened)
     assert wait_until(lambda: opened)
     quit_editor(opened[0])
     thread.join(timeout=10)
 
-    captured = capsys.readouterr()
-    assert captured.out == "" and captured.err == ""
+    said = capsys.readouterr().out
+    assert opened[0] in said and "Ctrl+C" in said and "Quit" in said
+
+
+def test_ctrl_c_stops_the_editor_cleanly(tmp_path):
+    def interrupted(address):
+        raise KeyboardInterrupt
+
+    app.run(data_dir=tmp_path, open_browser=interrupted, desktop_for=lambda name: FakeDesktop(), hotkey=False)
+
+    assert not (tmp_path / "app.json").exists()
 
 
 def test_the_state_file_holds_only_the_address(tmp_path):

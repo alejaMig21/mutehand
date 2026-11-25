@@ -1,8 +1,7 @@
-"""The product's front door: start the editor without a console window, open it, reuse a running one.
+"""The product's front door: start the editor, open it in the browser, reuse one that is already running.
 
-The desktop shortcut runs `pythonw -m workflow_factory.app`. A second click finds the running editor through
-`app.json` and just opens it again; the Quit button in the editor (`POST /api/quit`) ends it. Nothing is
-printed: with no console there is nowhere to print, so problems go to `app.log` in the data folder.
+`uv run workflow-factory` runs this. A second run finds the running editor through `app.json` and just opens it
+again; Ctrl+C in its terminal or the Quit button in the editor (`POST /api/quit`) ends it.
 """
 
 import json
@@ -44,7 +43,7 @@ def _running_address(state: Path) -> str | None:
 
 def run(data_dir: Path | None = None, open_browser: Callable[[str], object] = webbrowser.open,
         desktop_for: Callable[[str], object] = AgentDesktop, hotkey: bool = True,
-        web_dir: Path = DEFAULT_WEB_DIR) -> None:
+        web_dir: Path = DEFAULT_WEB_DIR, announce: Callable[[str], object] = print) -> None:
     user_db = Path(data_dir) / "user.db" if data_dir else default_user_db()
     data_dir = user_db.parent
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -70,9 +69,13 @@ def run(data_dir: Path | None = None, open_browser: Callable[[str], object] = we
     pending = state.with_suffix(".tmp")
     pending.write_text(json.dumps({"url": address}), encoding="utf-8")
     pending.replace(state)  # a second launch never reads a half-written file
+    announce(f"Workflow Factory is running at {address}\n"
+             "It opens in your browser. Press Ctrl+C here, or use Quit in the editor, to stop it.")
     try:
         open_browser(address)
         server.quit_requested.wait()
+    except KeyboardInterrupt:
+        pass
     finally:
         state.unlink(missing_ok=True)
         server.stop()

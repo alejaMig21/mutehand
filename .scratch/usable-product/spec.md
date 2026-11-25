@@ -1,31 +1,35 @@
-# Usable product: from a toolkit to an app you open with one click
+# Usable product: a mini n8n whose nodes are taught by an agent
 
 ## Problem
 
-Everything works but only from a terminal (`uv run python -m workflow_factory.<module>`), and teaching needs a
-manually registered MCP server. The person wants a product: open it from the desktop, do everything on screen,
-never type a command.
+Everything works but only from a terminal, one module at a time, and the editor is a thin canvas. The person wants
+a product: one command to start it, an editor worth using, and teaching that happens in a chat with an agent.
 
-## Decisions (made by the assistant, as the person delegated the organisation)
+## Decisions (the person's, 2026-11-25)
 
-- Keep the engine. The local web editor already lists lessons, flows, consents, doubts and history and can run a
-  flow (`/api/flows/<id>/run`). The product is the shell around it, built in thin slices that each leave something
-  usable.
-- The product's front door is one desktop shortcut that starts the local server without a console window and opens
-  the editor in the default browser. A second click reuses the running instance. A Quit button ends it.
-- Teaching stays with Claude Code (the tutor needs a model). The app opens a Claude Code window already wired to
-  the tutor tools and its instructions, so the person chats instead of configuring or typing commands.
-- Scheduling and a health check ("is everything it needs installed?") move into the screen.
-- No packaged `.exe` for now: a bundled Python is a large download on a slow metered connection, and a shortcut to
-  the installed environment gives the same one-click result.
-- Anything the person does not do on screen is a defect of this feature.
+- **One command** run in the project folder starts everything: `uv run workflow-factory`. No `.cmd` launchers, no
+  shortcuts, no installer, no sequence of terminal commands. The other tools are subcommands of the same command.
+- **The editor never starts a lesson.** It only shows what has already been taught, as nodes, so a person builds
+  custom flows with what they have and no agent. It is a serious product, a mini n8n whose components arrive through
+  lessons; the first editor is considered poor and is redesigned, not patched.
+- **Lessons start only through MCP in a chat with an agent.** The folder declares the tutor in `.mcp.json`, so
+  opening Claude Code here needs one approval and no registration by hand. A tutor playbook tells the agent how to
+  teach.
+- The editor's look is prototyped locally first (the `local-design` skill), after the design questions are settled.
+- No packaged `.exe`: a bundled Python is a large download on a slow metered connection.
+
+## Done
+
+25: the one command (`uv run workflow-factory`), the windowless-free launcher with reuse and a Quit button, and the
+tutor connection through `.mcp.json` (verified with a real MCP handshake: eight tutor tools).
+
+## Open work
+
+26 tutor playbook and a documented teaching session (the agent side); 27 the editor as a node editor (design grill,
+local prototype, then build); 28 schedule from the screen; 29 first-run check; 30 paste and key steps for apps that
+refuse `set-value` (Word).
 
 ## Out of scope
 
-The example flow Vivaldi to Word to Telegram (it needs a clipboard-paste adapter step, research 17 to 19), a
-multi-user or remote mode, and any change to the safety rules (ADR 0002).
-
-## Tickets
-
-25 launcher and shortcut, 26 teach from the app, 27 schedule from the app, 28 first-run health check,
-29 paste and key steps for apps that refuse `set-value` (Word).
+A Teach button in the editor, shortcuts or launchers, a multi-user or remote mode, and any change to the safety
+rules (ADR 0002).
