@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS node_results (
 """
 
 KINDS = ("step", "if", "join", "loop", "trigger", "foreach", "wait", "stop", "data")
+RETRY_PAUSE_SECONDS = 2.0  # first pause before a retry; doubles each time, capped
+MAX_RETRY_PAUSE_SECONDS = 60.0
+MAX_RETRIES = 10
+FAILURE_POLICIES = ("stop", "retry", "continue")
 WAIT_SLICE_SECONDS = 1.0  # a wait sleeps in slices so the emergency stop is heard within a second
 CLOCK_TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 INPUT_TYPES = {"str": str, "int": int, "float": float, "bool": bool}
@@ -113,8 +117,14 @@ class Node:
     fields: dict = field(default_factory=dict, hash=False)  # field name -> binding (see data.py)
     body: str | None = None  # foreach: the one node it repeats, once per item
     op: str | None = None  # data: which operation (see dataops.py)
+    on_failure: str = "stop"  # stop (leaves a doubt) | retry (after a pause, up to `retries` times) | continue (empty result)
+    retries: int = 3
 
     def __post_init__(self):
+        if self.on_failure not in FAILURE_POLICIES:
+            raise ValueError(f"on_failure must be one of {FAILURE_POLICIES}")
+        if self.on_failure == "retry" and not (type(self.retries) is int and 1 <= self.retries <= MAX_RETRIES):
+            raise ValueError(f"retries must be a whole number from 1 to {MAX_RETRIES}")
         for name, binding in self.fields.items():
             check_binding(name, binding)
         if self.kind not in KINDS:
@@ -252,6 +262,7 @@ class RunResult:
     run_id: int | None = None  # the run history row of this run, when one was recorded
     busy: bool = False  # another live run of this flow holds it, so this one did not start
     halted_by: str | None = None  # the stop node that ended the flow early, on purpose
+    continued: dict = field(default_factory=dict)  # node id -> why it failed and the flow went on without it
     outputs: dict = field(default_factory=dict)  # node id -> the Data it gave out; in memory, never written to a report
 
     @property
@@ -386,6 +397,9 @@ class _Run:
         self.node_status = {}  # node id -> (status, reason): what the run history will show
         self.emergency = False
         self.halted = None  # the id of the stop node that ended the flow
+        self.attempts = {}  # node id -> retries used so far
+        self.retrying = set()  # nodes whose last failure asked for a pause and another try
+        self.continued = {}
         self.nodes = {node.id: node for node in flow.nodes}
 
     def save(self) -> None:
@@ -462,7 +476,25 @@ class _Run:
         _store_effect(self.user_db, node.id, effect, desktop.now())
         return None, effect, step
 
-    def block(self, node: Node, reason: str) -> None:
+    def block(self, node: Node, reason: str, owner: Node | None = None) -> str:
+        """A node failed. Returns what happens next: "retry", "continue" or "stop" (a doubt is queued).
+
+        `owner` is the node whose policy applies when `node` is only its body (for each)."""
+        policy = owner or node
+        with self.lock:
+            if policy.on_failure == "retry" and self.attempts.get(policy.id, 0) < policy.retries:
+                self.attempts[policy.id] = self.attempts.get(policy.id, 0) + 1
+                self.retrying.add(policy.id)
+                return "retry"
+            if policy.on_failure == "continue":
+                self.continued[policy.id] = reason
+                self.node_status[policy.id] = ("continued", reason)
+                if owner is None:
+                    self.state.outputs[node.id] = {}  # an empty result: whoever needs a field of it stops instead of guessing
+                    self.state.done.add(node.id)
+                    self.progress(node.id, "continued")
+                    self.save()
+                return "continue"
         try:
             capture = dict(Counter(c.role for c in self.desktop.snapshot()))  # roles and counts only
         except DesktopError:
@@ -473,6 +505,7 @@ class _Run:
             self.progress(node.id, "blocked")
             record_doubt(self.user_db, self.flow.key, node.id, node.step, DOUBT_REASON[reason], capture)
             self.save()
+        return "stop"
 
     def finish(self, node: Node) -> None:
         with self.lock:
@@ -539,7 +572,15 @@ def _run_foreach(run: _Run, node: Node) -> None:
         run.progress(body.id, "running")
         reason, effect, _ = run.attempt(body)  # consent, the input lock and the user pause apply to every item
         if reason:
-            run.block(body, reason)  # the doubt is about the body's step
+            verdict = run.block(body, reason, owner=node)  # a stop leaves the doubt on the body's step
+            if verdict == "retry":
+                return  # the pause and the new try are _guarded's; the saved item is where it resumes
+            if verdict == "continue":  # this item is given up, the next one goes on
+                with run.lock:
+                    progress["iteration"] += 1
+                run.attempts.pop(node.id, None)
+                run.save()
+                continue
             with run.lock:
                 run.blocked[node.id] = reason
                 run.node_status[node.id] = ("blocked", reason)
@@ -547,6 +588,7 @@ def _run_foreach(run: _Run, node: Node) -> None:
             return
         with run.lock:
             progress["iteration"] += 1
+            run.attempts.pop(node.id, None)  # the retries are per item
             run.state.effects[body.id] = str(effect)
             run.state.outputs[body.id] = {"effect": str(effect)}
         run.save()  # a checkpoint per item
@@ -658,13 +700,22 @@ def _verdict(node_id: str, flow: Flow, nodes: dict, state: _State) -> str:
 
 def _guarded(run: _Run, node: Node, runner) -> None:
     """A typed desktop failure stops this node with a doubt; it never takes the flow down."""
-    run.progress(node.id, "running")
-    try:
-        runner(run, node)
-    except _EmergencyStop:
-        run.emergency = True
-    except DesktopError:
-        run.block(node, "action_failed")
+    while True:
+        run.progress(node.id, "running")
+        try:
+            runner(run, node)
+        except _EmergencyStop:
+            run.emergency = True
+        except DesktopError:
+            run.block(node, "action_failed")
+        if node.id not in run.retrying or run.emergency:
+            return
+        run.retrying.discard(node.id)
+        pause = min(RETRY_PAUSE_SECONDS * 2 ** (run.attempts[node.id] - 1), MAX_RETRY_PAUSE_SECONDS)
+        run.desktop.sleep(pause)  # the precondition is checked again by the runner on the next pass
+        if EMERGENCY_STOP.is_set():
+            run.emergency = True
+            return
 
 
 def run_flow(
@@ -737,13 +788,13 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="ma
         raise
     effects = {node_id: Effect(effect) for node_id, effect in run.effects.items()}
     if run.emergency:  # no doubt, no cleanup: the checkpoint lets the flow resume after the stop
-        result = RunResult(effects, run.blocked, run.statuses, emergency=True, outputs=run.state.outputs)
+        result = RunResult(effects, run.blocked, run.statuses, emergency=True, outputs=run.state.outputs, continued=run.continued)
     elif run.blocked:
         first = next(node.id for node in flow.nodes if node.id in run.blocked)  # flow order, not timing
-        result = RunResult(effects, run.blocked, run.statuses, stopped=first, outputs=run.state.outputs)
+        result = RunResult(effects, run.blocked, run.statuses, stopped=first, outputs=run.state.outputs, continued=run.continued)
     else:
         clear_checkpoint(user_db, flow.key)
-        result = RunResult(effects, {}, run.statuses, halted_by=run.halted, outputs=run.state.outputs)
+        result = RunResult(effects, {}, run.statuses, halted_by=run.halted, outputs=run.state.outputs, continued=run.continued)
     run_id = record_run(user_db, flow.key, started_at, desktop.now(), result.status, result.stopped, [
         {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1],
          "effect": str(effects[node.id]) if node.id in effects else None}
