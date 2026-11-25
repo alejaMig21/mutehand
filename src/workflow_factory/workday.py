@@ -84,6 +84,8 @@ def main(argv: list[str] | None = None, desktop_for=AgentDesktop) -> int:
     parser.add_argument("--user-db", type=Path)
     parser.add_argument("--factory-db", type=Path)
     parser.add_argument("--report-dir", type=Path)
+    parser.add_argument("--fired", choices=["manual", "daily"], default="manual",
+                        help="which triggers start the flow: the scheduled task passes daily")
     parser.add_argument("--no-hotkey", action="store_true")
     args = parser.parse_args(argv)
     if args.data_dir:
@@ -119,7 +121,8 @@ def _run(args, desktop_for) -> int:
             print(f"warning: {error}", file=sys.stderr)
             hotkey = None
     try:
-        result = run_flow(flow, desktop_for(args.app), args.user_db, args.factory_db, context=context)
+        result = run_flow(flow, desktop_for(args.app), args.user_db, args.factory_db, context=context,
+                         fired=args.fired)
     except DesktopError as error:  # e.g. the app is not running: the code only, never screen text
         return _fail(args, flow.key, getattr(error, "code", "DESKTOP_ERROR"))
     finally:

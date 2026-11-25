@@ -56,7 +56,9 @@ CREATE TABLE IF NOT EXISTS node_results (
 )
 """
 
-KINDS = ("step", "if", "join", "loop")
+KINDS = ("step", "if", "join", "loop", "trigger", "foreach", "wait", "stop")
+WAIT_SLICE_SECONDS = 1.0  # a wait sleeps in slices so the emergency stop is heard within a second
+CLOCK_TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 INPUT_TYPES = {"str": str, "int": int, "float": float, "bool": bool}
 MAX_LOOP_SECONDS = 8 * 3600
 MAX_PARALLEL_NODES = 4
@@ -96,7 +98,7 @@ class Effect(StrEnum):
 class Node:
     id: str
     step: str = ""  # step and loop nodes: the step to replay
-    kind: str = "step"  # step | if | join | loop
+    kind: str = "step"  # step | if | join | loop | trigger | foreach | wait | stop
     inputs: tuple[tuple[str, str], ...] = ()  # (name, type) values the run context must hold
     on: str | None = None  # if: the node whose measured effect is tested
     equals: str | None = None
@@ -108,6 +110,7 @@ class Node:
     stop_when_effect: str | None = None  # loop: ends normally when an iteration measures this
     exclusive_input: bool = False  # needs the mouse, keyboard or focus: never overlaps another such node
     fields: dict = field(default_factory=dict, hash=False)  # field name -> binding (see data.py)
+    body: str | None = None  # foreach: the one node it repeats, once per item
 
     def __post_init__(self):
         for name, binding in self.fields.items():
@@ -132,6 +135,35 @@ class Node:
                 raise ValueError("loop caps must be at least 1")
             if self.max_seconds > MAX_LOOP_SECONDS:
                 raise ValueError("a loop may run for at most 8 hours")
+        _check_system_node(self)
+
+
+def _check_system_node(node: Node) -> None:
+    """The settings a system node cannot work without."""
+    fields = node.fields
+    if node.kind == "trigger":
+        mode = fields.get("mode")
+        if not mode or "value" not in mode or mode["value"] not in ("manual", "daily"):
+            raise ValueError("a trigger needs a fixed mode: manual or daily")
+        if mode["value"] == "daily":
+            at = fields.get("at")
+            if not at or "value" not in at or not isinstance(at["value"], str) or not CLOCK_TIME.fullmatch(at["value"]):
+                raise ValueError("a daily trigger needs a fixed time written HH:MM")
+    elif node.kind == "foreach":
+        if not node.body:
+            raise ValueError("a foreach node needs a body: the node it repeats")
+        if "items" not in fields:
+            raise ValueError("a foreach node needs an items field")
+    elif node.kind == "wait":
+        binding = fields.get("seconds")
+        if binding is None:
+            raise ValueError("a wait node needs a seconds field")
+        if "value" in binding and not _good_seconds(binding["value"]):
+            raise ValueError(f"seconds must be a number above 0 and at most {MAX_LOOP_SECONDS}")
+
+
+def _good_seconds(value) -> bool:
+    return not isinstance(value, bool) and isinstance(value, (int, float)) and 0 < value <= MAX_LOOP_SECONDS
 
 
 @dataclass(frozen=True)
@@ -151,7 +183,16 @@ class Flow:
                     raise ValueError(f"field {name!r} of node {node.id!r} points at itself")
                 if target not in known and target != RUN:
                     raise ValueError(f"field {name!r} of node {node.id!r} points at an unknown node {target!r}")
+        by_id = {node.id: node for node in self.nodes}
+        for node in self.nodes:
+            if node.kind == "foreach":
+                if node.body not in known:
+                    raise ValueError(f"foreach {node.id!r} has a body that names an unknown node {node.body!r}")
+                if by_id[node.body].kind != "step":
+                    raise ValueError(f"the body of foreach {node.id!r} must be a step node")
         for source, target in self.all_edges:
+            if source in self.owned or target in self.owned:
+                raise ValueError(f"the body of a foreach cannot have edges of its own ({source!r} -> {target!r})")
             if source not in known or target not in known:
                 raise ValueError(f"edge {source!r} -> {target!r} names an unknown node")
         remaining, edges = list(ids), self.all_edges
@@ -162,9 +203,14 @@ class Flow:
             remaining = [n for n in remaining if n not in free]
 
     @property
+    def owned(self) -> set[str]:
+        """The nodes a foreach repeats: they run only inside it, never on their own."""
+        return {node.body for node in self.nodes if node.kind == "foreach" and node.body}
+
+    @property
     def all_edges(self) -> list[tuple[str, str]]:
         edges = (list(self.edges) if self.edges is not None
-                 else [(a.id, b.id) for a, b in pairwise(self.nodes)])
+                 else [(a.id, b.id) for a, b in pairwise(n for n in self.nodes if n.id not in self.owned)])
         for node in self.nodes:
             if node.kind == "if":  # it routes to its targets, and waits for the node it tests
                 edges += [(node.id, target) for target in (node.then, node.otherwise) if target]
@@ -190,6 +236,7 @@ class RunResult:
     emergency: bool = False  # a human pressed the emergency stop; the checkpoint allows resuming
     run_id: int | None = None  # the run history row of this run, when one was recorded
     busy: bool = False  # another live run of this flow holds it, so this one did not start
+    halted_by: str | None = None  # the stop node that ended the flow early, on purpose
 
     @property
     def status(self) -> str:
@@ -321,6 +368,8 @@ class _Run:
         self.baseline = None  # cursor and last-input time right after our own last physical action
         self.node_status = {}  # node id -> (status, reason): what the run history will show
         self.emergency = False
+        self.halted = None  # the id of the stop node that ended the flow
+        self.nodes = {node.id: node for node in flow.nodes}
 
     def save(self) -> None:
         with self.lock:
@@ -427,6 +476,84 @@ def _run_step(run: _Run, node: Node) -> None:
     run.finish(node)
 
 
+def _run_trigger(run: _Run, node: Node) -> None:
+    with run.lock:
+        run.state.outputs[node.id] = dict(run.state.context)  # what the workday started with
+    run.finish(node)
+
+
+def _run_wait(run: _Run, node: Node) -> None:
+    try:
+        seconds = resolve(node.fields["seconds"], run.state.outputs, run.state.context)
+    except MissingData:
+        seconds = None
+    if not _good_seconds(seconds):
+        run.block(node, "missing_input")
+        return
+    with run.lock:
+        progress = run.state.loops.setdefault(node.id, {"elapsed": 0.0})  # a resume waits only the rest
+    while progress["elapsed"] < seconds:
+        if EMERGENCY_STOP.is_set():
+            raise _EmergencyStop
+        slice_ = min(WAIT_SLICE_SECONDS, seconds - progress["elapsed"])
+        run.desktop.sleep(slice_)
+        progress["elapsed"] += slice_
+        run.save()
+    with run.lock:
+        run.state.outputs[node.id] = {"waited": seconds}
+    run.finish(node)
+
+
+def _run_foreach(run: _Run, node: Node) -> None:
+    body = run.nodes[node.body]
+    try:
+        items = resolve(node.fields["items"], run.state.outputs, run.state.context)
+    except MissingData:
+        items = None
+    if not isinstance(items, list):
+        run.block(node, "missing_input")
+        return
+    with run.lock:
+        progress = run.state.loops.setdefault(node.id, {"iteration": 0})
+    while progress["iteration"] < len(items):
+        index = progress["iteration"]
+        with run.lock:
+            run.state.outputs[node.id] = {"item": items[index], "index": index, "count": len(items)}
+        run.progress(body.id, "running")
+        reason, effect, _ = run.attempt(body)  # consent, the input lock and the user pause apply to every item
+        if reason:
+            run.block(body, reason)  # the doubt is about the body's step
+            with run.lock:
+                run.blocked[node.id] = reason
+                run.node_status[node.id] = ("blocked", reason)
+                run.progress(node.id, "blocked")
+            return
+        with run.lock:
+            progress["iteration"] += 1
+            run.state.effects[body.id] = str(effect)
+            run.state.outputs[body.id] = {"effect": str(effect)}
+        run.save()  # a checkpoint per item
+    with run.lock:
+        run.state.outputs[node.id] = {"count": len(items)}
+        run.state.done.add(body.id)
+        run.node_status[body.id] = ("done", None)
+        run.progress(body.id, "done")
+    run.finish(node)
+
+
+def _run_stop(run: _Run, node: Node) -> None:
+    with run.lock:
+        run.halted = node.id
+    run.finish(node)
+
+
+def _fired_triggers(flow: Flow, fired: str) -> set[str]:
+    """The triggers this run starts from. Pressing Run on a flow with no manual trigger starts every trigger."""
+    triggers = [node for node in flow.nodes if node.kind == "trigger"]
+    chosen = {node.id for node in triggers if node.fields["mode"]["value"] == fired}
+    return chosen or ({node.id for node in triggers} if fired == "manual" else set())
+
+
 def _run_if(run: _Run, node: Node) -> None:
     if node.on not in run.state.effects:  # the tested node never ran
         run.block(node, "missing_input")
@@ -492,7 +619,7 @@ def _guarded(run: _Run, node: Node, runner) -> None:
 
 def run_flow(
     flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path | None = None,
-    context: dict | None = None, progress=None,
+    context: dict | None = None, progress=None, fired: str = "manual",
 ) -> RunResult:
     for node in flow.nodes:
         if expressions(node.fields):
@@ -504,12 +631,12 @@ def run_flow(
     if not acquire_run_lock(user_db, flow.key):  # two runs of one flow would race on its checkpoint
         return RunResult({}, {}, {}, busy=True)
     try:
-        return _run_locked(flow, desktop, user_db, factory_db, context, progress)
+        return _run_locked(flow, desktop, user_db, factory_db, context, progress, fired)
     finally:
         release_run_lock(user_db, flow.key)
 
 
-def _run_locked(flow, desktop, user_db, factory_db, context, progress) -> RunResult:
+def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="manual") -> RunResult:
     key = desktop.app_key()
     revalidate_changed_versions(user_db, key.process, key.version)
     saved = load_checkpoint(user_db, flow.key, flow.definition)
@@ -518,8 +645,9 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress) -> RunRes
     run = _Run(flow, desktop, user_db, factory_db, state, progress)
     started_at = desktop.now()
     nodes = {node.id: node for node in flow.nodes}
-    runners = {"step": _run_step, "loop": _run_loop, "if": _run_if,
-               "join": lambda current, node: current.finish(node)}
+    runners = {"step": _run_step, "loop": _run_loop, "if": _run_if, "trigger": _run_trigger, "foreach": _run_foreach,
+               "wait": _run_wait, "stop": _run_stop, "join": lambda current, node: current.finish(node)}
+    fire = _fired_triggers(flow, fired)
     try:
         progressed = True
         while progressed and not run.emergency:
@@ -529,9 +657,9 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress) -> RunRes
                 break
             wave = []
             for node in flow.nodes:
-                if node.id in state.done or node.id in state.skipped or node.id in run.blocked:
+                if node.id in state.done or node.id in state.skipped or node.id in run.blocked or node.id in flow.owned:
                     continue
-                verdict = _verdict(node.id, flow, nodes, state)
+                verdict = "skip" if node.kind == "trigger" and node.id not in fire else _verdict(node.id, flow, nodes, state)
                 if verdict == "wait":
                     continue
                 progressed = True
@@ -544,6 +672,13 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress) -> RunRes
             if wave:  # everything ready together; PHYSICAL_INPUT serialises the nodes that need it
                 with ThreadPoolExecutor(max_workers=min(len(wave), MAX_PARALLEL_NODES)) as pool:
                     list(pool.map(lambda node: _guarded(run, node, runners[node.kind]), wave))
+            if run.halted:  # a stop node ran: nothing that has not run yet will
+                for node in flow.nodes:
+                    if node.id not in state.done and node.id not in state.skipped and node.id not in run.blocked:
+                        state.skipped.add(node.id)
+                        run.node_status[node.id] = ("skipped", None)
+                        run.progress(node.id, "skipped")
+                break
     except Exception:
         # a bug or a failure we do not handle: the run still leaves a trace, then the error goes on
         record_run(user_db, flow.key, started_at, desktop.now(), "error", None, [
@@ -558,7 +693,7 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress) -> RunRes
         result = RunResult(effects, run.blocked, run.statuses, stopped=first)
     else:
         clear_checkpoint(user_db, flow.key)
-        result = RunResult(effects, {}, run.statuses)
+        result = RunResult(effects, {}, run.statuses, halted_by=run.halted)
     run_id = record_run(user_db, flow.key, started_at, desktop.now(), result.status, result.stopped, [
         {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1],
          "effect": str(effects[node.id]) if node.id in effects else None}

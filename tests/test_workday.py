@@ -218,3 +218,22 @@ def test_a_workday_of_a_flow_that_is_already_running_exits_five_without_acting(t
     code = run(tmp_path, desktop)
 
     assert code == EXIT_BUSY == 5 and desktop.clicks == []
+
+
+def two_trigger_nodes():
+    def trigger(node_id, mode, at=None):
+        fields = {"mode": {"value": mode}, **({"at": {"value": at}} if at else {})}
+        return Node(node_id, kind="trigger", fields=fields)
+
+    return [trigger("m", "manual"), trigger("d", "daily", "09:00"), Node("a", "open-menu"), Node("b", "save-file")]
+
+
+@pytest.mark.parametrize("extra, clicked", [((), ["Alpha"]), (("--fired", "daily"), ["Beta"])], ids=["by hand", "scheduled"])
+def test_a_workday_fires_the_trigger_it_was_started_by(tmp_path, extra, clicked):
+    setup(tmp_path)
+    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=two_trigger_nodes(), edges=[("m", "a"), ("d", "b")]))
+    desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
+
+    code = run(tmp_path, desktop, *extra)
+
+    assert code == EXIT_FINISHED and [c.name for c in desktop.clicks] == clicked

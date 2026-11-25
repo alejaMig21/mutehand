@@ -28,10 +28,10 @@ class Recorder:
         return subprocess.CompletedProcess(args, self.returncode, stdout="", stderr="")
 
 
-def test_the_task_runs_the_workday_module_with_the_flow_and_the_app():
+def test_the_task_runs_the_workday_module_with_the_flow_and_the_app_and_fires_the_daily_triggers():
     command = workday_command("morning", "mspaint.exe")
 
-    assert re.fullmatch(r'"[^"]+" -m workflow_factory\.workday --flow morning --app mspaint\.exe', command)
+    assert re.fullmatch(r'"[^"]+" -m workflow_factory\.workday --flow morning --app mspaint\.exe --fired daily', command)
 
 
 def test_paths_with_spaces_are_quoted_in_the_command():

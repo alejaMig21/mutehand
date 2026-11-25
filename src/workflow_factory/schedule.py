@@ -33,7 +33,7 @@ def workday_command(flow_id: str, app: str, extra: list[str] | None = None) -> s
     python = Path(sys.executable)
     windowless = python.with_name("pythonw.exe")
     exe = windowless if windowless.exists() else python
-    parts = ["-m", "workflow_factory.workday", "--flow", flow_id, "--app", app, *(extra or [])]
+    parts = ["-m", "workflow_factory.workday", "--flow", flow_id, "--app", app, "--fired", "daily", *(extra or [])]
     return f'"{exe}" ' + " ".join(_quote(part) for part in parts)
 
 
