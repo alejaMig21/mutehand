@@ -4,9 +4,9 @@
 
 **Blocked by:** 03, 10
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Replacing the factory file leaves the user database untouched
-- [ ] Duplicating a template creates an editable copy in the user layer
-- [ ] Export then import round-trips lessons and flows unchanged
-- [ ] Exported JSON never contains secret values
+- [x] Replacing the factory file leaves the user database untouched
+- [x] Duplicating a template creates an editable copy in the user layer
+- [x] Export then import round-trips lessons and flows unchanged
+- [x] Exported JSON never contains secret values

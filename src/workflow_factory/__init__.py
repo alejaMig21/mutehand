@@ -11,6 +11,7 @@ from workflow_factory.flow import (
 )
 from workflow_factory.flows import list_flows, load_flow, save_flow
 from workflow_factory.hotkey import EmergencyHotkey
+from workflow_factory.knowledge import build_factory, duplicate_flow, export_knowledge, import_knowledge
 from workflow_factory.tutor import (
     StudyStep,
     answer_doubt_by_teaching,
@@ -41,6 +42,7 @@ from workflow_factory.lessons import (
 )
 
 __all__ = [
+    "build_factory", "duplicate_flow", "export_knowledge", "import_knowledge",
     "lesson_report", "list_runs", "reject_lesson",
     "EmergencyHotkey",
     "USER_IDLE_SECONDS", "clear_emergency_stop", "emergency_stop",

@@ -14,6 +14,7 @@ from workflow_factory.agent_desktop import AgentDesktop
 from workflow_factory.api import ApiServer
 from workflow_factory.flow import clear_emergency_stop, emergency_stop
 from workflow_factory.hotkey import EmergencyHotkey
+from workflow_factory.paths import default_user_db
 
 DEFAULT_WEB_DIR = Path(__file__).resolve().parents[2] / "web" / "dist"
 
@@ -24,8 +25,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--no-hotkey", action="store_true", help="do not register the emergency hotkey")
     args = parser.parse_args(argv)
 
-    default = Path(os.environ.get("LOCALAPPDATA", ".")) / "workflow-factory" / "user.db"
-    user_db = Path(os.environ.get("WORKFLOW_FACTORY_USER_DB", default))
+    user_db = default_user_db()
     user_db.parent.mkdir(parents=True, exist_ok=True)
     factory = os.environ.get("WORKFLOW_FACTORY_FACTORY_DB")
     web_dir = Path(os.environ.get("WORKFLOW_FACTORY_WEB_DIR", DEFAULT_WEB_DIR))

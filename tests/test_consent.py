@@ -132,9 +132,9 @@ def test_a_lesson_that_types_a_secret_must_be_marked_as_a_password_field(tmp_pat
 
 def test_an_unreadable_control_blocks_even_a_non_sensitive_lesson(tmp_path):
     user_db = tmp_path / "user.db"
-    save_lesson(user_db, lesson("send-message", "Send"))
+    save_lesson(user_db, lesson("send-message", "Open"))  # a plain control: no consent involved
 
-    desktop, result = run(user_db, FakeDesktop(controls=[button("Send", readable=False)]))
+    desktop, result = run(user_db, FakeDesktop(controls=[button("Open", readable=False)]))
 
     assert result.blocked == {"n1": "unreadable"}
     assert desktop.clicks == []

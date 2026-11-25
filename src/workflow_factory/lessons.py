@@ -3,6 +3,7 @@
 import base64
 import io
 import json
+import math
 import sqlite3
 from contextlib import closing
 from dataclasses import asdict, dataclass, field
@@ -215,8 +216,23 @@ def _pack(capture):
     return buffer.getvalue()
 
 
+MAX_PIXEL_BYTES = 64 * 1024 * 1024  # a stored capture or template this big is refused, not allocated
+
+
 def _unpack(blob):
-    return None if blob is None else np.load(io.BytesIO(blob), allow_pickle=False)
+    if blob is None:
+        return None
+    buffer = io.BytesIO(blob)
+    try:  # read the declared shape first: a tiny header can claim terabytes
+        version = np.lib.format.read_magic(buffer)
+        reader = np.lib.format.read_array_header_1_0 if version == (1, 0) else np.lib.format.read_array_header_2_0
+        shape, _, dtype = reader(buffer)
+    except Exception as error:  # noqa: BLE001 - any malformed header is just "bad pixel data"
+        raise ValueError(f"unreadable pixel data: {error}") from None
+    if math.prod(shape) * dtype.itemsize > MAX_PIXEL_BYTES:
+        raise ValueError("pixel data is too large")
+    buffer.seek(0)
+    return np.load(buffer, allow_pickle=False)
 
 
 def _row_to_lesson(row) -> Lesson:
@@ -419,3 +435,52 @@ def reject_lesson(user_db: Path, app: str, name: str) -> None:
         db.execute(STATE_SCHEMA)
         db.execute("INSERT OR IGNORE INTO lesson_state (app, name) VALUES (?, ?)", (app, name))
         db.execute("UPDATE lesson_state SET rejected = 1, restored = 0 WHERE app = ? AND name = ?", (app, name))
+
+
+def lesson_to_dict(lesson: Lesson) -> dict:
+    """A lesson as plain JSON-able data (pixels as base64 .npy). Holds a secret reference, never a value."""
+    return {
+        "app": lesson.app, "version": lesson.version, "name": lesson.name,
+        "precondition": lesson.precondition, "action": lesson.action, "effect": lesson.effect,
+        "origin": str(lesson.origin), "status": str(lesson.status),
+        "factory_successes": lesson.factory_successes, "factory_failures": lesson.factory_failures,
+        "locator": asdict(lesson.locator),
+        "frame": asdict(lesson.frame) if lesson.frame else None, "mask": list(lesson.mask),
+        "capture": base64.b64encode(_pack(lesson.capture)).decode() if lesson.capture is not None else None,
+        "sensitive": str(lesson.sensitive) if lesson.sensitive else None,
+        "secret_ref": lesson.secret_ref,
+        "derived": asdict(lesson.derived) if lesson.derived else None,
+        "template": json.loads(_dump_template(lesson.template)) if lesson.template else None,
+        "drag_to": json.loads(_dump_endpoint(lesson.drag_to)) if lesson.drag_to else None,
+    }
+
+
+def lesson_from_dict(data: dict) -> Lesson:
+    """Inverse of lesson_to_dict; raises ValueError when the data is not a valid lesson."""
+    try:
+        lesson = Lesson(
+            app=data["app"], version=data["version"], name=data["name"], locator=Locator(**data["locator"]),
+            precondition=data.get("precondition", ""), action=data.get("action", "click"),
+            effect=data.get("effect", ""), origin=Origin(data.get("origin", "local")),
+            status=Status(data.get("status", "suspect")),
+            factory_successes=data.get("factory_successes", 0), factory_failures=data.get("factory_failures", 0),
+            frame=Frame(**data["frame"]) if data.get("frame") else None,
+            mask=FRAME_FIELDS if data.get("mask") is None else tuple(data["mask"]),  # () is a real mask
+            capture=_unpack(base64.b64decode(data["capture"])) if data.get("capture") else None,
+            sensitive=Sensitivity(data["sensitive"]) if data.get("sensitive") else None,
+            secret_ref=data.get("secret_ref"),
+            derived=_load_derived(json.dumps(data["derived"])) if data.get("derived") else None,
+            template=_load_template(json.dumps(data["template"])) if data.get("template") else None,
+            drag_to=_load_endpoint(json.dumps(data["drag_to"])) if data.get("drag_to") else None,
+        )
+    except (KeyError, TypeError) as error:
+        raise ValueError(f"not a valid lesson: {error}") from None
+    validate_lesson(lesson)
+    return lesson
+
+
+def forget_state(user_db: Path, app: str, name: str) -> None:
+    """Drop the local counters and flags of a lesson that is being replaced by new knowledge."""
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute(STATE_SCHEMA)
+        db.execute("DELETE FROM lesson_state WHERE app = ? AND name = ?", (app, name))

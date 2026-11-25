@@ -30,7 +30,8 @@ def call(server, path, method="GET", body=None, token="secret-token", host=None)
         with urllib.request.urlopen(request, data=data, timeout=5) as response:
             return response.status, json.loads(response.read() or b"null"), dict(response.headers)
     except urllib.error.HTTPError as error:
-        return error.code, json.loads(error.read() or b"null"), dict(error.headers)
+        with error:  # an HTTPError holds the response: close it
+            return error.code, json.loads(error.read() or b"null"), dict(error.headers)
 
 
 @pytest.fixture
@@ -169,6 +170,7 @@ def test_a_non_ascii_authorization_header_is_a_plain_401(server):
     with pytest.raises(urllib.error.HTTPError) as refused:
         urllib.request.urlopen(request, timeout=5)
 
+    refused.value.close()
     assert refused.value.code == 401
 
 
@@ -232,3 +234,21 @@ def test_only_the_most_recent_finished_runs_are_kept(tmp_path):
         server.stop()
 
     assert statuses == [404, 200, 200]
+
+
+def test_a_factory_template_can_be_duplicated_into_the_user_layer_through_the_api(tmp_path):
+    from workflow_factory import build_factory
+
+    build_factory(tmp_path / "factory.db", {"version": 1, "lessons": [], "flows": [
+        {"id": "morning-template", "nodes": [{"id": "a", "lesson": "open-menu"}], "edges": None}]})
+    server = make_server(tmp_path)
+    try:
+        created = call(server, "/api/flows/morning-template/duplicate", "POST", {"new_id": "mine"})
+        again = call(server, "/api/flows/morning-template/duplicate", "POST", {"new_id": "mine"})
+        listing = call(server, "/api/flows")[1]
+    finally:
+        server.stop()
+
+    assert created[0] == 201 and created[1]["id"] == "mine"
+    assert again[0] == 400 and "already exists" in again[1]["error"]
+    assert listing == [{"id": "mine", "origin": "local"}, {"id": "morning-template", "origin": "factory"}]

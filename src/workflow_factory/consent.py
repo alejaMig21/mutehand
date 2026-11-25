@@ -5,7 +5,12 @@ from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
-from workflow_factory.lessons import Lesson
+import re
+
+from workflow_factory.lessons import Lesson, Sensitivity
+
+# Safety net: a control named like an outward action needs consent even if nobody labelled the lesson.
+OUTWARD_WORDS = ("send", "publish", "buy", "purchase", "pay", "post", "submit")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS consents (
@@ -22,6 +27,17 @@ class Consent:
     app: str
     control: str  # a control id/name, or "*" for any control of the app
     action: str
+
+
+def effective_sensitivity(lesson: Lesson) -> Sensitivity | None:
+    """The category that applies, whatever the lesson claims: labels come from teachers, files and factories."""
+    if lesson.sensitive is not None:
+        return lesson.sensitive
+    if lesson.action == "type_secret":
+        return Sensitivity.PASSWORD_FIELD
+    if any(re.search(rf"\b{word}\b", lesson.locator.name.lower()) for word in OUTWARD_WORDS):
+        return Sensitivity.OUTWARD_ACTION
+    return None
 
 
 def scope_of(lesson: Lesson) -> Consent:
@@ -52,8 +68,8 @@ def consents(user_db: Path) -> list[Consent]:
 
 
 def is_permitted(user_db: Path, lesson: Lesson) -> bool:
-    """No consent record means blocked. Typing a secret is always sensitive, label or not."""
-    if lesson.sensitive is None and lesson.action != "type_secret":
+    """No consent record means blocked. Sensitivity is decided here, not trusted from the label."""
+    if effective_sensitivity(lesson) is None:
         return True
     scope = scope_of(lesson)
     with closing(sqlite3.connect(user_db)) as db, db:

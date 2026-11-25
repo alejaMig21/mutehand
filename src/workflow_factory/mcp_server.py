@@ -15,6 +15,7 @@ from workflow_factory import tutor
 from workflow_factory.agent_desktop import AgentDesktop, AgentDesktopError
 from workflow_factory.desktop import Desktop
 from workflow_factory.lessons import Locator, Sensitivity
+from workflow_factory.paths import default_user_db
 
 
 def _code_only(tool):
@@ -99,8 +100,7 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPSer
 
 
 def main() -> None:
-    default = Path(os.environ.get("LOCALAPPDATA", ".")) / "workflow-factory" / "user.db"
-    user_db = Path(os.environ.get("WORKFLOW_FACTORY_USER_DB", default))
+    user_db = default_user_db()
     user_db.parent.mkdir(parents=True, exist_ok=True)
     build_server(user_db, AgentDesktop).run()
 

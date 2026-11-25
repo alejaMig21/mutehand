@@ -220,3 +220,27 @@ def test_the_four_other_screens_show_their_data_and_their_actions_work(tmp_path)
             browser.close()
     finally:
         server.stop()
+
+
+def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editable_copy(tmp_path):
+    from playwright.sync_api import sync_playwright
+    from workflow_factory import build_factory
+
+    if not (DIST / "index.html").exists():
+        pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
+    build_factory(tmp_path / "factory.db", {"version": 1, "lessons": [], "flows": [
+        {"id": "morning-template", "nodes": [{"id": "n1", "lesson": "open-menu"}], "edges": None}]})
+    server = ApiServer(tmp_path / "user.db", tmp_path / "factory.db", lambda app: None, token="e2e-token", web_dir=DIST)
+    server.start()
+    try:
+        with sync_playwright() as playwright:
+            browser, page = open_page(playwright, server)
+            page.get_by_test_id("duplicate-morning-template").click()
+            page.get_by_test_id("flow-morning-template-copy").wait_for()
+            page.locator('.react-flow__node[data-id="n1"]').wait_for()
+            assert page.get_by_test_id("flow-id").input_value() == "morning-template-copy"
+            assert "local" in page.get_by_test_id("flow-morning-template-copy").inner_text()
+            assert page.get_by_test_id("duplicate-morning-template-copy").count() == 0  # a copy is not a template
+            browser.close()
+    finally:
+        server.stop()

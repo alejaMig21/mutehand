@@ -5,14 +5,13 @@ doubts. There is no force option and no screenshot tracing here, and secrets onl
 as references.
 """
 
-import re
 import sqlite3
 from collections import Counter
 from contextlib import closing
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from workflow_factory.consent import Consent, grant_consent, is_permitted, scope_of
+from workflow_factory.consent import Consent, effective_sensitivity, grant_consent, is_permitted, scope_of
 from workflow_factory.desktop import Desktop
 from workflow_factory.flow import effect_of
 from workflow_factory.lessons import (
@@ -28,9 +27,6 @@ from workflow_factory.queue import answer_doubt, list_doubts
 
 # Apps whose content is private by default; the user can mark more.
 DEFAULT_PRIVATE_APPS = frozenset({"telegram", "vivaldi", "chrome", "msedge", "firefox", "brave"})
-
-# Safety net: controls named like an outward action need consent even if the tutor forgot to say so.
-OUTWARD_WORDS = ("send", "publish", "buy", "purchase", "pay", "post", "submit")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS private_apps (app TEXT PRIMARY KEY);
@@ -63,10 +59,6 @@ def _connect(user_db: Path) -> sqlite3.Connection:
 def _app_name(app: str) -> str:
     """'Telegram', 'TELEGRAM.EXE' and 'telegram.exe' are one app."""
     return app.lower().removesuffix(".exe")
-
-
-def _looks_outward(control_name: str) -> bool:
-    return any(re.search(rf"\b{word}\b", control_name.lower()) for word in OUTWARD_WORDS)
 
 
 def mark_private(user_db: Path, app: str) -> None:
@@ -148,13 +140,10 @@ def teach_lesson(
 ) -> dict:
     """Perform the action once, measure its effect and save the lesson at once (autosave)."""
     key = desktop.app_key()
-    category = (
-        sensitive
-        or (Sensitivity.PASSWORD_FIELD if action == "type_secret" else None)
-        or (Sensitivity.OUTWARD_ACTION if _looks_outward(locator.name) else None)
-    )
     candidate = Lesson(app=key.process, version=key.version, name=name, locator=locator,
-                       action=action, sensitive=category, secret_ref=secret_ref)
+                       action=action, sensitive=sensitive, secret_ref=secret_ref)
+    category = effective_sensitivity(candidate)  # declared, or implied by the action or the control name
+    candidate = replace(candidate, sensitive=category)
     validate_lesson(candidate)  # refuse before touching the app: a lesson that cannot be saved never runs
     if category and not is_permitted(user_db, candidate):  # ask before touching anything
         return _consent_required(category, scope_of(candidate))

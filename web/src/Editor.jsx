@@ -60,6 +60,21 @@ export default function Editor() {
     }
   }
 
+  // A factory template is read-only: a copy in the user layer is what the person edits.
+  async function duplicate(id) {
+    setError('')
+    const taken = new Set(flows.map((flow) => flow.id))
+    let copyId = `${id}-copy`
+    for (let n = 2; taken.has(copyId); n++) copyId = `${id}-copy-${n}`
+    try {
+      await api(`/api/flows/${id}/duplicate`, { method: 'POST', body: { new_id: copyId } })
+      await refreshFlows()
+      await openFlow(copyId)
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
   async function save() {
     setError('')
     try {
@@ -122,9 +137,17 @@ export default function Editor() {
         ))}
         <h2>Flows</h2>
         {flows.map((flow) => (
-          <button key={flow.id} className="palette-item" data-testid={`flow-${flow.id}`} onClick={() => openFlow(flow.id)}>
-            {flow.id} <small>{flow.origin}</small>
-          </button>
+          <div key={flow.id}>
+            <button className="palette-item" data-testid={`flow-${flow.id}`} onClick={() => openFlow(flow.id)}>
+              {flow.id} <small>{flow.origin}</small>
+            </button>
+            {flow.origin === 'factory' && (
+              <button data-testid={`duplicate-${flow.id}`} aria-label={`Duplicate template ${flow.id}`}
+                onClick={() => duplicate(flow.id)}>
+                Duplicate to edit
+              </button>
+            )}
+          </div>
         ))}
       </div>
 

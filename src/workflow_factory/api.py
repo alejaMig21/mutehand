@@ -20,6 +20,7 @@ from pathlib import Path
 from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.flow import run_flow
 from workflow_factory.flows import flow_from_dict, flow_to_dict, list_flows, load_flow, save_flow
+from workflow_factory.knowledge import duplicate_flow
 from workflow_factory.consent import consents, revoke_consent
 from workflow_factory.lessons import (
     find_lesson,
@@ -186,6 +187,10 @@ class ApiServer:
                     flow = flow_from_dict(flow_match[1], self._body())
                     save_flow(api.user_db, flow)
                     return self._send(200, flow_to_dict(flow))
+                copy_match = re.fullmatch(r"/api/flows/([\w.-]+)/duplicate", path)
+                if copy_match and method == "POST":
+                    copy = duplicate_flow(api.user_db, api.factory_db, copy_match[1], self._body()["new_id"])
+                    return self._send(201, flow_to_dict(copy))
                 run_match = re.fullmatch(r"/api/flows/([\w.-]+)/run", path)
                 if run_match and method == "POST":
                     body = self._body()

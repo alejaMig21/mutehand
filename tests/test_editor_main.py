@@ -38,4 +38,5 @@ def test_the_editor_command_prints_a_tokened_loopback_url_and_serves_the_built_e
         assert json.loads(response.read()) == []  # an empty user database: nothing taught yet
     with pytest.raises(urllib.error.HTTPError) as refused:
         urllib.request.urlopen(url + "api/lessons", timeout=5)
+    refused.value.close()
     assert refused.value.code == 401
