@@ -1,6 +1,5 @@
 from workflow_factory.consent import Consent, consents, grant_consent, revoke_consent
 from workflow_factory.flow import (
-    ControlNotFound,
     Effect,
     Flow,
     LessonNotFound,
@@ -8,6 +7,7 @@ from workflow_factory.flow import (
     RunResult,
     run_flow,
 )
+from workflow_factory.queue import Doubt, Reason, answer_doubt, dismiss_doubt, list_doubts
 from workflow_factory.lessons import (
     Lesson,
     Locator,
@@ -21,6 +21,6 @@ from workflow_factory.lessons import (
 
 __all__ = [
     "Consent", "Sensitivity", "consents", "grant_consent", "revoke_consent",
-    "ControlNotFound", "Effect", "Flow", "Lesson", "LessonNotFound", "Locator", "Node",
+    "Doubt", "Reason", "answer_doubt", "dismiss_doubt", "list_doubts", "Effect", "Flow", "Lesson", "LessonNotFound", "Locator", "Node",
     "Origin", "RunResult", "Status", "find_lesson", "restore_lesson", "run_flow", "save_lesson",
 ]

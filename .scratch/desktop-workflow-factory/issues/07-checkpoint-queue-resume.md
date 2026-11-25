@@ -4,10 +4,10 @@
 
 **Blocked by:** 01, 03
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Each stop writes one doubt with node, lesson, reason, structural capture and status open
-- [ ] The structural capture contains no text content
-- [ ] An independent flow continues while another is stopped
-- [ ] Marking a doubt answered makes the stopped flow resumable from its last checkpoint
-- [ ] Doubt status moves only among open, answered and dismissed
+- [x] Each stop writes one doubt with node, lesson, reason, structural capture and status open
+- [x] The structural capture contains no text content
+- [x] An independent flow continues while another is stopped
+- [x] Marking a doubt answered makes the stopped flow resumable from its last checkpoint
+- [x] Doubt status moves only among open, answered and dismissed

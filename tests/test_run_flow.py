@@ -1,9 +1,8 @@
 import sqlite3
 from contextlib import closing
 
-import pytest
 from fake_desktop import FakeDesktop, button, lesson
-from workflow_factory import ControlNotFound, Flow, Node, run_flow, save_lesson
+from workflow_factory import Flow, Node, run_flow, save_lesson
 
 
 def one_node_flow():
@@ -50,10 +49,10 @@ def test_missing_control_stops_the_flow_without_clicking(tmp_path):
     desktop = FakeDesktop(controls=[button("Something else")])
     db_path = taught(tmp_path / "user.db")
 
-    with pytest.raises(ControlNotFound):
-        run_flow(one_node_flow(), desktop=desktop, user_db=db_path)
+    result = run_flow(one_node_flow(), desktop=desktop, user_db=db_path)
 
     assert desktop.clicks == []
+    assert result.stopped == "n1"
 
 
 def test_click_that_changes_nothing_is_stored_as_no_change(tmp_path):

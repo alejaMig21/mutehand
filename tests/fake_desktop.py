@@ -67,3 +67,7 @@ def lesson(name, control_name, version="1.0", origin="local", app="paint.exe", *
         app=app, version=version, name=name, origin=origin,
         locator=Locator(role="button", name=control_name), **kw,
     )
+
+
+def field(name):
+    return Control(role="textfield", name=name)

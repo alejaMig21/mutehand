@@ -5,6 +5,7 @@ from workflow_factory import (
     LessonNotFound,
     Node,
     Status,
+    answer_doubt,
     find_lesson,
     run_flow,
     save_lesson,
@@ -60,6 +61,7 @@ def test_lesson_replays_again_once_it_is_re_measured_on_the_new_version(tmp_path
     assert desktop.clicks == []
 
     save_lesson(user_db, lesson("open-menu", "Menu", version="2.0"))
+    answer_doubt(user_db, 1)
     result = run_flow(flow_for("open-menu"), desktop=desktop, user_db=user_db)
 
     assert [c.name for c in desktop.clicks] == ["Menu"]

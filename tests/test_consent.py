@@ -3,6 +3,7 @@ from fake_desktop import FakeDesktop, button, lesson
 from workflow_factory import (
     Consent,
     Flow,
+    answer_doubt,
     Node,
     Sensitivity,
     consents,
@@ -87,6 +88,7 @@ def test_factory_lesson_in_a_sensitive_category_ships_without_consent(tmp_path):
 
     _, blocked = run(user_db, factory_db=factory_db)
     grant_consent(user_db, app="paint.exe", control="Send", action="click")
+    answer_doubt(user_db, 1)
     desktop, allowed = run(user_db, factory_db=factory_db)
 
     assert blocked.blocked == {"n1": "no_consent"}

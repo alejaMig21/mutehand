@@ -1,5 +1,5 @@
 from fake_desktop import FakeDesktop, button, lesson
-from workflow_factory import Flow, Node, Status, restore_lesson, run_flow, save_lesson
+from workflow_factory import Flow, Node, Status, answer_doubt, restore_lesson, run_flow, save_lesson
 
 FLOW = Flow(nodes=[Node(id="n1", lesson="open-menu")])
 
@@ -55,6 +55,7 @@ def test_only_an_explicit_human_restore_lets_a_rejected_lesson_run_again(tmp_pat
     still_blocked = run_flow(FLOW, desktop=working_desktop(), user_db=user_db, factory_db=factory_db)
 
     restore_lesson(user_db, app="paint.exe", name="open-menu")
+    answer_doubt(user_db, 1)  # the stopped flow waits until its doubt is answered
     desktop = working_desktop()
     restored = run_flow(FLOW, desktop=desktop, user_db=user_db, factory_db=factory_db)
 
@@ -69,6 +70,7 @@ def test_a_factory_lesson_rejected_by_its_shipped_counters_can_be_restored_by_a_
     blocked = run_flow(FLOW, desktop=working_desktop(), user_db=user_db, factory_db=factory_db)
 
     restore_lesson(user_db, app="paint.exe", name="open-menu")
+    answer_doubt(user_db, 1)  # the stopped flow waits until its doubt is answered
     desktop = working_desktop()
     run_flow(FLOW, desktop=desktop, user_db=user_db, factory_db=factory_db)
 
