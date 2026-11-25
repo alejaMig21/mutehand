@@ -316,13 +316,19 @@ class AgentDesktop:
         return capture_region(round(box["x"]), round(box["y"]), round(box["width"]), round(box["height"]))
 
     def _enter(self, control: Control, text: str) -> None:
-        """Insert text; a field with no semantic insert (only SetValue) is refused without focus, so set its value."""
+        """Insert text. A field with no semantic insert (only SetValue) is refused without focus: set its value.
+
+        Typing inserts and set-value replaces, so a readable field keeps its content (the text is appended); a
+        secure field cannot be read, so it is replaced (a password field is normally empty).
+        """
         try:
             self._call(["type", control.ref, "--stdin"], stdin=text)
         except AgentDesktopError as error:
-            if error.code != "POLICY_DENIED":
+            if error.code != "POLICY_DENIED" or "supported_action" not in str(error):
                 raise
-            self._call(["set-value", control.ref, "--stdin"], stdin=text)  # replaces the content, takes no focus
+            if not control.secure:
+                text = (self._call(["get", control.ref, "--property", "value"]).get("value") or "") + text
+            self._call(["set-value", control.ref, "--stdin"], stdin=text)  # takes no focus
 
     def type_text(self, control: Control, text: str) -> None:
         self._enter(control, text)

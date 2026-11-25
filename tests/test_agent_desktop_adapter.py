@@ -455,11 +455,32 @@ DENIED = {"ok": False, "error": {"code": "POLICY_DENIED", "message": "Target is 
 
 
 def test_a_field_that_only_accepts_a_value_is_filled_with_set_value_through_stdin():
-    runner = FakeRunner(DENIED, ok({}))
+    runner = FakeRunner(DENIED, ok({"property": "value", "value": "abc "}), ok({}))
 
     AgentDesktop("notepad.exe", runner, settle_seconds=0).type_text(Control("edit", "Body", ref="@s1:e2"), "hello")
 
-    assert runner.calls == [(["type", "@s1:e2", "--stdin"], "hello"), (["set-value", "@s1:e2", "--stdin"], "hello")]
+    # typing inserts, set-value replaces: the readable content is kept and the text appended
+    assert runner.calls == [(["type", "@s1:e2", "--stdin"], "hello"), (["get", "@s1:e2", "--property", "value"], None),
+                            (["set-value", "@s1:e2", "--stdin"], "abc hello")]
+
+
+def test_an_empty_field_that_reports_no_value_is_just_set():
+    runner = FakeRunner(DENIED, ok({"property": "value", "value": None}), ok({}))
+
+    AgentDesktop("notepad.exe", runner, settle_seconds=0).type_text(Control("edit", "Body", ref="@s1:e2"), "hello")
+
+    assert runner.calls[-1] == (["set-value", "@s1:e2", "--stdin"], "hello")
+
+
+def test_a_policy_denial_for_another_reason_is_not_worked_around():
+    other = {"ok": False, "error": {"code": "POLICY_DENIED", "message": "application is protected"}}
+    runner = FakeRunner(other)
+
+    with pytest.raises(AgentDesktopError) as error:
+        AgentDesktop("notepad.exe", runner, settle_seconds=0).type_text(Control("edit", "Body", ref="@s1:e2"), "hello")
+
+    assert error.value.code == "POLICY_DENIED"
+    assert len(runner.calls) == 1
 
 
 def test_a_secret_falls_back_to_set_value_through_stdin_and_never_through_arguments():

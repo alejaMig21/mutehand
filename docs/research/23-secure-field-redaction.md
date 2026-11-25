@@ -28,11 +28,13 @@ used (`dummy-secret-23`). After each write, the real content of each box was rea
 2. **`snapshot()` never marked secure fields** (the adapter only read the flag in `find`). A lesson that
    found the field by role and position would not have been treated as secret. Fixed: `_walk` now sets
    `secure` from `states`.
-3. **`type` is refused without focus on a field that offers only `SetValue`** (this WinForms edit is one;
-   Paint-style canvases and many custom controls are others). The adapter's `type_text` / `type_secret`
-   would have failed there. Fixed: on `POLICY_DENIED` they fall back to `set-value --stdin`, which takes
-   no focus and replaces the field content. Other error codes are not retried. A failed secret write
-   still withholds the CLI message.
+3. **`type` is refused without focus on a field that offers only `SetValue`** (measured on this WinForms
+   edit only; other custom controls were not tried). The adapter's `type_text` / `type_secret` would have
+   failed there. Fixed: when the denial says `supported_action` they fall back to `set-value --stdin` (no
+   focus taken, verified live). Other denials (for example a protected app) and other error codes are not
+   worked around. Typing inserts but set-value replaces, so a readable field keeps its content (read it,
+   append, set); a secure field cannot be read and is replaced. A failed secret write withholds the CLI
+   message. The fallback is not reported to the caller.
 4. A secure control has no name, so a lesson cannot find it by name: it must use role, automation id or
    position from the anchor. (The consent scope for a secret is already the control, not its label.)
 
@@ -44,4 +46,4 @@ Other toolkits (browser password inputs, WPF `PasswordBox`, UWP) were not run; t
 ## Impact
 
 `src/workflow_factory/agent_desktop.py`: `_walk` marks secure controls; `_enter` implements the
-`set-value` fallback. Tests: `tests/test_agent_desktop_adapter.py` (five new tests).
+`set-value` fallback. Tests: `tests/test_agent_desktop_adapter.py` (seven new tests).
