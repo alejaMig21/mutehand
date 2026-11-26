@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ReactFlow, Background, Controls, addEdge, useEdgesState, useNodesState } from '@xyflow/react'
+import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, addEdge, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
 import { api } from './api.js'
 import { fromFlowJson, layout, nextNodeId, toFlowJson } from './flowjson.js'
+import { Icon } from './icons.jsx'
+import NodeCard from './NodeCard.jsx'
+import SearchPanel from './SearchPanel.jsx'
 
 const INPUT_TYPES = ['str', 'int', 'float', 'bool']
+const NODE_TYPES = { card: NodeCard }
+// the search panel floats over the right edge, so the nodes are fitted into what is left
+const FIT = { maxZoom: 1, padding: { top: '60px', left: '60px', bottom: '60px', right: '440px' } }
 
 export default function Editor() {
+  return <ReactFlowProvider><EditorScreen /></ReactFlowProvider>
+}
+
+function EditorScreen() {
+  const { fitView } = useReactFlow()
   const [steps, setSteps] = useState([])
   const [flows, setFlows] = useState([])
   const [flowId, setFlowId] = useState('my-flow')
@@ -18,6 +29,10 @@ export default function Editor() {
   const [error, setError] = useState('')
   const [statuses, setStatuses] = useState({})
   const [running, setRunning] = useState(false)
+  const [panelOpen, setPanelOpen] = useState(true)
+  const [flowsOpen, setFlowsOpen] = useState(false)
+  const [runDataOpen, setRunDataOpen] = useState(false)
+  const [view, setView] = useState(0) // bumped when another flow is shown, so the canvas fits it
 
   const refreshFlows = useCallback(() => api('/api/flows').then(setFlows).catch((e) => setError(e.message)), [])
 
@@ -28,36 +43,63 @@ export default function Editor() {
 
   const onConnect = useCallback((connection) => setEdges((current) => addEdge(connection, current)), [setEdges])
 
-  function addStep(step) {
-    setNodes((current) => [
-      ...current,
-      {
-        id: nextNodeId(current),
-        position: layout(current.length),
-        data: { label: step.name, step: step.name, inputs: [], exclusive_input: false },
-      },
-    ])
+  // Like n8n: a node added while another is selected goes to its right and is wired after it.
+  const addNode = (node, meta = {}) => {
+    const id = nextNodeId(nodes)
+    const after = nodes.find((n) => n.id === selectedId)
+    const position = after ? { x: after.position.x + 250, y: after.position.y } : layout(nodes.length)
+    setNodes((current) => [...current, {
+      id, type: 'card', position, data: { node: { ...node, id, inputs: [], exclusive_input: false }, meta },
+    }])
+    if (after) setEdges((current) => addEdge({ source: after.id, target: id }, current))
+    setSelectedId(null)
+    setTimeout(() => fitView({ ...FIT, duration: 200 }), 60) // once the new node is on the canvas
   }
 
+  const addStep = (step) => addNode({ step: step.name }, { app: step.app, sensitive: step.sensitive, origin: step.origin })
+  const addSystem = (entry) => addNode(structuredClone(entry.node))
+
   function updateSelected(patch) {
-    setNodes((current) =>
-      current.map((n) => (n.id === selectedId ? { ...n, data: { ...n.data, ...patch } } : n)),
-    )
+    setNodes((current) => current.map((n) => (n.id === selectedId
+      ? { ...n, data: { ...n.data, node: { ...n.data.node, ...patch } } } : n)))
+  }
+
+  function deleteSelected() {
+    setNodes((current) => current.filter((n) => n.id !== selectedId))
+    setEdges((current) => current.filter((e) => e.source !== selectedId && e.target !== selectedId))
+    setSelectedId(null)
+  }
+
+  const lookup = (name) => {
+    const step = steps.find((s) => s.name === name)
+    return step ? { app: step.app, sensitive: step.sensitive, origin: step.origin } : {}
   }
 
   async function openFlow(id) {
     setError('')
     try {
-      const loaded = fromFlowJson(await api(`/api/flows/${id}`))
+      const loaded = fromFlowJson(await api(`/api/flows/${id}`), lookup)
       setNodes(loaded.nodes)
       setEdges(loaded.edges)
       setFlowId(id)
       setSelectedId(null)
       setStatuses({})
-      setStatus('')
+      setStatus('saved') // what is stored is what is shown
+      setFlowsOpen(false)
+      setView((v) => v + 1)
     } catch (e) {
       setError(e.message)
     }
+  }
+
+  function newFlow() {
+    setNodes([])
+    setEdges([])
+    setSelectedId(null)
+    setStatuses({})
+    setStatus('')
+    setFlowsOpen(false)
+    setView((v) => v + 1)
   }
 
   // A factory template is read-only: a copy in the user layer is what the person edits.
@@ -112,98 +154,134 @@ export default function Editor() {
   }
 
   const selected = nodes.find((n) => n.id === selectedId)
+  const selectedNode = selected?.data.node
   const shownNodes = useMemo(
     () => nodes.map((n) => ({ ...n, className: `status-${statuses[n.id] ?? 'pending'}` })),
     [nodes, statuses],
   )
 
   return (
-    <div className="app">
-      <div className="panel">
-        <h2>Steps</h2>
-        {steps.map((step) => (
-          <button
-            key={`${step.app}/${step.name}`}
-            className={`palette-item${step.sensitive ? ' sensitive' : ''}`}
-            data-testid={`palette-${step.name}`}
-            onClick={() => addStep(step)}
-          >
-            {step.name}{' '}
-            <small>
-              {step.app} · {step.origin}
-              {step.sensitive ? ' · needs consent' : ''}
-            </small>
+    <div className="editor">
+      <header className="topbar">
+        <span className="logo" aria-hidden="true"><Icon name="layers" size={20} /></span>
+        <input className="flow-name" aria-label="Flow name" data-testid="flow-id" value={flowId}
+          onChange={(e) => setFlowId(e.target.value)} />
+        <span className={`pill pill-${status || 'none'}`} data-testid="run-status" role="status">{status || 'draft'}</span>
+
+        <div className="menu-anchor">
+          <button className="ghost" data-testid="open-flows" aria-expanded={flowsOpen} onClick={() => setFlowsOpen(!flowsOpen)}>
+            <Icon name="folder" /> Flows
           </button>
-        ))}
-        <h2>Flows</h2>
-        {flows.map((flow) => (
-          <div key={flow.id}>
-            <button className="palette-item" data-testid={`flow-${flow.id}`} onClick={() => openFlow(flow.id)}>
-              {flow.id} <small>{flow.origin}</small>
-            </button>
-            {flow.origin === 'factory' && (
-              <button data-testid={`duplicate-${flow.id}`} aria-label={`Duplicate template ${flow.id}`}
-                onClick={() => duplicate(flow.id)}>
-                Duplicate to edit
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
+          {flowsOpen && (
+            <div className="menu" role="menu">
+              <button className="menu-item" data-testid="new-flow" onClick={newFlow}><Icon name="plus" /> New flow</button>
+              {flows.map((flow) => (
+                <div className="menu-row" key={flow.id}>
+                  <button className="menu-item" data-testid={`flow-${flow.id}`} onClick={() => openFlow(flow.id)}>
+                    {flow.id} <small>{flow.origin}</small>
+                  </button>
+                  {flow.origin === 'factory' && (
+                    <button className="ghost small" data-testid={`duplicate-${flow.id}`}
+                      aria-label={`Duplicate template ${flow.id}`} onClick={() => duplicate(flow.id)}>
+                      Duplicate to edit
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="spacer" />
+
+        <label className="field-inline">App
+          <input aria-label="App to run on" data-testid="app-name" value={appName} onChange={(e) => setAppName(e.target.value)} />
+        </label>
+        <div className="menu-anchor">
+          <button className="ghost" data-testid="run-data" aria-expanded={runDataOpen} onClick={() => setRunDataOpen(!runDataOpen)}>
+            Run data
+          </button>
+          {runDataOpen && (
+            <div className="menu wide">
+              <label htmlFor="run-context">Values the run starts with (JSON)</label>
+              <textarea id="run-context" data-testid="context" value={context} rows={4} onChange={(e) => setContext(e.target.value)} />
+            </div>
+          )}
+        </div>
+        <button className="ghost" data-testid="save" onClick={save}>Save</button>
+        <button className="primary" data-testid="run" onClick={run} disabled={running}>
+          <Icon name="play" size={16} /> Run flow
+        </button>
+      </header>
+      {error && <div className="error" role="alert" data-testid="error">{error}</div>}
 
       <div className="canvas">
         <ReactFlow
+          key={view}
           nodes={shownNodes}
           edges={edges}
+          nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={(_, node) => setSelectedId(node.id)}
           onPaneClick={() => setSelectedId(null)}
+          deleteKeyCode={['Backspace', 'Delete']}
+          colorMode="dark"
           fitView
+          fitViewOptions={FIT}
+          minZoom={0.3}
         >
-          <Background />
-          <Controls />
+          <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#26384C" />
+          <Controls showInteractive={false} position="bottom-center" orientation="horizontal" />
         </ReactFlow>
-      </div>
 
-      <div className="panel right">
-        <h2>Flow</h2>
-        <div className="row"><input aria-label="flow id" data-testid="flow-id" value={flowId} onChange={(e) => setFlowId(e.target.value)} /></div>
-        <div className="row"><input aria-label="app" data-testid="app-name" value={appName} onChange={(e) => setAppName(e.target.value)} /></div>
-        <div className="row"><textarea aria-label="run context" data-testid="context" value={context} onChange={(e) => setContext(e.target.value)} rows={3} style={{ flex: 1 }} /></div>
-        <div className="row">
-          <button data-testid="save" onClick={save}>Save</button>
-          <button data-testid="run" onClick={run} disabled={running}>Run</button>
-        </div>
-        <div className="status-line" data-testid="run-status">{status}</div>
-        {error && <div className="error" role="alert" data-testid="error">{error}</div>}
+        {nodes.length === 0 && (
+          <div className="empty-canvas">
+            <p>Add your first node from the panel on the right.</p>
+          </div>
+        )}
 
         {selected && (
-          <>
-            <h2>Node {selected.id}</h2>
-            <div>Step: <b>{selected.data.step}</b></div>
-            <label>
-              <input type="checkbox" data-testid="exclusive" checked={selected.data.exclusive_input}
-                onChange={(e) => updateSelected({ exclusive_input: e.target.checked })} />
-              needs the mouse or keyboard
-            </label>
-            <h2>Typed inputs</h2>
-            {selected.data.inputs.map(([name, type], i) => (
-              <div className="row" key={i}>
-                <input aria-label="input name" value={name} onChange={(e) =>
-                  updateSelected({ inputs: selected.data.inputs.map((p, j) => (j === i ? [e.target.value, p[1]] : p)) })} />
-                <select aria-label="input type" value={type} onChange={(e) =>
-                  updateSelected({ inputs: selected.data.inputs.map((p, j) => (j === i ? [p[0], e.target.value] : p)) })}>
-                  {INPUT_TYPES.map((t) => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-            ))}
-            <button data-testid="add-input" onClick={() => updateSelected({ inputs: [...selected.data.inputs, ['value', 'str']] })}>
-              Add input
+          <section className="settings" aria-label="Selected node">
+            <h2>{selectedNode.step ?? selectedNode.kind}</h2>
+            {selectedNode.step && (
+              <>
+                <label className="check">
+                  <input type="checkbox" data-testid="exclusive" checked={selectedNode.exclusive_input}
+                    onChange={(e) => updateSelected({ exclusive_input: e.target.checked })} />
+                  needs the mouse or keyboard
+                </label>
+                <h3>Typed inputs</h3>
+                {selectedNode.inputs.map(([name, type], i) => (
+                  <div className="row" key={i}>
+                    <input aria-label="input name" value={name} onChange={(e) =>
+                      updateSelected({ inputs: selectedNode.inputs.map((p, j) => (j === i ? [e.target.value, p[1]] : p)) })} />
+                    <select aria-label="input type" value={type} onChange={(e) =>
+                      updateSelected({ inputs: selectedNode.inputs.map((p, j) => (j === i ? [p[0], e.target.value] : p)) })}>
+                      {INPUT_TYPES.map((t) => <option key={t}>{t}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <button className="ghost small" data-testid="add-input"
+                  onClick={() => updateSelected({ inputs: [...selectedNode.inputs, ['value', 'str']] })}>
+                  Add input
+                </button>
+              </>
+            )}
+            <button className="danger small" data-testid="delete-node" onClick={deleteSelected}>
+              <Icon name="trash" size={15} /> Delete node
             </button>
-          </>
+          </section>
         )}
+
+        {panelOpen
+          ? <SearchPanel steps={steps} onAddSystem={addSystem} onAddStep={addStep} onClose={() => setPanelOpen(false)} />
+          : (
+            <button className="open-panel" data-testid="open-panel" aria-label="Add a node" onClick={() => setPanelOpen(true)}>
+              <Icon name="plus" size={20} />
+            </button>
+          )}
       </div>
     </div>
   )

@@ -38,6 +38,7 @@ def editor(tmp_path):
 
 
 def drag_between(page, source, target):
+    page.wait_for_timeout(400)  # the canvas re-fits (animated) after a node is added
     a, b = source.bounding_box(), target.bounding_box()
     page.mouse.move(a["x"] + a["width"] / 2, a["y"] + a["height"] / 2)
     page.mouse.down()
@@ -79,6 +80,7 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
 
         # run it with the typed value and watch the per-node status
         page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("run-data").click()
         page.get_by_test_id("context").fill(json.dumps({"value": "hello"}))
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
@@ -122,6 +124,7 @@ def test_a_loaded_flow_keeps_unique_node_ids_and_drops_the_previous_run_colours(
         page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
         assert page.locator(".react-flow__node.status-done").count() == 1
 
+        page.get_by_test_id("open-flows").click()
         page.get_by_test_id("flow-gappy").click()  # a different flow whose node ids are n1 and n3
         page.locator('.react-flow__node[data-id="n3"]').wait_for()
         assert page.locator(".react-flow__node.status-done").count() == 0  # no colours from the old run
@@ -159,8 +162,8 @@ def test_a_sensitive_step_is_marked_in_words_in_the_palette_not_only_by_colour(e
         page.goto(f"{server.url}/#token=e2e-token")
         marked = page.get_by_test_id("palette-send-message")
         marked.wait_for()
-        assert "needs consent" in marked.inner_text()
-        assert "needs consent" not in page.get_by_test_id("palette-open-menu").inner_text()
+        assert "needs consent" in marked.inner_text().lower()
+        assert "needs consent" not in page.get_by_test_id("palette-open-menu").inner_text().lower()
         browser.close()
 
 
@@ -241,10 +244,11 @@ def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editab
     try:
         with sync_playwright() as playwright:
             browser, page = open_page(playwright, server)
+            page.get_by_test_id("open-flows").click()
             page.get_by_test_id("duplicate-morning-template").click()
-            page.get_by_test_id("flow-morning-template-copy").wait_for()
             page.locator('.react-flow__node[data-id="n1"]').wait_for()
             assert page.get_by_test_id("flow-id").input_value() == "morning-template-copy"
+            page.get_by_test_id("open-flows").click()
             assert "local" in page.get_by_test_id("flow-morning-template-copy").inner_text()
             assert page.get_by_test_id("duplicate-morning-template-copy").count() == 0  # a copy is not a template
             browser.close()
@@ -273,4 +277,104 @@ def test_the_quit_button_asks_first_then_ends_the_server_and_says_so_on_screen(e
         page.get_by_test_id("closed").wait_for()
         assert server.quit_requested.is_set()
         assert "closed" in page.get_by_test_id("closed").inner_text().lower()
+        browser.close()
+
+
+def test_system_nodes_and_steps_are_added_wired_deleted_saved_and_reopened(editor):
+    from playwright.sync_api import sync_playwright
+
+    server, tmp_path = editor
+    with sync_playwright() as playwright:
+        browser, page = open_page(playwright, server)
+        page.get_by_test_id("system-manual-trigger").click()  # n1
+        page.get_by_test_id("palette-open-menu").click()  # n2
+        page.get_by_test_id("system-daily-trigger").click()  # n3, deleted again below
+        page.get_by_test_id("palette-save-file").click()  # n4
+        page.locator('.react-flow__node[data-id="n4"]').wait_for()
+        drag_between(page, page.locator('.react-flow__node[data-id="n1"] .react-flow__handle.source'),
+                     page.locator('.react-flow__node[data-id="n2"] .react-flow__handle.target'))
+        drag_between(page, page.locator('.react-flow__node[data-id="n2"] .react-flow__handle.source'),
+                     page.locator('.react-flow__node[data-id="n4"] .react-flow__handle.target'))
+        page.locator('.react-flow__node[data-id="n3"]').click()
+        page.get_by_test_id("delete-node").click()
+        assert page.locator('.react-flow__node[data-id="n3"]').count() == 0
+        page.get_by_test_id("flow-id").fill("built")
+        page.get_by_test_id("save").click()
+        page.get_by_test_id("run-status").filter(has_text="saved").wait_for()
+
+        saved = load_flow(tmp_path / "user.db", None, "built")
+        assert [(n.id, n.kind, n.step) for n in saved.nodes] == [
+            ("n1", "trigger", ""), ("n2", "step", "open-menu"), ("n4", "step", "save-file")]
+        assert saved.edges == [("n1", "n2"), ("n2", "n4")]
+
+        # start from an empty canvas, then reopen the saved flow
+        page.get_by_test_id("open-flows").click()
+        page.get_by_test_id("new-flow").click()
+        assert page.locator(".react-flow__node").count() == 0
+        page.get_by_test_id("open-flows").click()
+        page.get_by_test_id("flow-built").click()
+        page.locator('.react-flow__node[data-id="n4"]').wait_for()
+        assert page.locator(".react-flow__node").count() == 3 and page.locator(".react-flow__edge").count() == 2
+        browser.close()
+
+
+def test_the_search_panel_finds_system_nodes_and_steps_by_name_and_by_app(editor):
+    from playwright.sync_api import sync_playwright
+
+    server, _ = editor
+    with sync_playwright() as playwright:
+        browser, page = open_page(playwright, server)
+        page.get_by_test_id("palette-open-menu").wait_for()
+        search = page.get_by_test_id("search")
+
+        search.fill("wait")
+        page.get_by_test_id("system-wait").wait_for()
+        assert page.get_by_test_id("palette-open-menu").count() == 0
+
+        search.fill("paint")  # by app: both steps of Paint, no system node
+        page.get_by_test_id("palette-open-menu").wait_for()
+        assert page.get_by_test_id("palette-save-file").count() == 1 and page.get_by_test_id("system-wait").count() == 0
+
+        search.fill("nothing like this")
+        page.get_by_text("Nothing matches").wait_for()
+        browser.close()
+
+
+def test_a_flow_with_an_if_and_a_for_each_keeps_what_the_wires_mean_after_saving(editor):
+    from playwright.sync_api import sync_playwright
+
+    server, tmp_path = editor
+    with sync_playwright() as playwright:
+        browser, page = open_page(playwright, server)
+        page.get_by_test_id("system-foreach").click()  # n1
+        page.get_by_test_id("palette-open-menu").click()  # n2: the body
+        page.get_by_test_id("palette-save-file").click()  # n3: after the loop
+        page.locator('.react-flow__node[data-id="n3"]').wait_for()
+        for a, b in (("n1", "n2"), ("n1", "n3")):
+            drag_between(page, page.locator(f'.react-flow__node[data-id="{a}"] .react-flow__handle.source'),
+                         page.locator(f'.react-flow__node[data-id="{b}"] .react-flow__handle.target'))
+        page.get_by_test_id("flow-id").fill("looped")
+        page.get_by_test_id("save").click()
+        page.get_by_test_id("run-status").filter(has_text="saved").wait_for()
+
+        saved = load_flow(tmp_path / "user.db", None, "looped")
+        assert saved.nodes[0].body == "n2" and saved.edges == [("n1", "n3")]
+        browser.close()
+
+
+def test_nothing_in_the_editor_starts_a_lesson(editor):
+    import re
+
+    from playwright.sync_api import sync_playwright
+
+    server, _ = editor
+    with sync_playwright() as playwright:
+        browser, page = open_page(playwright, server)
+        page.get_by_test_id("palette-open-menu").wait_for()
+        page.get_by_test_id("palette-open-menu").click()
+        page.get_by_test_id("open-flows").click()
+        page.locator(".react-flow__node").first.click()
+        words = page.locator("body").inner_text() + " ".join(
+            b.get_attribute("aria-label") or "" for b in page.get_by_role("button").all())
+        assert not re.search(r"lesson|teach|learn|study", words, re.IGNORECASE)
         browser.close()
