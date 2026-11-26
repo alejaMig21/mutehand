@@ -7,9 +7,13 @@ import { refOptions } from './bindings.js'
 import { titleOf } from './catalog.js'
 import NodeCard from './NodeCard.jsx'
 import NodeDetail from './NodeDetail.jsx'
+import RunLog from './RunLog.jsx'
 import SearchPanel from './SearchPanel.jsx'
+import { safetySummary, summaryMarks, whyNotRunnable } from './safety.js'
 
 const NODE_TYPES = { card: NodeCard }
+const metaOf = (step) => ({ app: step.app, sensitive: step.sensitive, origin: step.origin, action: step.action,
+  state: step.state, private: step.private, consent: step.consent })
 // the search panel floats over the right edge, so the nodes are fitted into what is left
 const FIT = { maxZoom: 1, padding: { top: '60px', left: '60px', bottom: '60px', right: '440px' } }
 
@@ -37,6 +41,10 @@ function EditorScreen() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [nodeData, setNodeData] = useState({})
   const [showValues, setShowValues] = useState(false)
+  const [runId, setRunId] = useState(null)
+  const [runLog, setRunLog] = useState([])
+  const [logOpen, setLogOpen] = useState(false)
+  const [doubts, setDoubts] = useState({}) // node id -> how many open doubts it has (the tutor answers them, not the editor)
   const [view, setView] = useState(0) // bumped when another flow is shown, so the canvas fits it
 
   const refreshFlows = useCallback(() => api('/api/flows').then(setFlows).catch((e) => setError(e.message)), [])
@@ -55,6 +63,19 @@ function EditorScreen() {
     }
   }, [flowId])
 
+  const loadDoubts = useCallback(async () => {
+    try {
+      const open = await api('/api/doubts?status=open')
+      const counts = {}
+      for (const d of open) if (d.flow_id === flowId) counts[d.node_id] = (counts[d.node_id] ?? 0) + 1
+      setDoubts(counts)
+    } catch {
+      setDoubts({})
+    }
+  }, [flowId])
+
+  useEffect(() => { loadDoubts() }, [loadDoubts])
+
   const onConnect = useCallback((connection) => setEdges((current) => addEdge(connection, current)), [setEdges])
 
   // Like n8n: a node added while another is selected goes to its right and is wired after it.
@@ -70,7 +91,7 @@ function EditorScreen() {
     setTimeout(() => fitView({ ...FIT, duration: 200 }), 60) // once the new node is on the canvas
   }
 
-  const addStep = (step) => addNode({ step: step.name }, { app: step.app, sensitive: step.sensitive, origin: step.origin, action: step.action })
+  const addStep = (step) => addNode({ step: step.name }, metaOf(step))
   const addSystem = (entry) => addNode(structuredClone(entry.node))
 
   function updateSelected(patch) {
@@ -86,7 +107,7 @@ function EditorScreen() {
 
   const lookup = (name) => {
     const step = steps.find((s) => s.name === name)
-    return step ? { app: step.app, sensitive: step.sensitive, origin: step.origin, action: step.action } : {}
+    return step ? metaOf(step) : {}
   }
 
   async function openFlow(id) {
@@ -146,17 +167,22 @@ function EditorScreen() {
     if (running) return
     setError('')
     setStatuses({})
+    setRunLog([])
+    setLogOpen(true)
     setRunning(true)
     try {
       const values = JSON.parse(context || '{}')
       const { run_id } = await api(`/api/flows/${flowId}/run`, { method: 'POST', body: { app: appName, context: values } })
       setStatus('running')
+      setRunId(run_id)
       for (;;) {
         const view = await api(`/api/runs/${run_id}`)
         setStatuses(view.nodes)
+        setRunLog(view.log)
         if (view.status !== 'running') {
           setStatus(view.status)
           loadData(showValues)
+          loadDoubts()
           break
         }
         await new Promise((resolve) => setTimeout(resolve, 250))
@@ -165,6 +191,14 @@ function EditorScreen() {
       setError(e.message)
     } finally {
       setRunning(false)
+    }
+  }
+
+  async function stop() { // one mouse and keyboard: this ends the run at once
+    try {
+      await api(`/api/runs/${runId}/stop`, { method: 'POST' })
+    } catch (e) {
+      setError(e.message)
     }
   }
 
@@ -180,9 +214,14 @@ function EditorScreen() {
     refreshFlows()
   }
   const shownNodes = useMemo(
-    () => nodes.map((n) => ({ ...n, className: `status-${statuses[n.id] ?? 'pending'}` })),
-    [nodes, statuses],
+    () => nodes.map((n) => ({
+      ...n, className: `status-${statuses[n.id] ?? 'pending'}`,
+      data: { ...n.data, runStatus: statuses[n.id], doubts: doubts[n.id] ?? 0 },
+    })),
+    [nodes, statuses, doubts],
   )
+  const safety = useMemo(() => safetySummary(nodes, doubts), [nodes, doubts])
+  const paused = Object.values(statuses).includes('paused')
 
   return (
     <div className="editor">
@@ -191,6 +230,11 @@ function EditorScreen() {
         <input className="flow-name" aria-label="Flow name" data-testid="flow-id" value={flowId}
           onChange={(e) => setFlowId(e.target.value)} />
         <span className={`pill pill-${status || 'none'}`} data-testid="run-status" role="status">{status || 'draft'}</span>
+        <ul className="summary" aria-label="Safety of this flow" data-testid="safety-summary">
+          {summaryMarks(safety).map(([glyph, words, tone]) => (
+            <li key={words} className={`tone-${tone}`}><Icon name={glyph} size={15} /> {words}</li>
+          ))}
+        </ul>
 
         <div className="menu-anchor">
           <button className="ghost" data-testid="open-flows" aria-expanded={flowsOpen} onClick={() => setFlowsOpen(!flowsOpen)}>
@@ -233,10 +277,21 @@ function EditorScreen() {
           )}
         </div>
         <button className="ghost" data-testid="save" onClick={save}>Save</button>
-        <button className="primary" data-testid="run" onClick={run} disabled={running}>
-          <Icon name="play" size={16} /> Run flow
-        </button>
+        {running ? (
+          <button className="danger" data-testid="stop" onClick={stop}><Icon name="stop" size={16} /> Stop</button>
+        ) : (
+          <button className="primary" data-testid="run" onClick={run} disabled={Boolean(whyNotRunnable(safety))}
+            title={whyNotRunnable(safety)}>
+            <Icon name="play" size={16} /> Run flow
+          </button>
+        )}
       </header>
+      {whyNotRunnable(safety) && <div className="notice" data-testid="cannot-start" role="status">{whyNotRunnable(safety)}</div>}
+      {paused && (
+        <div className="notice" data-testid="paused" role="status">
+          <Icon name="pause" size={15} /> Paused: you moved the mouse. It resumes when you stop using the PC.
+        </div>
+      )}
       {error && <div className="error" role="alert" data-testid="error">{error}</div>}
 
       <div className="canvas">
@@ -293,7 +348,7 @@ function EditorScreen() {
             appName={appName}
             context={context}
             ensureSaved={ensureSaved}
-            onTested={() => loadData(showValues)}
+            onTested={() => { loadData(showValues); loadDoubts() }}
           />
         )}
 
@@ -305,6 +360,7 @@ function EditorScreen() {
             </button>
           )}
       </div>
+      {logOpen && <RunLog log={runLog} nodes={nodes} running={running} onClose={() => setLogOpen(false)} />}
     </div>
   )
 }

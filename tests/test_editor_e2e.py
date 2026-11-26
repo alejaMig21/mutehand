@@ -505,3 +505,100 @@ def test_a_node_takes_a_failure_policy_in_its_settings(editor):
         node = next(n for n in load_flow(tmp_path / "user.db", None, "datas").nodes if n.id == "p")
         assert (node.on_failure, node.retries) == ("retry", 4)
         browser.close()
+
+
+def serve(tmp_path, desktop):
+    server = ApiServer(tmp_path / "user.db", tmp_path / "factory.db", lambda app: desktop, token="e2e-token", web_dir=DIST)
+    server.start()
+    return server
+
+
+def test_stop_ends_a_run_at_once_and_the_run_button_comes_back(tmp_path):
+    from playwright.sync_api import sync_playwright
+
+    from workflow_factory import save_flow
+
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
+    save_step(tmp_path / "user.db", step("save-file", "Beta"))
+    save_flow(tmp_path / "user.db", Flow(id="slow", nodes=[Node("a", "open-menu"), Node("b", "save-file")]))
+    desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
+    desktop.click_seconds = 0.8
+    server = serve(tmp_path, desktop)
+    try:
+        with sync_playwright() as playwright:
+            browser, page = open_page(playwright, server)
+            page.get_by_test_id("open-flows").click()
+            page.get_by_test_id("flow-slow").click()
+            page.locator('.react-flow__node[data-id="b"]').wait_for()
+            page.get_by_test_id("app-name").fill("paint.exe")
+            page.get_by_test_id("run").click()
+            page.get_by_test_id("run-log").wait_for()
+            page.get_by_test_id("stop").click()
+            page.get_by_test_id("run-status").filter(has_text="emergency").wait_for(timeout=10_000)
+            page.get_by_test_id("run").wait_for()
+            assert [c.name for c in desktop.clicks] == ["Alpha"]
+            assert "open-menu started" in page.get_by_test_id("run-log").inner_text()
+            browser.close()
+    finally:
+        server.stop()
+
+
+def test_a_flow_with_a_rejected_step_says_which_one_and_cannot_be_started(tmp_path):
+    from playwright.sync_api import sync_playwright
+
+    from workflow_factory import reject_step, save_flow
+
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
+    save_step(tmp_path / "user.db", step("save-file", "Beta"))
+    reject_step(tmp_path / "user.db", "paint.exe", "save-file")
+    save_flow(tmp_path / "user.db", Flow(id="blocked", nodes=[Node("a", "open-menu"), Node("b", "save-file")]))
+    server = serve(tmp_path, FakeDesktop(controls=[button("Alpha"), button("Beta")]))
+    try:
+        with sync_playwright() as playwright:
+            browser, page = open_page(playwright, server)
+            page.get_by_test_id("palette-open-menu").wait_for()
+            page.get_by_test_id("open-flows").click()
+            page.get_by_test_id("flow-blocked").click()
+            note = page.get_by_test_id("cannot-start")
+            note.wait_for()
+            assert "'save-file' is rejected" in note.inner_text()
+            assert page.get_by_test_id("run").is_disabled()
+            assert "1 rejected step" in page.get_by_test_id("safety-summary").inner_text()
+            assert "Rejected" in page.get_by_test_id("node-b").inner_text()
+            browser.close()
+    finally:
+        server.stop()
+
+
+def test_cards_say_how_far_a_step_is_trusted_and_doubts_are_counted_but_cannot_be_answered_here(tmp_path):
+    from playwright.sync_api import sync_playwright
+
+    from workflow_factory import Sensitivity, grant_consent, save_flow
+
+    save_step(tmp_path / "user.db", step("send", "Send", app="telegram.exe", sensitive=Sensitivity.OUTWARD_ACTION))
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha", app="telegram.exe"))
+    grant_consent(tmp_path / "user.db", "telegram.exe", "Send", "click")
+    save_flow(tmp_path / "user.db", Flow(id="chat", nodes=[Node("a", "open-menu"), Node("b", "send")]))
+    desktop = FakeDesktop(controls=[button("Alpha")], app="telegram.exe")  # Send is not on screen: b will stop
+    server = serve(tmp_path, desktop)
+    try:
+        with sync_playwright() as playwright:
+            browser, page = open_page(playwright, server)
+            page.get_by_test_id("palette-send").wait_for()
+            page.get_by_test_id("open-flows").click()
+            page.get_by_test_id("flow-chat").click()
+            page.locator('.react-flow__node[data-id="b"]').wait_for()
+            b = page.get_by_test_id("node-b").inner_text()
+            assert "On trial" in b and "Consent given" in b and "Private app" in b
+
+            page.get_by_test_id("app-name").fill("telegram.exe")
+            page.get_by_test_id("run").click()
+            page.get_by_test_id("run-status").filter(has_text="stopped").wait_for(timeout=10_000)
+            page.get_by_text("1 doubt").first.wait_for()
+            assert "1 doubt" in page.get_by_test_id("node-b").inner_text()
+            assert "1 doubt" in page.get_by_test_id("safety-summary").inner_text()
+            words = " ".join(button_.inner_text() for button_ in page.get_by_role("button").all())
+            assert not any(word in words.lower() for word in ("answer", "dismiss", "resolve"))
+            browser.close()
+    finally:
+        server.stop()

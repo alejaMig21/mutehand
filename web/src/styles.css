@@ -140,3 +140,21 @@ input, select, textarea { background: var(--sunk); border: 1px solid var(--line)
 .warning p { margin: 0 0 8px; }
 .warning .row { justify-content: flex-end; }
 input[type="number"] { width: 70px; }
+
+/* marks, summary, notices and the run log */
+.tone-ok { color: var(--ok); } .tone-warn { color: var(--warn); } .tone-bad { color: var(--bad); }
+.tone-info { color: var(--info); } .tone-muted { color: var(--muted); }
+.card-mark { margin-top: 6px; }
+.summary { display: flex; gap: 14px; margin: 0; padding: 0; list-style: none; font-size: 13px; font-weight: 600; }
+.summary li { display: flex; align-items: center; gap: 5px; }
+.notice { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--sunk); border-bottom: 1px solid var(--line); }
+.run-log { flex: none; max-height: 30%; overflow: auto; padding: 8px 20px 12px; background: var(--surface); border-top: 1px solid var(--line); }
+.run-log header { display: flex; align-items: center; }
+.run-log h2 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); flex: 1; }
+.run-log ol { margin: 6px 0 0; padding: 0; list-style: none; font-family: var(--mono); font-size: 13px; }
+.run-log li { padding: 5px 0; border-bottom: 1px solid var(--line); }
+.run-log time { color: var(--muted); margin-right: 6px; }
+.muted { color: var(--muted); }
+.status-running .card-mark.tone-info svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .status-running .card-mark.tone-info svg { animation: none; } }

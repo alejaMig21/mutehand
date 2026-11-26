@@ -10,6 +10,7 @@ import json
 import re
 import secrets
 import threading
+import time
 import urllib.parse
 import uuid
 from collections.abc import Callable
@@ -17,9 +18,9 @@ from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from workflow_factory.consent import consents, revoke_consent
+from workflow_factory.consent import consents, effective_sensitivity, is_permitted, revoke_consent
 from workflow_factory.desktop import Desktop, DesktopError
-from workflow_factory.flow import run_flow
+from workflow_factory.flow import clear_emergency_stop, emergency_stop, rejected_steps, run_flow
 from workflow_factory.flows import flow_from_dict, flow_to_dict, list_flows, load_flow, save_flow
 from workflow_factory.knowledge import duplicate_flow
 from workflow_factory.nodedata import present, single_node_flow, snapshot
@@ -31,11 +32,13 @@ from workflow_factory.steps import (
     restore_step,
     step_report,
 )
+from workflow_factory.tutor import _is_private
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")  # the only names this server can be bound to
 MAX_BODY_BYTES = 1_000_000
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_NOTE_CHARS = 500
+MAX_LOG_EVENTS = 200
 CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css",
                  ".svg": "image/svg+xml", ".json": "application/json", ".map": "application/json"}
 
@@ -87,6 +90,14 @@ class ApiServer:
         flow = load_flow(self.user_db, self.factory_db, flow_id)
         if flow is None:
             return 404, None
+        try:
+            refused = rejected_steps(flow, self.desktop_for(app), self.user_db, self.factory_db)
+        except DesktopError:
+            refused = ()  # the app is not there: the run itself will say so
+        if refused:  # a rejected step is never run: name them all before anything starts
+            names = ", ".join(f"'{step}'" for _, step in refused)
+            raise ValueError(f"This flow will not start: {names} {'is' if len(refused) == 1 else 'are'} rejected. "
+                             "Restore the step in the Steps screen first.")
         return self._launch(flow, flow_id, flow_id, app, context)
 
     def _launch(self, flow, run_key: str, data_key: str, app: str, context: dict) -> tuple[int, str | None]:
@@ -94,7 +105,7 @@ class ApiServer:
         node data this run updates (a test of one node updates the data of the flow it belongs to)."""
         run_id = uuid.uuid4().hex
         record = {"flow_id": run_key, "status": "running", "stopped": None,
-                  "nodes": {n.id: "pending" for n in flow.nodes}}
+                  "nodes": {n.id: "pending" for n in flow.nodes}, "log": []}
         with self._runs_lock:
             active = [run for run in self._runs.values() if run["status"] == "running"]
             if any(run["flow_id"] == run_key for run in active):
@@ -107,6 +118,8 @@ class ApiServer:
         def progress(node_id: str, status: str) -> None:
             with self._runs_lock:
                 record["nodes"][node_id] = status
+                event = {"at": time.strftime("%H:%M:%S"), "node": node_id, "status": status}
+                record["log"] = [*record["log"][-(MAX_LOG_EVENTS - 1):], event]
 
         def work() -> None:
             try:
@@ -122,6 +135,8 @@ class ApiServer:
             with self._runs_lock:
                 record.update(final)  # status last of all fields a poller might read
                 self._trim_runs()
+                if not any(run["status"] == "running" for run in self._runs.values()):
+                    clear_emergency_stop()  # a stop pressed here must not refuse the next run
 
         threading.Thread(target=work, name=f"run-{run_id[:8]}", daemon=True).start()
         return 202, run_id
@@ -139,7 +154,7 @@ class ApiServer:
     def _run_view(self, run_id: str) -> dict | None:
         with self._runs_lock:
             record = self._runs.get(run_id)
-            return None if record is None else {**record, "nodes": dict(record["nodes"])}
+            return None if record is None else {**record, "nodes": dict(record["nodes"]), "log": list(record["log"])}
 
     # --- http ----------------------------------------------------------------------------------
 
@@ -200,7 +215,7 @@ class ApiServer:
                     api.quit_requested.set()
                     return self._send(202, {"ok": True})
                 if method == "GET" and path == "/api/steps":
-                    return self._send(200, [_step_view(step) for step in
+                    return self._send(200, [{**_step_view(step), **_safety(api.user_db, step)} for step in
                                             list_steps(api.user_db, api.factory_db)])
                 if method == "GET" and path == "/api/flows":
                     return self._send(200, list_flows(api.user_db, api.factory_db))
@@ -270,6 +285,15 @@ class ApiServer:
                     return self._send(200, {"doubt": int(doubt[1]), "action": doubt[2]})
                 if path == "/api/history" and method == "GET":
                     return self._send(200, list_runs(api.user_db, (self.query.get("flow") or [None])[0]))
+                stop_match = re.fullmatch(r"/api/runs/(\w+)/stop", path)
+                if stop_match and method == "POST":
+                    view = api._run_view(stop_match[1])
+                    if view is None:
+                        return self._send(404, {"error": "no such run"})
+                    if view["status"] != "running":
+                        return self._send(409, {"error": "this run is not running"})
+                    emergency_stop()  # one mouse and keyboard: every run stops at once
+                    return self._send(202, {"stopping": True})
                 status_match = re.fullmatch(r"/api/runs/(\w+)", path)
                 if status_match and method == "GET":
                     view = api._run_view(status_match[1])
@@ -299,6 +323,13 @@ class ApiServer:
                 self._dispatch("DELETE")
 
         return Handler
+
+
+def _safety(user_db: Path, step) -> dict:
+    """What the editor marks on a step: how far it is trusted, whether its app is private, whether consent is given."""
+    sensitive = effective_sensitivity(step) is not None
+    return {"state": step_report(user_db, step)["state"], "private": _is_private(user_db, step.app),
+            "consent": ("given" if is_permitted(user_db, step) else "missing") if sensitive else "none"}
 
 
 def _step_view(step) -> dict:

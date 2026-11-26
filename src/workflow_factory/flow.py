@@ -418,8 +418,10 @@ class _Run:
             if outcome is not _USER_ACTIVE:
                 return outcome
             # the person is using the PC: wait for idle with the lock free, then verify again
+            self.progress(node.id, "paused")
             if not self._wait_for_idle():
                 return "user_active", None, step
+            self.progress(node.id, "running")
 
     def _user_active(self) -> bool:
         """Did the person touch mouse or keyboard since our last physical action?"""
@@ -719,6 +721,22 @@ def _guarded(run: _Run, node: Node, runner) -> None:
         if EMERGENCY_STOP.is_set():
             run.emergency = True
             return
+
+
+def rejected_steps(flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path | None) -> tuple:
+    """((node id, step name), ...) of every step node whose step is rejected right now.
+
+    The editor refuses to start such a flow. A scheduled run still starts and stops at that node with a doubt, so the
+    tutor hears about it."""
+    key = desktop.app_key()
+    found = []
+    for node in flow.nodes:
+        if node.kind not in ("step", "loop"):
+            continue
+        step = find_step(user_db, factory_db, key.process, node.step)
+        if step is not None and current_status(user_db, step, key.version) == Status.REJECTED:
+            found.append((node.id, node.step))
+    return tuple(found)
 
 
 def run_flow(
