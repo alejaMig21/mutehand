@@ -3,6 +3,7 @@ import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
 import { appLabel, chipFor } from './catalog.js'
 import { changeDaily, DailyForm } from './Daily.jsx'
 import { Icon } from './icons.jsx'
+import More, { useDeleted } from './More.jsx'
 import Screen from './Screen.jsx'
 import { useLoad } from './useLoad.js'
 import { blockedWords, flowTitle, lastRunWords, runNoteWords } from './words.js'
@@ -14,6 +15,7 @@ export default function Home({ following, left, onOpen, onNew }) {
   const load = useLoad('/api/flow-overview', { keep: true })
   const { reload } = load
   const flows = load.data
+  const undo = useDeleted(reload, flows)
 
   // the button that led back is gone with the flow screen: the focus goes to the flow's row
   useEffect(() => {
@@ -40,15 +42,16 @@ export default function Home({ following, left, onOpen, onNew }) {
         <ul className="chores">
           {flows.map((flow) => (
             <Chore key={flow.id} flow={flow} title={flowTitle(flow.id, flows)} following={following} reload={reload}
-              onOpen={() => onOpen(flow.id)} />
+              onDeleted={undo.onDeleted} onOpen={() => onOpen(flow.id)} />
           ))}
         </ul>
       </Screen>
+      {undo.notice}
     </div>
   )
 }
 
-function Chore({ flow, title, following: { runs, follow, attach, forget }, reload, onOpen }) {
+function Chore({ flow, title, following: { runs, follow, attach, forget }, reload, onOpen, onDeleted }) {
   const { id, app } = flow
   const run = runs[id]
   const running = run?.status === 'running'
@@ -120,6 +123,7 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
         <Icon name="clock" size={20} />
         {daily ? <span>Every day at <b>{daily}</b><small>Change or stop</small></span> : 'Run every day'}
       </button>
+      <More flow={flow} title={title} reload={reload} onDeleted={onDeleted} />
       {setting && <DailyForm at={daily} suffix={`-${id}`} submit={(at) => changeDaily(id, at)} onDone={closeDaily} />}
     </li>
   )

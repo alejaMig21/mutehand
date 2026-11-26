@@ -49,7 +49,9 @@ CREATE TABLE IF NOT EXISTS run_nodes (  -- what each node did: never any data va
     status TEXT NOT NULL,  -- done | blocked | skipped
     reason TEXT,
     effect TEXT,
-    step TEXT  -- the step it ran, so the history still reads after the flow changes
+    step TEXT,  -- the step it ran, so the history still reads after the flow changes
+    kind TEXT,  -- what kind of box it was (and, for a data box, its op): node ids are reused when a flow is rebuilt
+    op TEXT
 );
 CREATE INDEX IF NOT EXISTS run_nodes_by_run ON run_nodes (run_id);
 CREATE TABLE IF NOT EXISTS run_locks (  -- which process is running a flow right now
@@ -81,7 +83,8 @@ def _connect(user_db: Path) -> sqlite3.Connection:
     db = sqlite3.connect(user_db)
     migrate_names(db)
     db.executescript(SCHEMA)
-    add_text_column(db, "run_nodes", "step")
+    for column in ("step", "kind", "op"):
+        add_text_column(db, "run_nodes", column)
     add_text_column(db, "doubts", "detail")
     return db
 
@@ -158,8 +161,9 @@ def record_run(user_db: Path, flow_id: str, started_at: str, finished_at: str, s
             "INSERT INTO run_history (flow_id, started_at, finished_at, status, stopped_node)"
             " VALUES (?, ?, ?, ?, ?)", (flow_id, started_at, finished_at, status, stopped_node)).lastrowid
         db.executemany(
-            "INSERT INTO run_nodes (run_id, node_id, status, reason, effect, step) VALUES (?, ?, ?, ?, ?, ?)",
-            [(run_id, n["node_id"], n["status"], n.get("reason"), n.get("effect"), n.get("step")) for n in nodes])
+            "INSERT INTO run_nodes (run_id, node_id, status, reason, effect, step, kind, op) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [(run_id, n["node_id"], n["status"], n.get("reason"), n.get("effect"), n.get("step"), n.get("kind"), n.get("op"))
+             for n in nodes])
         old = "SELECT id FROM run_history ORDER BY id DESC LIMIT -1 OFFSET ?"  # everything after the newest `keep`
         db.execute(f"DELETE FROM run_nodes WHERE run_id IN ({old})", (keep,))
         db.execute(f"DELETE FROM run_history WHERE id IN ({old})", (keep,))
@@ -177,9 +181,9 @@ def list_runs(user_db: Path, flow_id: str | None = None, limit: int = 50) -> lis
                 for row in db.execute(query + " ORDER BY id DESC LIMIT ?", (*args, limit))]
         for run in runs:
             run["nodes"] = [
-                {"node_id": n, "status": o, "reason": r, "effect": e, "step": s}
-                for n, o, r, e, s in db.execute(
-                    "SELECT node_id, status, reason, effect, step FROM run_nodes WHERE run_id = ? ORDER BY rowid",
+                {"node_id": n, "status": o, "reason": r, "effect": e, "step": s, "kind": k, "op": p}
+                for n, o, r, e, s, k, p in db.execute(
+                    "SELECT node_id, status, reason, effect, step, kind, op FROM run_nodes WHERE run_id = ? ORDER BY rowid",
                     (run["id"],))]
     return runs
 
@@ -222,6 +226,12 @@ def acquire_run_lock(user_db: Path, flow_id: str, pid: int | None = None) -> boo
         except Exception:
             db.execute("ROLLBACK")
             raise
+
+
+def locked_flows(user_db: Path) -> list[str]:
+    """The flows a live process is running right now: this editor's runs and a scheduled one's alike."""
+    with closing(_connect(user_db)) as db:
+        return [flow_id for flow_id, pid in db.execute("SELECT flow_id, pid FROM run_locks") if _pid_alive(pid)]
 
 
 def release_run_lock(user_db: Path, flow_id: str, pid: int | None = None) -> None:

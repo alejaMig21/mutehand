@@ -38,15 +38,19 @@ from workflow_factory.flows import (
     load_flow,
     load_layout,
     new_flow_id,
+    restore_flow,
     save_flow,
     save_layout,
+    set_title,
     stored_info,
     taught_app,
+    trash_flow,
+    trashed_ids,
 )
 from workflow_factory.knowledge import duplicate_flow
 from workflow_factory.nodedata import present, single_node_flow, snapshot
 from workflow_factory.paths import default_user_db
-from workflow_factory.queue import answer_doubt, dismiss_doubt, list_doubts, list_runs
+from workflow_factory.queue import answer_doubt, dismiss_doubt, list_doubts, list_runs, locked_flows
 from workflow_factory.recipes import adaptations, recipes_overview
 from workflow_factory.steps import (
     app_names,
@@ -232,6 +236,8 @@ class ApiServer:
         parsed = _parse_flow(flow_id, body)
         with self._save_lock:
             stored = load_flow(self.user_db, self.factory_db, flow_id)
+            if stored is None and flow_id in trashed_ids(self.user_db):
+                return 409, {"error": f"The identifier '{flow_id}' belongs to a flow that was deleted. Undo that, or use another."}
             if stored is None and flow_id.casefold() in (known.casefold() for known in self._flow_ids()):
                 return 409, {"error": f"A flow identified as '{flow_id}' already exists, with other capital letters"}
             if "base" in body and stored is not None and body["base"] != (seen := self._flow_view(stored))["revision"]:
@@ -247,7 +253,73 @@ class ApiServer:
             return 201, self._write(*parsed, body)
 
     def _flow_ids(self) -> list[str]:
-        return [entry["id"] for entry in list_flows(self.user_db, self.factory_db)]
+        """Every identifier in use or held for an undo."""
+        return [*(entry["id"] for entry in list_flows(self.user_db, self.factory_db)), *trashed_ids(self.user_db)]
+
+    def _running(self, flow_id: str) -> bool:
+        """Is the flow, or a test of one of its boxes, running here or in another process (a scheduled run)?"""
+        def ours(key: str) -> bool:
+            return key == flow_id or key.startswith(f"{flow_id}#test:")
+        with self._runs_lock:
+            if any(run["status"] == "running" and ours(run["flow_id"]) for run in self._runs.values()):
+                return True
+        return any(ours(key) for key in locked_flows(self.user_db))
+
+    def _rename(self, flow_id: str, body: dict) -> tuple[int, dict]:
+        with self._save_lock:
+            flow = load_flow(self.user_db, self.factory_db, flow_id)
+            if flow is None:
+                return 404, {"error": "no such flow"}
+            set_title(self.user_db, flow_id, body["title"])
+            return 200, self._flow_view(flow)
+
+    def _schedule_extra(self) -> list[str]:
+        return ["--user-db", str(self.user_db)] if self.user_db != default_user_db() else []
+
+    def _delete(self, flow_id: str) -> tuple[int, dict]:
+        """Delete the flow and its daily runs, keeping both for `_restore`."""
+        with self._save_lock:
+            flow = load_flow(self.user_db, self.factory_db, flow_id)
+            if flow is None:
+                return 404, {"error": "no such flow"}
+            if not self._local(flow_id):
+                raise ValueError("This is a built-in flow: it cannot be deleted.")
+            title = self._flow_view(flow)["title"]
+            if self._running(flow_id):
+                return 409, {"error": f"“{title}” is running. Stop it first, then delete it."}
+            runner = self.schedule_runner
+            tasks = daily.tasks_by_flow(self.user_db, runner).get(flow_id, [])
+            stopped = []
+            try:
+                for task in tasks:
+                    schedule.delete_schedule(task["name"], runner=runner)
+                    stopped.append(task)
+            except RuntimeError:  # Windows refused: the flow stays, so what was stopped runs again
+                self._recreate(flow_id, stopped)
+                return 502, {"error": f"“{title}” was not deleted: its daily run could not be removed from Windows."}
+            trash_flow(self.user_db, flow_id, tasks)
+            return 200, {"id": flow_id, "title": title, "daily_runs": len(tasks)}
+
+    def _recreate(self, flow_id: str, tasks: list[dict]) -> list[str]:
+        """Set the daily runs `tasks` again; the names of those Windows would not take."""
+        lost = []
+        for task in tasks:
+            try:
+                schedule.create_schedule(task["name"], flow_id, task["app"], task["at"], self._schedule_extra(),
+                                         runner=self.schedule_runner)
+            except (ValueError, RuntimeError, TypeError):  # the flow is back; say what did not come back with it
+                lost.append(task["name"])
+        return lost
+
+    def _restore(self, flow_id: str) -> tuple[int, dict]:
+        with self._save_lock:
+            if flow_id not in trashed_ids(self.user_db):
+                return 404, {"error": "nothing was deleted under this name"}
+            if self._local(flow_id):
+                return 409, {"error": "A flow with this identifier exists again."}
+            lost = self._recreate(flow_id, restore_flow(self.user_db, flow_id))
+            view = self._flow_view(load_flow(self.user_db, self.factory_db, flow_id))
+            return 200, {**view, "daily_run_lost": lost} if lost else view
 
     def _write(self, flow, positions: dict | None, body: dict) -> dict:
         """Call with the save lock held."""
@@ -434,6 +506,12 @@ class ApiServer:
                     return self._send(200, [{**flow, "daily": times[flow["id"]][0]["at"] if flow["id"] in times else None}
                                             for flow in flow_overview(api.user_db, api.factory_db)])
                 flow_match = re.fullmatch(r"/api/flows/([^/]+)", path)
+                if flow_match and method == "DELETE":
+                    return self._send(*api._delete(flow_match[1]))
+                change_match = re.fullmatch(r"/api/flows/([\w.-]+)/(rename|restore)", path)
+                if change_match and method == "POST":
+                    return self._send(*(api._rename(change_match[1], self._body()) if change_match[2] == "rename"
+                                        else api._restore(change_match[1])))
                 if flow_match and method == "GET":
                     flow = load_flow(api.user_db, api.factory_db, flow_match[1])
                     return self._send(200, api._flow_view(flow)) if flow else self._send(404, {"error": "no such flow"})
@@ -541,9 +619,8 @@ class ApiServer:
                     existing = schedule.list_schedules(runner=runner)
                     if len(existing) >= MAX_SCHEDULES and schedule.full_name(name) not in existing:
                         return self._send(409, {"error": f"There are already {MAX_SCHEDULES} schedules. Remove one first."})
-                    extra = ["--user-db", str(api.user_db)] if api.user_db != default_user_db() else []
                     try:
-                        schedule.create_schedule(name, flow_id, app, at, extra, runner=runner)
+                        schedule.create_schedule(name, flow_id, app, at, api._schedule_extra(), runner=runner)
                     except RuntimeError as error:  # schtasks said no: its words, which hold no screen content
                         return self._send(502, {"error": str(error)})
                     return self._send(201, {"name": name, "flow": flow_id, "app": app, "at": at})
