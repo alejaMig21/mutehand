@@ -60,6 +60,20 @@ def test_a_person_can_reject_a_step_and_restore_it_even_a_factory_one(tmp_path):
     assert after_reject["open-menu"] == "rejected" and after_restore["open-menu"] == "suspect"
 
 
+def test_a_step_whose_name_has_spaces_can_be_rejected_and_restored_as_the_browser_asks(tmp_path):
+    save_step(tmp_path / "user.db", step("Select cell A1", "Menu"))
+    server = make_server(tmp_path)
+    try:  # the browser percent-encodes the path; the playbook names steps "Verb object", with spaces
+        rejected = call(server, "/api/steps/paint.exe/Select%20cell%20A1/reject", "POST", {})
+        restored = call(server, "/api/steps/paint.exe/Select%20cell%20A1/restore", "POST", {})
+        state = {i["name"]: i["state"] for i in call(server, "/api/library")[1]}
+    finally:
+        server.stop()
+
+    assert (rejected[0], restored[0]) == (200, 200) and restored[1]["step"] == "Select cell A1"
+    assert state["Select cell A1"] == "suspect"
+
+
 # --- consents: revoke only ---------------------------------------------------------------------
 
 def test_the_consents_screen_lists_scopes_and_can_revoke_but_never_grant(tmp_path):
@@ -137,7 +151,7 @@ def test_the_engine_records_one_history_row_per_executed_run(tmp_path):
     (run,) = list_runs(tmp_path / "user.db")
 
     assert run["status"] == "finished" and run["started_at"] <= run["finished_at"]
-    assert run["nodes"] == [{"node_id": "a", "status": "done", "reason": None, "effect": "no_change"}]
+    assert run["nodes"] == [{"node_id": "a", "status": "done", "reason": None, "effect": "no_change", "step": "open-menu"}]
 
 
 def test_rejecting_an_unknown_step_is_a_404(tmp_path):

@@ -103,13 +103,12 @@ def recipes_overview(user_db: Path) -> list[dict]:
     return result
 
 
-def adapted_from(user_db: Path, app: str, step_name: str) -> str | None:
-    """The app a step was adapted from: set when it fills a recipe's hole on an app other than the recipe's first."""
+def adaptations(user_db: Path) -> dict[tuple[str, str], str]:
+    """(app, step) -> the app it was adapted from: set when it fills a recipe's hole on an app other than the first."""
     with closing(_connect(user_db)) as db:
-        row = db.execute(
-            "SELECT o.app FROM recipe_bindings b JOIN recipe_origin o ON o.recipe = b.recipe"
-            " WHERE b.app = ? AND b.step = ? AND o.app != b.app LIMIT 1", (app, step_name)).fetchone()
-    return row[0] if row else None
+        return {(app, step): origin for app, step, origin in db.execute(
+            "SELECT b.app, b.step, o.app FROM recipe_bindings b JOIN recipe_origin o ON o.recipe = b.recipe"
+            " WHERE o.app != b.app")}
 
 
 def mark_step_known(user_db: Path, app: str, recipe: str, hole: str, step: str) -> None:

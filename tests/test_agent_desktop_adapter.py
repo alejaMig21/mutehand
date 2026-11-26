@@ -57,6 +57,24 @@ def test_find_returns_none_when_nothing_matches():
     assert AgentDesktop("mspaint.exe", runner, settle_seconds=0).find("button", "Nope") is None
 
 
+def test_a_slow_find_is_asked_again_with_a_longer_deadline():
+    slow = {"ok": False, "error": {"code": "TIMEOUT", "message": "did not stabilize"}}
+    runner = FakeRunner(slow, ok({"matches": [{"ref_id": "@s1:e1", "role": "grid", "name": "Grid", "states": []}]}))
+
+    control = AgentDesktop("excel.exe", runner, settle_seconds=0).find("grid", "Grid")
+
+    assert control.ref == "@s1:e1"
+    assert runner.calls[1][0] == [*runner.calls[0][0], "--timeout-ms", "20000"]
+
+
+def test_a_plain_click_on_a_cell_presses_no_key_in_any_app():
+    runner = FakeRunner(ok({}))
+
+    AgentDesktop("excel.exe", runner, settle_seconds=0).click(Control("cell", "B2", ref="@s1:e5"))
+
+    assert runner.calls == [(["click", "@s1:e5"], None)]
+
+
 def test_click_uses_the_control_ref():
     runner = FakeRunner(ok({}))
 
@@ -120,7 +138,85 @@ def test_snapshot_gives_up_with_typed_error_after_bounded_retries():
         AgentDesktop("mspaint.exe", runner, settle_seconds=0).snapshot()
 
     assert caught.value.code == "AMBIGUOUS_TARGET"
-    assert len(runner.calls) == SNAPSHOT_ATTEMPTS
+    assert len(runner.calls) == SNAPSHOT_ATTEMPTS + 1  # the retries, then one try to list the windows
+
+
+AMBIGUOUS = {"ok": False, "error": {"code": "AMBIGUOUS_TARGET", "message": "2 windows"}}
+
+
+def two_windows(app="EXCEL.EXE"):
+    def window(window_id, width, **extra):
+        return {"id": window_id, "app_name": app, "visible": True, "minimized": False,
+                "bounds": {"x": 0, "y": 0, "width": width, "height": 400}, **extra}
+
+    return ok([window("w-main", 1200), window("w-dialog", 300), window("w-hidden", 50, visible=False)])
+
+
+def test_find_looks_in_every_window_when_the_app_keeps_a_dialog_open():
+    runner = FakeRunner(
+        AMBIGUOUS, two_windows(), ok({"matches": []}),
+        ok({"matches": [{"ref_id": "@s2:e1", "role": "button", "name": "OK", "states": []}]}))
+
+    control = AgentDesktop("excel.exe", runner, settle_seconds=0).find("button", "OK")
+
+    assert control.ref == "@s2:e1"
+    assert [call[0][-1] for call in runner.calls[2:]] == ["w-main", "w-dialog"]  # the hidden one is skipped
+
+
+def test_snapshot_joins_every_window_when_the_ambiguity_does_not_pass():
+    main = ok({"tree": {"role": "window", "name": "Book1"}})
+    dialog = ok({"tree": {"role": "window", "name": "Create Table"}})
+    runner = FakeRunner(*[AMBIGUOUS] * SNAPSHOT_ATTEMPTS, two_windows(), main, dialog)
+
+    controls = AgentDesktop("excel.exe", runner, settle_seconds=0).snapshot()
+
+    assert [c.name for c in controls] == ["Book1", "Create Table"]
+
+
+def test_a_control_found_in_two_windows_stays_ambiguous():
+    hit = ok({"matches": [{"ref_id": "@s2:e1", "role": "button", "name": "Save", "states": []}]})
+    runner = FakeRunner(AMBIGUOUS, two_windows(), hit, hit)
+
+    with pytest.raises(AgentDesktopError) as caught:
+        AgentDesktop("excel.exe", runner, settle_seconds=0).find("button", "Save")
+
+    assert caught.value.code == "AMBIGUOUS_TARGET"
+
+
+def test_a_snapshot_with_no_visible_window_is_an_error_not_an_empty_screen():
+    hidden = ok([{"id": "w", "app_name": "EXCEL.EXE", "visible": False, "minimized": False}])
+    runner = FakeRunner(*[AMBIGUOUS] * SNAPSHOT_ATTEMPTS, hidden)
+
+    with pytest.raises(AgentDesktopError) as caught:
+        AgentDesktop("excel.exe", runner, settle_seconds=0).snapshot()
+
+    assert caught.value.code == "AMBIGUOUS_TARGET"
+
+
+def test_the_frame_never_takes_a_hidden_window_over_a_visible_one():
+    def window(width, visible):
+        return {"app_name": "EXCEL.EXE", "visible": visible, "minimized": False,
+                "bounds": {"x": 0, "y": 0, "width": width, "height": 500}}
+
+    runner = FakeRunner(ok([window(1900, False), window(900, True)]))
+    fields = {"resolution_width": 1920, "resolution_height": 1080, "scale": 1.0, "language": "en", "theme": "light"}
+
+    frame = AgentDesktop("excel.exe", runner, settle_seconds=0, system_frame_fields=lambda: fields).frame()
+
+    assert frame.window_width == 900
+
+
+def test_the_frame_is_the_biggest_window_not_a_popup_border_listed_first():
+    def window(width):
+        return {"app_name": "EXCEL.EXE", "visible": True, "minimized": False,
+                "bounds": {"x": 0, "y": 0, "width": width, "height": 500}}
+
+    runner = FakeRunner(ok([window(22), window(900)]))
+    fields = {"resolution_width": 1920, "resolution_height": 1080, "scale": 1.0, "language": "en", "theme": "light"}
+
+    frame = AgentDesktop("excel.exe", runner, settle_seconds=0, system_frame_fields=lambda: fields).frame()
+
+    assert frame.window_width == 900
 
 
 def test_snapshot_reads_native_id_published_as_kind_value_object():

@@ -10,6 +10,8 @@ from workflow_factory.flow import Flow, Node
 from workflow_factory.legacy import upgrade_node
 
 SCHEMA = "CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, definition TEXT NOT NULL)"
+# where the editor drew each node: kept apart so moving a card never changes the definition a checkpoint belongs to
+LAYOUT_SCHEMA = "CREATE TABLE IF NOT EXISTS flow_layout (id TEXT PRIMARY KEY, positions TEXT NOT NULL)"
 
 
 def flow_to_dict(flow: Flow) -> dict:
@@ -59,6 +61,28 @@ def load_flow(user_db: Path, factory_db: Path | None, flow_id: str) -> Flow | No
         return found
     with closing(sqlite3.connect(f"{factory_db.resolve().as_uri()}?mode=ro", uri=True)) as db:
         return _read(db, flow_id)
+
+
+def check_positions(positions) -> dict:
+    """{node id: {"x": number, "y": number}}; ValueError for anything else."""
+    if not isinstance(positions, dict) or not all(
+            isinstance(p, dict) and set(p) == {"x", "y"} and all(type(v) in (int, float) for v in p.values())
+            for p in positions.values()):
+        raise ValueError("positions are {node id: {x, y}} with numbers")
+    return positions
+
+
+def save_layout(db_path: Path, flow_id: str, positions: dict) -> None:
+    with closing(sqlite3.connect(db_path)) as db, db:
+        db.execute(LAYOUT_SCHEMA)
+        db.execute("INSERT OR REPLACE INTO flow_layout VALUES (?, ?)", (flow_id, json.dumps(check_positions(positions))))
+
+
+def load_layout(db_path: Path, flow_id: str) -> dict:
+    with closing(sqlite3.connect(db_path)) as db, db:
+        db.execute(LAYOUT_SCHEMA)
+        row = db.execute("SELECT positions FROM flow_layout WHERE id = ?", (flow_id,)).fetchone()
+    return json.loads(row[0]) if row else {}
 
 
 def list_flows(user_db: Path, factory_db: Path | None) -> list[dict]:

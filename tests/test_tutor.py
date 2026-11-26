@@ -19,6 +19,7 @@ from workflow_factory import (
     study_status,
     teach_step,
 )
+from workflow_factory.desktop import Control
 
 from fake_desktop import FakeDesktop, button, field, step
 
@@ -61,6 +62,73 @@ def test_a_step_is_saved_as_soon_as_its_effect_is_measured(tmp_path):
     saved = find_step(user_db, None, "paint.exe", "open-menu")
     assert result == {"status": "saved", "step": "open-menu", "effect": "revealed"}
     assert saved.effect == "revealed" and saved.version == "1.0" and saved.frame == desktop.frame()
+
+
+@pytest.mark.parametrize("action", ["type_value", "paste_text", "press_keys"])
+def test_teaching_a_step_that_writes_text_only_proves_the_control_and_acts_on_nothing(tmp_path, action):
+    user_db = tmp_path / "user.db"
+    desktop = FakeDesktop(controls=[field("Name Box")])
+    desktop.fail_on = {"Name Box"}  # a real text box refuses a click without real input
+
+    result = teach_step(user_db, desktop, name="write", locator=Locator("textfield", "Name Box"), action=action)
+
+    assert result == {"status": "saved", "step": "write", "effect": "no_change"}
+    assert desktop.clicks == [] and desktop.typed == [] and desktop.pressed == []
+    # nothing was done, so there is no taught effect that a later run could contradict
+    assert find_step(user_db, None, "paint.exe", "write").effect == ""
+
+
+@pytest.mark.parametrize("app", ["excel.exe", "grid.exe"])
+def test_a_cell_refuses_a_value_write_in_any_app_because_it_can_report_it_and_stay_empty(tmp_path, app):
+    user_db = tmp_path / "user.db"
+    desktop = FakeDesktop(controls=[Control(role="cell", name="B2")], app=app)
+
+    refused = teach_step(user_db, desktop, name="write", locator=Locator("cell", "B2"), action="type_value")
+
+    assert refused == {"status": "cell_requires_paste_text"} and find_step(user_db, None, app, "write") is None
+    assert teach_step(user_db, desktop, name="write", locator=Locator("cell", "B2"), action="paste_text")["status"] == "saved"
+
+
+def test_a_select_step_clicks_leaves_any_editor_and_teaches_no_effect(tmp_path):
+    user_db = tmp_path / "user.db"
+    cell = Control(role="cell", name="B2")
+    desktop = FakeDesktop(controls=[cell], app="grid.exe", reveals={("cell", "B2"): [button("Fill handle")]})
+
+    teach_step(user_db, desktop, name="select", locator=Locator("cell", "B2"), action="select")
+
+    assert desktop.clicks == [cell] and desktop.pressed == [("escape", "grid.exe")]
+    # what changes on screen depends on what is selected: nothing a later run could contradict
+    assert find_step(user_db, None, "grid.exe", "select").effect == ""
+
+
+def test_teaching_a_select_that_loses_the_window_presses_nothing_and_saves_nothing(tmp_path):
+    user_db = tmp_path / "user.db"
+    desktop = FakeDesktop(controls=[Control(role="cell", name="B2")], app="grid.exe")
+    desktop.on_action.append(lambda: setattr(desktop, "foreground", "chrome.exe"))
+
+    result = teach_step(user_db, desktop, name="select", locator=Locator("cell", "B2"), action="select")
+
+    assert result == {"status": "wrong_window"} and desktop.pressed == []
+    assert find_step(user_db, None, "grid.exe", "select") is None
+
+
+def test_a_click_on_a_cell_is_an_ordinary_click_whatever_the_app_is_called(tmp_path):
+    user_db = tmp_path / "user.db"
+    cell = Control(role="cell", name="B2")
+    desktop = FakeDesktop(controls=[cell], app="excel.exe", reveals={("cell", "B2"): [button("Fill handle")]})
+
+    teach_step(user_db, desktop, name="open", locator=Locator("cell", "B2"))
+
+    assert desktop.clicks == [cell] and desktop.pressed == []
+    assert find_step(user_db, None, "excel.exe", "open").effect == "revealed"
+
+
+def test_selecting_a_control_named_like_an_outward_action_still_asks_for_consent(tmp_path):
+    desktop = FakeDesktop(controls=[button("Send")])
+
+    asked = teach_step(tmp_path / "user.db", desktop, name="pick", locator=Locator("button", "Send"), action="select")
+
+    assert asked["status"] == "consent_required" and desktop.clicks == []
 
 
 def test_an_interrupted_study_resumes_at_the_first_step_without_a_step(tmp_path):

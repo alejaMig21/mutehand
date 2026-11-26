@@ -26,6 +26,7 @@ from workflow_factory.humanize import glide
 
 Runner = Callable[[list[str], str | None], str]
 SNAPSHOT_ATTEMPTS = 5
+SLOW_FIND_MS = "20000"
 
 
 class AgentDesktopError(DesktopError):
@@ -259,10 +260,12 @@ class AgentDesktop:
         args = ["find", "--app", self._app, "--role", role, "--name", name, "--exact"]
         if automation_id:
             args += ["--native-id", automation_id]
-        matches = self._call(args).get("matches", [])
-        if not matches:
+        found = [m for data in self._lookups(args) if (m := data.get("matches", []))]
+        if not found:
             return None
-        match = matches[0]
+        if len(found) > 1:  # window order is arbitrary: picking one could act on the wrong document
+            raise AgentDesktopError("AMBIGUOUS_TARGET", "the control is in more than one window")
+        match = found[0][0]
         return Control(
             role=match.get("role", role),
             name=match.get("name", ""),
@@ -271,6 +274,17 @@ class AgentDesktop:
             # research 23: the CLI lists a password field with states ["secure"], hides its name and value
             secure="secure" in match.get("states", []),
         )
+
+    def _lookups(self, args: list[str]):
+        """The answers to one find: one per window when several are open, with more time when the tree is slow."""
+        try:
+            return [self._call(args)]
+        except AgentDesktopError as error:
+            if error.code == "AMBIGUOUS_TARGET":
+                return self._each_window(args, error)
+            if error.code != "TIMEOUT" or "--timeout-ms" in args:
+                raise
+            return self._lookups([*args, "--timeout-ms", SLOW_FIND_MS])  # a big control tree can pass the default 5 s
 
     def click(self, control: Control) -> None:
         self._call(["click", control.ref])
@@ -364,18 +378,44 @@ class AgentDesktop:
             # the CLI message could echo what was typed: keep the code, drop the text
             raise AgentDesktopError(error.code, "typing a secret failed; details withheld") from None
 
+    def _windows(self) -> list[dict]:
+        return [w for w in self._call(["list-windows", "--app", self._app])
+                if w.get("app_name", "").lower() == self._app.lower()]
+
+    def _each_window(self, args: list[str], ambiguous: AgentDesktopError):
+        """The same read once per visible window (an app with a dialog open owns several), as they are asked for."""
+        try:
+            windows = self._windows()
+        except AgentDesktopError:
+            raise ambiguous from None
+        for window in windows:
+            if window.get("visible", True) and not window.get("minimized"):
+                try:
+                    yield self._call([*args, "--window-id", window["id"]])
+                except AgentDesktopError as error:
+                    if error.code != "WINDOW_NOT_FOUND":  # a popup may close between the list and the read
+                        raise
+
+    @staticmethod
+    def _controls(data: dict) -> tuple[Control, ...]:
+        if data.get("tree") is None:
+            raise AgentDesktopError("INVALID_RESPONSE", "snapshot has no tree")
+        return tuple(_walk(data["tree"]))
+
     def snapshot(self) -> tuple[Control, ...]:
+        args = ["snapshot", "--app", self._app, "-i"]
         for attempt in range(1, SNAPSHOT_ATTEMPTS + 1):
             try:
-                tree = self._call(["snapshot", "--app", self._app, "-i"]).get("tree")
-                if tree is None:
-                    raise AgentDesktopError("INVALID_RESPONSE", "snapshot has no tree")
-                return tuple(_walk(tree))
+                return self._controls(self._call(args))
             except AgentDesktopError as error:
-                # right after an action the app can briefly own two windows
-                if error.code != "AMBIGUOUS_TARGET" or attempt == SNAPSHOT_ATTEMPTS:
+                if error.code != "AMBIGUOUS_TARGET":
                     raise
-                time.sleep(self._settle)
+                if attempt == SNAPSHOT_ATTEMPTS:  # it stays: a dialog is open, so read every window
+                    screens = list(self._each_window(args, error))
+                    if not screens:  # an empty screen would be measured as an effect
+                        raise
+                    return tuple(c for data in screens for c in self._controls(data))
+                time.sleep(self._settle)  # right after an action the app can briefly own two windows
 
     def app_key(self) -> AppKey:
         for app in self._call(["list-apps"]).get("apps", []):
@@ -385,15 +425,16 @@ class AgentDesktop:
 
     def frame(self) -> Frame:
         fields = self._system_frame_fields()
-        for window in self._call(["list-windows", "--app", self._app]):
-            if window.get("app_name", "").lower() == self._app.lower():
-                bounds = window["bounds"]
-                full = (bounds["width"] >= 0.98 * fields["resolution_width"]
-                        and bounds["height"] >= 0.9 * fields["resolution_height"])
-                state = "minimized" if window.get("minimized") else "maximized" if full else "normal"
-                return Frame(window_state=state, window_width=bounds["width"],
-                             window_height=bounds["height"], **fields)
-        raise AgentDesktopError("WINDOW_NOT_FOUND", self._app)
+        windows = self._windows()
+        if not windows:
+            raise AgentDesktopError("WINDOW_NOT_FOUND", self._app)
+        # the app's own window: menus and dialogs add smaller ones, in no useful order
+        window = max(windows, key=lambda w: (w.get("visible", True), w["bounds"]["width"] * w["bounds"]["height"]))
+        bounds = window["bounds"]
+        full = (bounds["width"] >= 0.98 * fields["resolution_width"]
+                and bounds["height"] >= 0.9 * fields["resolution_height"])
+        state = "minimized" if window.get("minimized") else "maximized" if full else "normal"
+        return Frame(window_state=state, window_width=bounds["width"], window_height=bounds["height"], **fields)
 
     def now(self) -> str:
         return datetime.now(UTC).isoformat()

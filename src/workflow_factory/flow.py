@@ -46,6 +46,7 @@ from workflow_factory.steps import (
     current_status,
     find_step,
     record_outcome,
+    refused_write,
     revalidate_changed_versions,
 )
 
@@ -70,6 +71,9 @@ MAX_PARALLEL_NODES = 4
 PHYSICAL_INPUT = threading.Lock()  # one mouse, one keyboard, one focus for the whole machine
 USER_IDLE_SECONDS = 5.0  # how long the person must leave mouse and keyboard alone before we resume
 MAX_USER_WAIT_SECONDS = 600.0  # a person who never stops ends in a doubt, not an endless wait
+# ponytail: fixed wait, the app gives no sign that it read the clipboard; raise it if a slower app pastes the old content
+PASTE_READ_SECONDS = 1.0
+SELECT_SETTLE_SECONDS = 0.5  # let the app close its editor before the effect is measured
 KEY_ACTIONS = ("type_value", "type_secret", "paste_text", "press_keys")  # real keys: the foreground window must be the app's
 TEXT_ACTIONS = ("type_value", "paste_text", "press_keys")  # they write the text of the node
 EMERGENCY_STOP = threading.Event()  # set by the global hotkey: every running flow stops at once
@@ -284,6 +288,7 @@ DOUBT_REASON = {
     "missing_input": Reason.PRECONDITION_NOT_MET,
     "bad_data": Reason.PRECONDITION_NOT_MET,
     "unsendable_text": Reason.PRECONDITION_NOT_MET,
+    "cell_requires_paste_text": Reason.PRECONDITION_NOT_MET,
     "effect_mismatch": Reason.PRECONDITION_NOT_MET,
     "step_missing": Reason.PRECONDITION_NOT_MET,
     "action_failed": Reason.PRECONDITION_NOT_MET,
@@ -372,6 +377,8 @@ def _keys_for(text: str) -> list[str] | None:
 def _input_problem(node: Node, step, state) -> str | None:
     """A node does not start while a bound field points at nothing, or a typed input is missing or of the wrong type."""
     context = state.context
+    if refused_write(step.action, step.locator.role):  # a step saved or imported before teaching refused it
+        return "cell_requires_paste_text"
     if step.action in TEXT_ACTIONS and not node.inputs and "text" not in node.fields:
         return "missing_input"
     for binding in node.fields.values():
@@ -392,6 +399,27 @@ def _input_problem(node: Node, step, state) -> str | None:
         if not ok:
             return "missing_input"
     return None
+
+
+def select(desktop, app: str, control, point=None, before_key=lambda: None) -> str | None:
+    """Click, then Escape: the control stays selected and any editor the click opened is closed.
+
+    "wrong_window" when the app is no longer in front after the click: no key is pressed."""
+    if point:
+        desktop.click_at(control, *point)
+    else:
+        desktop.click(control)
+    if desktop.foreground_app().lower() != app:  # a key goes to whatever window is in front
+        return "wrong_window"
+    before_key()
+    desktop.press_key("escape")
+    desktop.sleep(SELECT_SETTLE_SECONDS)
+    return None
+
+
+def _differs(step, effect) -> bool:
+    """The screen changed in another way than when the step was learned. Nothing taught: nothing to compare."""
+    return bool(step.effect) and effect != step.effect
 
 
 def _store_effect(user_db: Path, node_id: str, effect: Effect, finished_at: str) -> None:
@@ -473,19 +501,24 @@ class _Run:
                 refused = True
             else:
                 desktop.press_key("ctrl+v")
+                desktop.sleep(PASTE_READ_SECONDS)  # the key returns first; the app reads the clipboard afterwards
         finally:
             lost = desktop.clipboard_restore(saved)
         with self.lock:
             self.state.outputs[node.id] = {"not_restored": list(lost)}  # what the person's clipboard lost, by name
         return "wrong_window" if refused else None
 
+    @staticmethod
+    def _stop_if_asked() -> None:
+        if EMERGENCY_STOP.is_set():
+            raise _EmergencyStop
+
     def _type_keys(self, node: Node) -> str | None:
         """One real key at a time, looking at the foreground window before every key."""
         for key in _keys_for(_text_of(node, self.state)) or []:
             if self.desktop.foreground_app().lower() != self.key.process:
                 return "wrong_window"
-            if EMERGENCY_STOP.is_set():  # looked at last, right before the key goes out
-                raise _EmergencyStop
+            self._stop_if_asked()  # looked at last, right before the key goes out
             self.desktop.press_key(key)
         return None
 
@@ -524,6 +557,10 @@ class _Run:
             desktop.type_text(target.control, _text_of(node, self.state))
         elif step.action == "drag":
             desktop.drag(target.control, target.point, targets[1].control, targets[1].point)
+        elif step.action == "select":
+            reason = select(desktop, self.key.process, target.control, target.point, self._stop_if_asked)
+            if reason:
+                return reason, None, step
         elif target.point:
             desktop.click_at(target.control, *target.point)
         else:
@@ -533,7 +570,8 @@ class _Run:
         effect = effect_of(before, set(desktop.snapshot()))
         self.effects[node.id] = effect
         if step.effect:  # nothing taught to compare against means nothing to count
-            self.statuses[node.id] = record_outcome(self.user_db, step, effect == step.effect)
+            self.statuses[node.id] = record_outcome(
+                self.user_db, step, effect == step.effect, got=str(effect), at=desktop.now())
         _store_effect(self.user_db, node.id, effect, desktop.now())
         return None, effect, step
 
@@ -577,7 +615,7 @@ class _Run:
 
 
 def _run_step(run: _Run, node: Node) -> None:
-    reason, effect, _ = run.attempt(node)
+    reason, effect, step = run.attempt(node)
     if reason:
         run.block(node, reason)
         return
@@ -585,6 +623,9 @@ def _run_step(run: _Run, node: Node) -> None:
         run.state.effects[node.id] = str(effect)
         run.state.outputs[node.id] = {**run.state.outputs.get(node.id, {}), "effect": str(effect)}
     run.finish(node)
+    if _differs(step, effect):  # it counted against the step: the history has to say so
+        with run.lock:
+            run.node_status[node.id] = ("done", "effect_mismatch")
 
 
 def _run_trigger(run: _Run, node: Node) -> None:
@@ -631,7 +672,7 @@ def _run_foreach(run: _Run, node: Node) -> None:
         with run.lock:
             run.state.outputs[node.id] = {"item": items[index], "index": index, "count": len(items)}
         run.progress(body.id, "running")
-        reason, effect, _ = run.attempt(body)  # consent, the input lock and the user pause apply to every item
+        reason, effect, step = run.attempt(body)  # consent, the input lock and the user pause apply to every item
         if reason:
             verdict = run.block(body, reason, owner=node)  # a stop leaves the doubt on the body's step
             if verdict == "retry":
@@ -649,6 +690,7 @@ def _run_foreach(run: _Run, node: Node) -> None:
             return
         with run.lock:
             progress["iteration"] += 1
+            progress["mismatch"] = progress.get("mismatch", False) or _differs(step, effect)
             run.attempts.pop(node.id, None)  # the retries are per item
             run.state.effects[body.id] = str(effect)
             run.state.outputs[body.id] = {"effect": str(effect)}
@@ -656,7 +698,7 @@ def _run_foreach(run: _Run, node: Node) -> None:
     with run.lock:
         run.state.outputs[node.id] = {"count": len(items)}
         run.state.done.add(body.id)
-        run.node_status[body.id] = ("done", None)
+        run.node_status[body.id] = ("done", "effect_mismatch" if progress.get("mismatch") else None)
         run.progress(body.id, "done")
     run.finish(node)
 
@@ -729,7 +771,8 @@ def _run_loop(run: _Run, node: Node) -> None:
         if reason is None:
             progress["iteration"] += 1
             progress["effect"] = str(effect)
-            if step.effect and effect != step.effect and not wanted:
+            progress["mismatch"] = progress.get("mismatch", False) or _differs(step, effect)
+            if _differs(step, effect) and not wanted:
                 reason = "effect_mismatch"
         progress["failures"] = progress["failures"] + 1 if reason else 0
         run.save()  # a checkpoint per iteration
@@ -742,6 +785,9 @@ def _run_loop(run: _Run, node: Node) -> None:
     with run.lock:
         run.state.effects[node.id] = progress["effect"]
     run.finish(node)
+    if progress.get("mismatch"):
+        with run.lock:
+            run.node_status[node.id] = ("done", "effect_mismatch")
 
 
 def _verdict(node_id: str, flow: Flow, nodes: dict, state: _State) -> str:
@@ -874,6 +920,6 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="ma
         result = RunResult(effects, {}, run.statuses, halted_by=run.halted, outputs=run.state.outputs, continued=run.continued)
     run_id = record_run(user_db, flow.key, started_at, desktop.now(), result.status, result.stopped, [
         {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1],
-         "effect": str(effects[node.id]) if node.id in effects else None}
+         "effect": str(effects[node.id]) if node.id in effects else None, "step": node.step or None}
         for node in flow.nodes if node.id in run.node_status])
     return replace(result, run_id=run_id)

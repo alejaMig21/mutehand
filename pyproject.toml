@@ -27,6 +27,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+tmp_path_retention_policy = "none"  # a test run leaves nothing behind in the system temp folder
 addopts = "-m 'not live and not web'"
 markers = [
     "live: real agent-desktop smoke tests, opt-in with -m live",

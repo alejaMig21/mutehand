@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS step_state (
     local_failures INTEGER NOT NULL DEFAULT 0,
     rejected INTEGER NOT NULL DEFAULT 0,  -- sticky: set at replay time, cleared only by restore_step
     restored INTEGER NOT NULL DEFAULT 0,  -- a human restored it: shipped counters no longer reject
+    why TEXT,  -- JSON: what rejected it, so the person can decide; NULL = not rejected or not recorded
     PRIMARY KEY (app, name)
 )
 """
@@ -253,7 +254,12 @@ def _row_to_step(row) -> Step:
     )
 
 
-ACTIONS = ("click", "drag", "type_secret", "type_value", "read_value", "paste_text", "press_keys")
+ACTIONS = ("click", "select", "drag", "type_secret", "type_value", "read_value", "paste_text", "press_keys")
+
+
+def refused_write(action: str, role: str) -> bool:
+    """A grid cell can accept a value write and report it back while the grid stays empty: a run would "finish" blank."""
+    return action == "type_value" and role == "cell"
 
 
 def validate_step(step: Step) -> None:
@@ -280,6 +286,8 @@ def _prepare(db: sqlite3.Connection, *schemas: str) -> None:
     migrate_names(db)
     for schema in schemas:
         db.execute(schema)
+    if STATE_SCHEMA in schemas and "why" not in {row[1] for row in db.execute("PRAGMA table_info(step_state)")}:
+        db.execute("ALTER TABLE step_state ADD COLUMN why TEXT")
 
 
 def save_step(db_path: Path, step: Step) -> None:
@@ -357,8 +365,8 @@ def _derive_status(step: Step, local_successes: int, local_failures: int) -> Sta
     return Status.SUSPECT
 
 
-def record_outcome(user_db: Path, step: Step, success: bool) -> Status:
-    """Count one replay result and return the step's status afterwards."""
+def record_outcome(user_db: Path, step: Step, success: bool, got: str = "", at: str = "") -> Status:
+    """Count one replay result and return the step's status afterwards. `got` is the effect that was measured."""
     with closing(sqlite3.connect(user_db)) as db, db:
         _prepare(db, STATE_SCHEMA)
         db.execute("INSERT OR IGNORE INTO step_state (app, name) VALUES (?, ?)",
@@ -369,22 +377,28 @@ def record_outcome(user_db: Path, step: Step, success: bool) -> Status:
         successes, failures, _, _ = _state(db, step)
         derived = _derive_status(step, successes, failures)
         if derived == Status.REJECTED:
-            db.execute("UPDATE step_state SET rejected = 1 WHERE app = ? AND name = ?",
-                       (step.app, step.name))
+            why = {"kind": "different_effect", "expected": step.effect, "got": got, "at": at}
+            db.execute("UPDATE step_state SET rejected = 1, why = ? WHERE app = ? AND name = ?",
+                       (None if success else json.dumps(why), step.app, step.name))
         return derived
+
+
+def _status_of(step: Step, state: tuple, app_version: str) -> Status:
+    successes, failures, rejected, restored = state
+    derived = _derive_status(step, successes, failures)
+    if rejected or (not restored and Status.REJECTED in (step.status, derived)):
+        return Status.REJECTED
+    if step.status == Status.TO_REVALIDATE or step.version != app_version:
+        return Status.TO_REVALIDATE
+    return Status.SUSPECT if derived == Status.REJECTED else derived  # restored by a human
 
 
 def current_status(user_db: Path, step: Step, app_version: str) -> Status:
     """What the apprentice may do with this step right now (rejection outranks revalidation)."""
     with closing(sqlite3.connect(user_db)) as db, db:
         _prepare(db, STATE_SCHEMA)
-        successes, failures, rejected, restored = _state(db, step)
-        derived = _derive_status(step, successes, failures)
-    if rejected or (not restored and Status.REJECTED in (step.status, derived)):
-        return Status.REJECTED
-    if step.status == Status.TO_REVALIDATE or step.version != app_version:
-        return Status.TO_REVALIDATE
-    return Status.SUSPECT if derived == Status.REJECTED else derived  # restored by a human
+        state = _state(db, step)
+    return _status_of(step, state, app_version)
 
 
 def restore_step(user_db: Path, app: str, name: str) -> None:
@@ -394,7 +408,7 @@ def restore_step(user_db: Path, app: str, name: str) -> None:
         db.execute("INSERT OR IGNORE INTO step_state (app, name) VALUES (?, ?)", (app, name))
         db.execute(
             "UPDATE step_state SET local_successes = 0, local_failures = 0, rejected = 0,"
-            " restored = 1 WHERE app = ? AND name = ?",
+            " restored = 1, why = NULL WHERE app = ? AND name = ?",
             (app, name),
         )
         db.execute(
@@ -420,20 +434,31 @@ def list_steps(user_db: Path, factory_db: Path | None) -> list[Step]:
     return sorted(found.values(), key=lambda step: (step.app, step.name))
 
 
-def step_report(user_db: Path, step: Step) -> dict:
-    """The numbers behind a step's state, for the library screen."""
+def step_reports(user_db: Path, steps: list[Step]) -> list[dict]:
+    """The numbers behind each step's state, for the library screen. One read, however many steps."""
     with closing(sqlite3.connect(user_db)) as db, db:
         _prepare(db, STATE_SCHEMA)
         db.execute(SEEN_SCHEMA)
-        local_successes, local_failures, _, _ = _state(db, step)
-        seen = db.execute("SELECT version FROM app_seen WHERE app = ?", (step.app,)).fetchone()
-    successes = step.factory_successes + local_successes
-    failures = step.factory_failures + local_failures
-    return {
-        "state": str(current_status(user_db, step, seen[0] if seen else step.version)),
-        "successes": successes, "failures": failures,
-        "confidence": round(confidence(successes, failures), 2),
-    }
+        states = {(app, name): rest for app, name, *rest in db.execute(
+            "SELECT app, name, local_successes, local_failures, rejected, restored, why FROM step_state")}
+        seen = dict(db.execute("SELECT app, version FROM app_seen"))
+    reports = []
+    for step in steps:
+        *state, why = states.get((step.app, step.name), (0, 0, False, False, None))
+        successes = step.factory_successes + state[0]
+        failures = step.factory_failures + state[1]
+        status = _status_of(step, tuple(state), seen.get(step.app, step.version))
+        reports.append({
+            "state": str(status),
+            "successes": successes, "failures": failures,
+            "confidence": round(confidence(successes, failures), 2),
+            "why": json.loads(why) if status == Status.REJECTED and why else None,
+        })
+    return reports
+
+
+def step_report(user_db: Path, step: Step) -> dict:
+    return step_reports(user_db, [step])[0]
 
 
 def reject_step(user_db: Path, app: str, name: str) -> None:
@@ -441,7 +466,8 @@ def reject_step(user_db: Path, app: str, name: str) -> None:
     with closing(sqlite3.connect(user_db)) as db, db:
         _prepare(db, STATE_SCHEMA)
         db.execute("INSERT OR IGNORE INTO step_state (app, name) VALUES (?, ?)", (app, name))
-        db.execute("UPDATE step_state SET rejected = 1, restored = 0 WHERE app = ? AND name = ?", (app, name))
+        db.execute("UPDATE step_state SET rejected = 1, restored = 0, why = ? WHERE app = ? AND name = ?",
+                   (json.dumps({"kind": "person"}), app, name))
 
 
 def step_to_dict(step: Step) -> dict:

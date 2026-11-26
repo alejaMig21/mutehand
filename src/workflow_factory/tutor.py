@@ -13,7 +13,7 @@ from pathlib import Path
 
 from workflow_factory.consent import Consent, effective_sensitivity, grant_consent, is_permitted, scope_of
 from workflow_factory.desktop import Desktop
-from workflow_factory.flow import effect_of
+from workflow_factory.flow import TEXT_ACTIONS, effect_of, select
 from workflow_factory.queue import answer_doubt, list_doubts
 from workflow_factory.steps import (
     Locator,
@@ -21,6 +21,7 @@ from workflow_factory.steps import (
     Status,
     Step,
     find_step,
+    refused_write,
     save_step,
     validate_step,
 )
@@ -66,12 +67,14 @@ def mark_private(user_db: Path, app: str) -> None:
         db.execute("INSERT OR IGNORE INTO private_apps VALUES (?)", (_app_name(app),))
 
 
-def is_private(user_db: Path, app: str) -> bool:
-    if _app_name(app) in DEFAULT_PRIVATE_APPS:
-        return True
+def private_apps(user_db: Path) -> frozenset[str]:
+    """The names (no .exe, lower case) of every private app: the defaults and the ones the person marked."""
     with closing(_connect(user_db)) as db:
-        row = db.execute("SELECT 1 FROM private_apps WHERE app = ?", (_app_name(app),)).fetchone()
-    return row is not None
+        return DEFAULT_PRIVATE_APPS | {row[0] for row in db.execute("SELECT app FROM private_apps")}
+
+
+def is_private(user_db: Path, app: str, known: frozenset[str] | None = None) -> bool:
+    return _app_name(app) in (known if known is not None else private_apps(user_db))
 
 
 def observe(user_db: Path, desktop: Desktop) -> dict:
@@ -145,6 +148,8 @@ def teach_step(
     category = effective_sensitivity(candidate)  # declared, or implied by the action or the control name
     candidate = replace(candidate, sensitive=category)
     validate_step(candidate)  # refuse before touching the app: a step that cannot be saved never runs
+    if refused_write(action, locator.role):
+        return {"status": "cell_requires_paste_text"}
     if category and not is_permitted(user_db, candidate):  # ask before touching anything
         return _consent_required(category, scope_of(candidate))
     control = desktop.find(locator.role, locator.name, locator.automation_id)
@@ -163,10 +168,16 @@ def teach_step(
         desktop.type_secret(control, secret_ref)
     elif action == "read_value":
         desktop.read_text(control)  # a read acts on nothing: the step is taught by proving the control answers
-    else:
+    elif action == "select":
+        refused = select(desktop, key.process, control)
+        if refused:
+            return {"status": refused}
+    elif action not in TEXT_ACTIONS:  # no text to write yet: finding the control is the whole proof
         desktop.click(control)
     effect = effect_of(before, set(desktop.snapshot()))
-    save_step(user_db, replace(candidate, sensitive=category, effect=str(effect), frame=desktop.frame()))
+    # no effect a run could contradict: nothing was done, or what a selection changes depends on what is selected
+    taught = "" if action in TEXT_ACTIONS or action == "select" else str(effect)
+    save_step(user_db, replace(candidate, sensitive=category, effect=taught, frame=desktop.frame()))
     return {"status": "saved", "step": name, "effect": str(effect)}
 
 

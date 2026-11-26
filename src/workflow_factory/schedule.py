@@ -15,7 +15,7 @@ from pathlib import Path
 
 SAFE_NAME = re.compile(r"[\w.-]+")
 SCHEDULE_PREFIX = "Workflow factory - "  # marks what this tool made, so it can list and remove only that
-SCHEDULE_NAME = re.compile(r"[\w .-]{1,80}")
+SCHEDULE_NAME = re.compile(r"[\w .-]{1,120}")  # the longest flow name plus " daily HHMM" fits
 MAX_COMMAND_CHARS = 261  # the limit of schtasks /TR
 CLOCK = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 

@@ -52,6 +52,17 @@ def test_a_paste_puts_the_text_on_the_page_and_the_persons_clipboard_comes_back(
         "clipboard_backup", "clipboard_set", "press_key", "clipboard_restore"]
 
 
+def test_the_clipboard_goes_back_only_after_the_app_had_time_to_read_it(tmp_path):
+    # ctrl+v returns before the app reads the clipboard: restoring at once pastes the person's own copy instead
+    desktop = word()
+    desktop.on_sleep.append(lambda: desktop.calls.append(("sleep",)))
+
+    run(tmp_path, desktop, "paste_text")
+
+    names = [c[0] for c in desktop.calls]
+    assert "sleep" in names[names.index("press_key"):names.index("clipboard_restore")]
+
+
 def test_the_step_says_which_clipboard_formats_it_could_not_put_back(tmp_path):
     desktop = word()
     desktop.board.items = {CF_UNICODETEXT: text_bytes("x"), CF_BITMAP: b"handle"}
@@ -168,3 +179,53 @@ def test_both_routes_take_the_input_lock_like_every_physical_step(tmp_path, acti
     teach(tmp_path / "user.db", action)
 
     assert find_step(tmp_path / "user.db", None, "word.exe", "write-page").uses_physical_input
+
+
+def test_a_select_step_runs_as_a_click_followed_by_leaving_the_editor(tmp_path):
+    from workflow_factory import Locator, Step
+    from workflow_factory.desktop import Control
+
+    save_step(tmp_path / "user.db", Step(app="paint.exe", version="1.0", name="pick", action="select",
+                                         locator=Locator("cell", "B2")))
+    desktop = FakeDesktop(controls=[Control(role="cell", name="B2")])
+
+    result = run_flow(Flow(id="f", nodes=[Node("a", "pick")]), desktop=desktop, user_db=tmp_path / "user.db")
+
+    assert result.stopped is None
+    assert [c.name for c in desktop.clicks] == ["B2"] and desktop.pressed == [("escape", "paint.exe")]
+
+
+def pick_cell(tmp_path, action="select"):
+    from workflow_factory import Locator, Step
+    from workflow_factory.desktop import Control
+
+    save_step(tmp_path / "user.db", Step(app="paint.exe", version="1.0", name="pick", action=action,
+                                         locator=Locator("cell", "B2")))
+    return FakeDesktop(controls=[Control(role="cell", name="B2")])
+
+
+def test_the_escape_of_a_select_never_goes_to_another_window(tmp_path):
+    desktop = pick_cell(tmp_path)
+    desktop.on_action.append(lambda: setattr(desktop, "foreground", "chrome.exe"))
+
+    result = run_flow(Flow(id="f", nodes=[Node("a", "pick")]), desktop=desktop, user_db=tmp_path / "user.db")
+
+    assert result.blocked == {"a": "wrong_window"} and desktop.pressed == []
+
+
+def test_the_emergency_stop_between_the_click_and_the_escape_of_a_select_sends_no_key(tmp_path):
+    desktop = pick_cell(tmp_path)
+    desktop.on_action.append(emergency_stop)
+
+    result = run_flow(Flow(id="f", nodes=[Node("a", "pick")]), desktop=desktop, user_db=tmp_path / "user.db")
+
+    assert result.emergency and desktop.pressed == []
+
+
+def test_a_stored_value_write_on_a_cell_is_refused_before_it_touches_the_app(tmp_path):
+    desktop = pick_cell(tmp_path, "type_value")
+    flow = Flow(id="f", nodes=[Node("a", "pick", fields={"text": {"value": "12"}})])
+
+    result = run_flow(flow, desktop=desktop, user_db=tmp_path / "user.db")
+
+    assert result.blocked == {"a": "cell_requires_paste_text"} and desktop.typed == []

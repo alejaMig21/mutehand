@@ -5,8 +5,10 @@ is served without the token; every /api/ route needs it. No CORS header is ever 
 header must be a loopback name with this server's port (against DNS rebinding).
 """
 
+import hashlib
 import hmac
 import json
+import math
 import re
 import secrets
 import subprocess
@@ -21,29 +23,40 @@ from pathlib import Path
 
 from workflow_factory import schedule
 from workflow_factory.checks import mark_seen, run_checks, seen_before
-from workflow_factory.consent import consents, effective_sensitivity, is_permitted, revoke_consent
+from workflow_factory.consent import consents, covers, effective_sensitivity, revoke_consent
 from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.flow import clear_emergency_stop, emergency_stop, rejected_steps, run_flow
-from workflow_factory.flows import flow_from_dict, flow_to_dict, list_flows, load_flow, save_flow
+from workflow_factory.flows import (
+    check_positions,
+    flow_from_dict,
+    flow_to_dict,
+    list_flows,
+    load_flow,
+    load_layout,
+    save_flow,
+    save_layout,
+)
 from workflow_factory.knowledge import duplicate_flow
 from workflow_factory.nodedata import present, single_node_flow, snapshot
 from workflow_factory.paths import default_user_db
 from workflow_factory.queue import answer_doubt, dismiss_doubt, list_doubts, list_runs
-from workflow_factory.recipes import adapted_from, recipes_overview
+from workflow_factory.recipes import adaptations, recipes_overview
 from workflow_factory.steps import (
     find_step,
     list_steps,
     reject_step,
     restore_step,
-    step_report,
+    step_reports,
 )
-from workflow_factory.tutor import is_private
+from workflow_factory.tutor import is_private, private_apps
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")  # the only names this server can be bound to
 MAX_BODY_BYTES = 1_000_000
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_NOTE_CHARS = 500
 MAX_LOG_EVENTS = 200
+MAX_FLOW_NAME_CHARS = 100
+MAX_SCHEDULES = 20  # more than a person can manage: a stray client cannot fill Windows Task Scheduler
 CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css",
                  ".svg": "image/svg+xml", ".json": "application/json", ".map": "application/json"}
 
@@ -62,6 +75,7 @@ class ApiServer:
         self.max_active_runs, self.max_kept_runs = max_active_runs, max_kept_runs
         self._runs: dict[str, dict] = {}
         self._runs_lock = threading.Lock()
+        self._save_lock = threading.Lock()  # "is it unchanged?" and "save it" happen as one
         self._node_data: dict[str, dict] = {}  # flow id -> node id -> {in, out}: the latest, in memory only
         self.quit_requested = threading.Event()  # set by POST /api/quit; whoever started the server waits on it
         self._http = ThreadingHTTPServer((host, port), self._handler())
@@ -166,6 +180,35 @@ class ApiServer:
         alone = single_node_flow(flow, node_id, last)
         return self._launch(alone, f"{flow_id}#test:{node_id}", flow_id, app, context)
 
+    def _flow_view(self, flow) -> dict:
+        """A flow as the editor sees it: where its nodes sit, and a revision that changes when either does."""
+        view = {**flow_to_dict(flow), "positions": load_layout(self.user_db, flow.id)}
+        digest = hashlib.sha256(json.dumps(view, sort_keys=True).encode()).hexdigest()[:16]
+        return {**view, "revision": digest}
+
+    def _save(self, flow_id: str, body: dict) -> tuple[int, dict]:
+        """Save a flow. A body with "base" only replaces what the editor has seen: the revision it loaded, or
+        None for "this is a new flow". A body without it replaces whatever is there."""
+        if not schedule.SAFE_NAME.fullmatch(flow_id) or not flow_id.strip("."):
+            raise ValueError("a flow name may only use letters, digits, '_', '.' and '-'")
+        if len(flow_id) > MAX_FLOW_NAME_CHARS:
+            raise ValueError(f"a flow name can have at most {MAX_FLOW_NAME_CHARS} characters")
+        try:
+            flow = flow_from_dict(flow_id, body)
+        except (TypeError, KeyError):  # their words would show how the engine is built
+            raise ValueError("that is not a valid flow") from None
+        positions = check_positions(body["positions"]) if "positions" in body else None
+        with self._save_lock:
+            if "base" in body:
+                stored = load_flow(self.user_db, self.factory_db, flow_id)
+                if stored is not None and body["base"] != self._flow_view(stored)["revision"]:
+                    return 409, {"error": f"A flow called '{flow_id}' already exists" if body["base"] is None else
+                                 f"'{flow_id}' was changed somewhere else since you opened it"}
+            save_flow(self.user_db, flow)
+            if positions is not None:
+                save_layout(self.user_db, flow_id, positions)
+            return 200, self._flow_view(flow)
+
     def _run_view(self, run_id: str) -> dict | None:
         with self._runs_lock:
             record = self._runs.get(run_id)
@@ -192,6 +235,12 @@ class ApiServer:
                 self.end_headers()
                 self.wfile.write(body)
 
+            def handle(self):
+                try:
+                    super().handle()
+                except ConnectionError:  # the browser left (closed, reloaded) before the answer: nobody to tell
+                    pass
+
             def _host_ok(self) -> bool:
                 name, _, port = (self.headers.get("Host") or "").rpartition(":")
                 return name in LOOPBACK_HOSTS and port == str(api.address[1])
@@ -205,13 +254,17 @@ class ApiServer:
                 size = int(self.headers.get("Content-Length") or 0)
                 if not 0 <= size <= MAX_BODY_BYTES:
                     raise ValueError("bad Content-Length")
-                return json.loads(self.rfile.read(size) or b"{}")
+                # a number that is not finite would be sent back as text no browser can read
+                body = json.loads(self.rfile.read(size) or b"{}", parse_constant=_finite, parse_float=_finite)
+                return _Body(body) if isinstance(body, dict) else body
 
             def _dispatch(self, method: str):
                 if not self._host_ok():
                     return self._send(403, {"error": "unexpected Host header"})
                 url = urllib.parse.urlsplit(self.path)
                 path, self.query = url.path, urllib.parse.parse_qs(url.query)
+                if path.startswith("/api/flows/"):  # flow names may carry accents; they never carry a slash
+                    path = urllib.parse.unquote(path)
                 if path.startswith("/api/lessons"):  # the name an earlier editor used
                     path = "/api/steps" + path[len("/api/lessons"):]
                 if not path.startswith("/api/"):
@@ -220,8 +273,10 @@ class ApiServer:
                     return self._send(401, {"error": "missing or wrong token"})
                 try:
                     self._route(method, path)
-                except (ValueError, TypeError, KeyError) as error:
+                except ValueError as error:
                     self._send(400, {"error": str(error)})
+                except TypeError:
+                    self._send(400, {"error": "that is not a valid request"})
                 except Exception:  # noqa: BLE001 - details could echo private content: say nothing
                     self._send(500, {"error": "internal error"})
 
@@ -230,8 +285,9 @@ class ApiServer:
                     api.quit_requested.set()
                     return self._send(202, {"ok": True})
                 if method == "GET" and path == "/api/steps":
-                    return self._send(200, [{**_step_view(step), **_safety(api.user_db, step)} for step in
-                                            list_steps(api.user_db, api.factory_db)])
+                    steps = list_steps(api.user_db, api.factory_db)
+                    return self._send(200, [{**_step_view(step), **safety} for step, safety in
+                                            zip(steps, _safety(api.user_db, steps), strict=True)])
                 if method == "GET" and path == "/api/checks":
                     data_dir = api.user_db.parent
                     return self._send(200, {"first_run": not seen_before(data_dir), "checks": run_checks(data_dir)})
@@ -244,18 +300,17 @@ class ApiServer:
                     return self._send(200, recipes_overview(api.user_db))
                 if method == "GET" and path == "/api/flows":
                     return self._send(200, list_flows(api.user_db, api.factory_db))
-                flow_match = re.fullmatch(r"/api/flows/([\w.-]+)", path)
+                flow_match = re.fullmatch(r"/api/flows/([^/]+)", path)
                 if flow_match and method == "GET":
                     flow = load_flow(api.user_db, api.factory_db, flow_match[1])
-                    return self._send(200, flow_to_dict(flow)) if flow else self._send(404, {"error": "no such flow"})
+                    return self._send(200, api._flow_view(flow)) if flow else self._send(404, {"error": "no such flow"})
                 if flow_match and method == "PUT":
-                    flow = flow_from_dict(flow_match[1], self._body())
-                    save_flow(api.user_db, flow)
-                    return self._send(200, flow_to_dict(flow))
+                    return self._send(*api._save(flow_match[1], self._body()))
                 copy_match = re.fullmatch(r"/api/flows/([\w.-]+)/duplicate", path)
                 if copy_match and method == "POST":
                     copy = duplicate_flow(api.user_db, api.factory_db, copy_match[1], self._body()["new_id"])
-                    return self._send(201, flow_to_dict(copy))
+                    save_layout(api.user_db, copy.id, load_layout(api.user_db, copy_match[1]))
+                    return self._send(201, api._flow_view(copy))
                 data_match = re.fullmatch(r"/api/flows/([\w.-]+)/data", path)
                 if data_match and method == "GET":
                     if load_flow(api.user_db, api.factory_db, data_match[1]) is None:
@@ -280,15 +335,16 @@ class ApiServer:
                     return self._send(code, {"error": {404: "no such flow", 409: "this flow is already running",
                                                        429: "too many runs at once"}[code]})
                 if method == "GET" and path == "/api/library":
-                    return self._send(200, [
-                        {**_step_view(step), **step_report(api.user_db, step)}
-                        for step in list_steps(api.user_db, api.factory_db)])
-                mark = re.fullmatch(r"/api/steps/([\w.-]+)/([\w.-]+)/(reject|restore)", path)
-                if mark and method == "POST":
-                    if find_step(api.user_db, api.factory_db, mark[1], mark[2]) is None:
+                    steps = list_steps(api.user_db, api.factory_db)
+                    return self._send(200, [{**_step_view(step), **report} for step, report in
+                                            zip(steps, step_reports(api.user_db, steps), strict=True)])
+                mark = re.fullmatch(r"/api/steps/([^/]+)/([^/]+)/(reject|restore)", path)
+                if mark and method == "POST":  # a step name is free text: the browser sends it percent-encoded
+                    app, name = urllib.parse.unquote(mark[1]), urllib.parse.unquote(mark[2])
+                    if find_step(api.user_db, api.factory_db, app, name) is None:
                         return self._send(404, {"error": "no such step"})
-                    (reject_step if mark[3] == "reject" else restore_step)(api.user_db, mark[1], mark[2])
-                    return self._send(200, {"step": mark[2], "action": mark[3]})
+                    (reject_step if mark[3] == "reject" else restore_step)(api.user_db, app, name)
+                    return self._send(200, {"step": name, "action": mark[3]})
                 if path == "/api/consents" and method == "GET":
                     return self._send(200, [asdict(consent) for consent in consents(api.user_db)])
                 if path == "/api/consents" and method == "DELETE":  # revoke only: granting happens at teaching time
@@ -319,6 +375,10 @@ class ApiServer:
                         return self._send(409, {"error": "this run is not running"})
                     emergency_stop()  # one mouse and keyboard: every run stops at once
                     return self._send(202, {"stopping": True})
+                if path == "/api/runs" and method == "GET":
+                    with api._runs_lock:
+                        return self._send(200, [{"run_id": run_id, "flow_id": run["flow_id"]}
+                                                for run_id, run in api._runs.items() if run["status"] == "running"])
                 status_match = re.fullmatch(r"/api/runs/(\w+)", path)
                 if status_match and method == "GET":
                     view = api._run_view(status_match[1])
@@ -337,6 +397,9 @@ class ApiServer:
                     if load_flow(api.user_db, api.factory_db, flow_id) is None:
                         return self._send(404, {"error": "no such flow"})
                     name = f"{flow_id} daily {str(at).replace(':', '')}"
+                    existing = schedule.list_schedules(runner=runner)
+                    if len(existing) >= MAX_SCHEDULES and schedule.full_name(name) not in existing:
+                        return self._send(409, {"error": f"There are already {MAX_SCHEDULES} schedules. Remove one first."})
                     extra = ["--user-db", str(api.user_db)] if api.user_db != default_user_db() else []
                     try:
                         schedule.create_schedule(name, flow_id, app, at, extra, runner=runner)
@@ -379,12 +442,30 @@ class ApiServer:
         return Handler
 
 
-def _safety(user_db: Path, step) -> dict:
-    """What the editor marks on a step: how far it is trusted, whether its app is private, whether consent is given."""
-    sensitive = effective_sensitivity(step) is not None
-    return {"state": step_report(user_db, step)["state"], "private": is_private(user_db, step.app),
-            "adapted_from": adapted_from(user_db, step.app, step.name),
-            "consent": ("given" if is_permitted(user_db, step) else "missing") if sensitive else "none"}
+class _Body(dict):
+    """A request body: only a field the request itself lacks is the caller's mistake."""
+
+    def __missing__(self, key):
+        raise ValueError(f"the request is missing '{key}'")
+
+
+def _finite(text: str) -> float:
+    number = float(text)
+    if not math.isfinite(number):
+        raise ValueError("numbers must be finite")
+    return number
+
+
+def _safety(user_db: Path, steps: list) -> list[dict]:
+    """What the editor marks on each step: how far it is trusted, whether its app is private, whether consent is given."""
+    private, adapted, granted = private_apps(user_db), adaptations(user_db), consents(user_db)
+    marks = []
+    for step, report in zip(steps, step_reports(user_db, steps), strict=True):
+        sensitive = effective_sensitivity(step) is not None
+        marks.append({"state": report["state"], "private": is_private(user_db, step.app, private),
+                      "adapted_from": adapted.get((step.app, step.name)),
+                      "consent": ("given" if covers(granted, step) else "missing") if sensitive else "none"})
+    return marks
 
 
 def _step_view(step) -> dict:

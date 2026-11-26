@@ -30,7 +30,7 @@ def run_checks(data_dir: Path, which: Callable[[str], str | None] = shutil.which
     project = Path(project_dir) if project_dir else Path.cwd()
     data_dir = Path(data_dir)
     return [
-        _check("agent-desktop", "agent-desktop", "It is how the apprentice sees and acts on apps.",
+        _check("agent-desktop", "Desktop control (agent-desktop)", "It is how the apprentice sees and acts on apps.",
                bool(which("agent-desktop")), "Install it with npm: npm install -g agent-desktop"),
         _check("claude-code", "Claude Code", "Teaching happens in a chat with an agent in Claude Code. Running flows does not need it.",
                bool(which("claude")), "Install Claude Code from claude.com/claude-code, then open it in this folder."),

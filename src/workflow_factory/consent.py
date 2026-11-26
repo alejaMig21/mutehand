@@ -73,14 +73,14 @@ def consents(user_db: Path) -> list[Consent]:
         return [Consent(*row) for row in db.execute("SELECT app, control, action FROM consents")]
 
 
+def covers(granted: list[Consent], step: Step) -> bool:
+    """True when one of these consents is for this step's app, control (or any) and action."""
+    scope = scope_of(step)
+    return any(c.app == scope.app and c.control in (scope.control, "*") and c.action == scope.action for c in granted)
+
+
 def is_permitted(user_db: Path, step: Step) -> bool:
     """No consent record means blocked. Sensitivity is decided here, not trusted from the label."""
     if effective_sensitivity(step) is None and not _reads_private_app(user_db, step):
         return True
-    scope = scope_of(step)
-    with closing(sqlite3.connect(user_db)) as db, db:
-        db.execute(SCHEMA)
-        return db.execute(
-            "SELECT 1 FROM consents WHERE app = ? AND control IN (?, '*') AND action = ?",
-            (scope.app, scope.control, scope.action),
-        ).fetchone() is not None
+    return covers(consents(user_db), step)

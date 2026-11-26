@@ -34,5 +34,5 @@ export function whyNotRunnable(summary, app = 'this app') {
   if (!summary.rejected.length) return ''
   const names = summary.rejected.map((r) => `'${r.step}'`).join(', ')
   const one = summary.rejected.length === 1
-  return `Will not start: ${names} ${one ? 'is' : 'are'} rejected. Restore ${one ? 'it' : 'them'} in the Steps screen.`
+  return `Will not start: ${names} ${one ? 'is' : 'are'} rejected. Open Steps to see why.`
 }

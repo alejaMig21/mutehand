@@ -63,7 +63,8 @@ def test_a_workday_that_stops_exits_one_and_says_what_stopped_and_why(tmp_path):
     report = json.loads(reports(tmp_path)[0].read_text(encoding="utf-8"))
     assert code == EXIT_STOPPED == 1
     assert report["status"] == "stopped" and report["stopped_node"] == "b"
-    assert report["nodes"][1] == {"node_id": "b", "status": "blocked", "reason": "control_not_found", "effect": None}
+    assert report["nodes"][1] == {"node_id": "b", "status": "blocked", "reason": "control_not_found", "effect": None,
+                                  "step": "save-file"}
     assert [(d["node_id"], d["reason"]) for d in report["open_doubts"]] == [("b", "control_not_found")]
 
 

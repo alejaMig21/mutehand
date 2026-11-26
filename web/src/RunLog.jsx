@@ -18,8 +18,8 @@ export default function RunLog({ log, nodes, running, onClose }) {
         <h2>Run log</h2>
         {!running && <button className="icon-button" aria-label="Close the run log" onClick={onClose}><Icon name="close" /></button>}
       </header>
-      <ol>
-        {log.length === 0 && <li className="muted">Starting…</li>}
+      <ol aria-live="polite">
+        {log.length === 0 && <li className="muted">{running ? 'Starting…' : 'No node ran.'}</li>}
         {log.map((event, i) => (
           <li key={i}><time>{event.at}</time> <b>{title(event.node)}</b> {WORDS[event.status] ?? event.status}</li>
         ))}

@@ -52,8 +52,18 @@ export default function NodeCard({ id, data, selected }) {
           <div className="card-sub">{subtitle}</div>
         </div>
       </div>
-      {marksFor(node, meta, runStatus, doubts).map(([glyph, word, tone]) => (
-        <div key={word} className={`card-mark tone-${tone}`}><Icon name={glyph} size={14} /> {word}</div>
+      {marksFor(node, meta, runStatus, doubts).map(([glyph, word, tone]) => (glyph === 'help' && data.onDoubts
+        ? (
+          <button key={word} type="button" className={`card-mark nodrag tone-${tone}`} title="Open the Tutor queue" onClick={data.onDoubts}>
+            <Icon name={glyph} size={14} /> {word}
+          </button>
+        )
+        : (
+          <div key={word} className={`card-mark tone-${tone}`}
+            title={word === 'On trial' ? 'Trusted after it has worked a few times without failing' : undefined}>
+            <Icon name={glyph} size={14} /> {word}
+          </div>
+        )
       ))}
       <Handle type="source" position={Position.Right} />
     </div>

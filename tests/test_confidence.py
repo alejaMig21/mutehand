@@ -1,4 +1,21 @@
-from workflow_factory import Flow, Node, Status, answer_doubt, restore_step, run_flow, save_step
+import sqlite3
+from contextlib import closing
+
+import pytest
+
+from workflow_factory import (
+    Flow,
+    Node,
+    Status,
+    answer_doubt,
+    find_step,
+    list_runs,
+    reject_step,
+    restore_step,
+    run_flow,
+    save_step,
+    step_report,
+)
 
 from fake_desktop import FakeDesktop, button, step
 
@@ -77,3 +94,53 @@ def test_a_factory_step_rejected_by_its_shipped_counters_can_be_restored_by_a_hu
 
     assert blocked.blocked == {"n1": "rejected"}
     assert [c.name for c in desktop.clicks] == ["Menu"]
+
+
+def report(user_db, name="open-menu"):
+    return step_report(user_db, find_step(user_db, None, "paint.exe", name))
+
+
+def test_a_rejected_step_remembers_why_until_a_person_restores_it(tmp_path):
+    user_db = tmp_path / "user.db"
+    save_step(user_db, step("open-menu", "Menu", effect="revealed"))
+
+    result = run_flow(FLOW, desktop=failing_desktop(), user_db=user_db)
+
+    why = report(user_db)["why"]
+    assert (why["kind"], why["expected"], why["got"]) == ("different_effect", "revealed", "no_change") and why["at"]
+    assert result.stopped is None  # the node itself finished: the history has to say what went wrong
+    (run,) = list_runs(user_db)
+    assert run["nodes"][0]["status"] == "done" and run["nodes"][0]["reason"] == "effect_mismatch"
+
+    restore_step(user_db, "paint.exe", "open-menu")
+    assert report(user_db)["why"] is None
+    reject_step(user_db, "paint.exe", "open-menu")
+    assert report(user_db)["why"] == {"kind": "person"}
+
+
+def test_a_database_from_before_reasons_were_kept_still_opens(tmp_path):
+    user_db = tmp_path / "user.db"
+    save_step(user_db, step("open-menu", "Menu"))
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute("CREATE TABLE step_state (app TEXT NOT NULL, name TEXT NOT NULL, local_successes INTEGER NOT NULL DEFAULT 0,"
+                   " local_failures INTEGER NOT NULL DEFAULT 0, rejected INTEGER NOT NULL DEFAULT 0,"
+                   " restored INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (app, name))")
+        db.execute("INSERT INTO step_state (app, name, local_failures, rejected) VALUES ('paint.exe', 'open-menu', 1, 1)")
+
+    assert report(user_db) == {"state": "rejected", "successes": 0, "failures": 1, "confidence": 0.2, "why": None}
+
+
+@pytest.mark.parametrize(("flow", "node_id"), [
+    (Flow(id="f", nodes=[Node("e", kind="foreach", body="b", fields={"items": {"value": [1]}}), Node("b", "open-menu")]), "b"),
+    (Flow(id="f", nodes=[Node("l", "open-menu", kind="loop", max_iterations=1, max_seconds=60,
+                              stop_after_failures=3)], edges=[]), "l"),
+], ids=["for each", "loop"])
+def test_a_repeated_node_that_changed_the_screen_differently_is_told_in_the_history(tmp_path, flow, node_id):
+    user_db = tmp_path / "user.db"
+    save_step(user_db, step("open-menu", "Menu", effect="revealed"))
+
+    run_flow(flow, desktop=failing_desktop(), user_db=user_db)
+
+    (run,) = list_runs(user_db)
+    node = {n["node_id"]: n for n in run["nodes"]}[node_id]
+    assert (node["status"], node["reason"]) == ("done", "effect_mismatch")

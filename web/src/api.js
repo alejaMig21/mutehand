@@ -10,17 +10,31 @@ function readToken() {
 }
 
 const token = readToken()
+// a new link pasted in the same tab only changes the fragment: load again so it is read
+window.addEventListener('hashchange', () => { if (location.hash.includes('token=')) location.reload() })
 
+export const LOCKED = 'wf-locked' // the event for "this token is no longer accepted"
+export const UNREACHABLE = 'Cannot reach Workflow Factory. Is it still running?'
+
+// An error with a `status` is the server's answer; one without it means no answer arrived.
 export async function api(path, { method = 'GET', body } = {}) {
-  const response = await fetch(path, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  let response
+  try {
+    response = await fetch(path, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    throw new Error(UNREACHABLE)
+  }
   const data = await response.json().catch(() => null)
-  if (!response.ok) throw new Error(data?.error ?? `HTTP ${response.status}`)
+  if (response.status === 401) window.dispatchEvent(new Event(LOCKED))
+  if (!response.ok) throw Object.assign(new Error(data?.error ?? `HTTP ${response.status}`), { status: response.status })
   return data
 }
+
+export const encode = encodeURIComponent

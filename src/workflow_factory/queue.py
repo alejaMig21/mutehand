@@ -47,7 +47,8 @@ CREATE TABLE IF NOT EXISTS run_nodes (  -- what each node did: never any data va
     node_id TEXT NOT NULL,
     status TEXT NOT NULL,  -- done | blocked | skipped
     reason TEXT,
-    effect TEXT
+    effect TEXT,
+    step TEXT  -- the step it ran, so the history still reads after the flow changes
 );
 CREATE INDEX IF NOT EXISTS run_nodes_by_run ON run_nodes (run_id);
 CREATE TABLE IF NOT EXISTS run_locks (  -- which process is running a flow right now
@@ -78,6 +79,8 @@ def _connect(user_db: Path) -> sqlite3.Connection:
     db = sqlite3.connect(user_db)
     migrate_names(db)
     db.executescript(SCHEMA)
+    if "step" not in {row[1] for row in db.execute("PRAGMA table_info(run_nodes)")}:
+        db.execute("ALTER TABLE run_nodes ADD COLUMN step TEXT")
     return db
 
 
@@ -153,8 +156,8 @@ def record_run(user_db: Path, flow_id: str, started_at: str, finished_at: str, s
             "INSERT INTO run_history (flow_id, started_at, finished_at, status, stopped_node)"
             " VALUES (?, ?, ?, ?, ?)", (flow_id, started_at, finished_at, status, stopped_node)).lastrowid
         db.executemany(
-            "INSERT INTO run_nodes VALUES (?, ?, ?, ?, ?)",
-            [(run_id, n["node_id"], n["status"], n.get("reason"), n.get("effect")) for n in nodes])
+            "INSERT INTO run_nodes (run_id, node_id, status, reason, effect, step) VALUES (?, ?, ?, ?, ?, ?)",
+            [(run_id, n["node_id"], n["status"], n.get("reason"), n.get("effect"), n.get("step")) for n in nodes])
         old = "SELECT id FROM run_history ORDER BY id DESC LIMIT -1 OFFSET ?"  # everything after the newest `keep`
         db.execute(f"DELETE FROM run_nodes WHERE run_id IN ({old})", (keep,))
         db.execute(f"DELETE FROM run_history WHERE id IN ({old})", (keep,))
@@ -172,9 +175,9 @@ def list_runs(user_db: Path, flow_id: str | None = None, limit: int = 50) -> lis
                 for row in db.execute(query + " ORDER BY id DESC LIMIT ?", (*args, limit))]
         for run in runs:
             run["nodes"] = [
-                {"node_id": n, "status": o, "reason": r, "effect": e}
-                for n, o, r, e in db.execute(
-                    "SELECT node_id, status, reason, effect FROM run_nodes WHERE run_id = ? ORDER BY rowid",
+                {"node_id": n, "status": o, "reason": r, "effect": e, "step": s}
+                for n, o, r, e, s in db.execute(
+                    "SELECT node_id, status, reason, effect, step FROM run_nodes WHERE run_id = ? ORDER BY rowid",
                     (run["id"],))]
     return runs
 

@@ -21,7 +21,7 @@ A teaching session in which the tutor teaches the apprentice steps and recipes a
 _Avoid_: Skill, macro
 
 **Step**:
-One learned action on one control of an app, with its precondition, the action itself and the effect measured when it was taught. It is a node of a flow and is reusable.
+One learned action on one control of an app, with its precondition, the action itself and the effect measured when it was taught. A step that writes text or selects keeps no effect, so runs neither trust nor reject it. It is a node of a flow and is reusable.
 _Avoid_: Action, task
 
 **Basic operation**:

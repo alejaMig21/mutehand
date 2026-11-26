@@ -67,7 +67,7 @@ def test_a_time_that_is_not_a_clock_time_is_refused(when):
         create_schedule("morning-workday", "morning", "mspaint.exe", daily_at=when, runner=Recorder())
 
 
-@pytest.mark.parametrize("name", ["", "bad/name", "a" * 100, 'x"y'])
+@pytest.mark.parametrize("name", ["", "bad/name", "a" * 121, 'x"y'])
 def test_a_task_name_with_odd_characters_is_refused(name):
     with pytest.raises(ValueError, match="schedule name"):
         create_schedule(name, "morning", "mspaint.exe", daily_at="09:00", runner=Recorder())

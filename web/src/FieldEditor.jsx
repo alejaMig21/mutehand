@@ -3,17 +3,18 @@ import { kindOf, KINDS, parseValue, refKey, showValue } from './bindings.js'
 
 // One field of a node: a fixed value (typed as text, number, true or false, or a list or object) or a reference
 // picked from a list of what other nodes give out. A stored expression is shown as it is and cannot be edited yet.
-export default function FieldEditor({ spec, binding, refs, onChange }) {
+export default function FieldEditor({ spec, binding, draft, refs, onChange, onDraft }) {
   const mode = binding && 'ref' in binding ? 'ref' : binding && 'expression' in binding ? 'expression' : 'value'
   const current = binding && 'value' in binding ? binding.value : undefined
-  const [kind, setKind] = useState(kindOf(current))
-  const [text, setText] = useState(current === undefined ? '' : showValue(current))
-  const [error, setError] = useState('')
+  const [kind, setKind] = useState(draft?.kind ?? kindOf(current))
+  const [text, setText] = useState(draft?.text ?? (current === undefined ? '' : showValue(current)))
+  const error = draft?.error ?? ''
   const id = `field-${spec.name}`
 
   function setValueFrom(nextKind, nextText) {
     const parsed = parseValue(nextKind, nextText)
-    setError(parsed.ok ? '' : parsed.error)
+    // text that is not a value yet is kept as typed: saving waits until it is one
+    onDraft(parsed.ok ? null : { kind: nextKind, text: nextText, error: parsed.error, label: spec.label })
     if (parsed.ok) onChange({ value: parsed.value })
   }
 
@@ -26,8 +27,12 @@ export default function FieldEditor({ spec, binding, refs, onChange }) {
       <div className="field-row">
         <select aria-label={`${spec.label}: where it comes from`} value={mode} data-testid={`mode-${spec.name}`}
           onChange={(e) => {
-            if (e.target.value === 'ref') onChange(refs[0] ? { ref: { node: refs[0].node, field: refs[0].field } } : { value: current })
-            else setValueFrom(kind, text)
+            if (e.target.value !== 'ref') {
+              setValueFrom(kind, text)
+              return
+            }
+            onDraft(null)
+            onChange(refs[0] ? { ref: { node: refs[0].node, field: refs[0].field } } : { value: current })
           }}>
           <option value="value">Fixed value</option>
           <option value="ref" disabled={refs.length === 0}>From another node</option>

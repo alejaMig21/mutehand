@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { api } from './api.js'
+import { api, encode } from './api.js'
 import { fieldsOf, showValue } from './bindings.js'
 import { appLabel, chipFor, systemEntryFor, titleOf } from './catalog.js'
 import FieldEditor from './FieldEditor.jsx'
 import { Icon } from './icons.jsx'
+import { runWords } from './words.js'
 
 const INPUT_TYPES = ['str', 'int', 'float', 'bool']
 const POLICIES = [['stop', 'Stop and ask the tutor'], ['retry', 'Retry'], ['continue', 'Carry on without it']]
 
 // The window over the dimmed canvas: what went in (Data in), the settings, what came out (Data out).
-export default function NodeDetail({ node, meta, refs, data, showValues, onShowValues, onChange, onClose, onDelete, flowId, appName, context, ensureSaved, onTested }) {
+export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, showValues, onShowValues, onChange, onClose, onDelete, flowId, appName, context, ensureSaved, onTested }) {
   const system = node.kind && node.kind !== 'step'
   const entry = system && systemEntryFor(node)
   const chip = !system && meta?.app ? chipFor(meta.app) : null
@@ -23,15 +24,33 @@ export default function NodeDetail({ node, meta, refs, data, showValues, onShowV
 
   useEffect(() => { dialog.current?.focus() }, [])
 
+  // a modal window keeps the keyboard until it is closed
+  function onKeys(event) {
+    if (event.key === 'Escape') {
+      onClose()
+      return
+    }
+    if (event.key !== 'Tab') return
+    const inside = [...dialog.current.querySelectorAll('button, input, select, textarea, [tabindex="0"]')].filter((el) => !el.disabled)
+    const [first, last] = [inside[0], inside[inside.length - 1]]
+    const at = document.activeElement
+    if (event.shiftKey && (at === first || at === dialog.current)) { event.preventDefault(); last.focus() }
+    else if (!event.shiftKey && at === last) { event.preventDefault(); first.focus() }
+  }
+
   async function runTest() {
     setAsking(false)
     setTest({ state: 'running' })
     try {
       const values = JSON.parse(context || '{}')
       await ensureSaved()
-      const { run_id } = await api(`/api/flows/${flowId}/nodes/${node.id}/test`, { method: 'POST', body: { app: appName, context: values } })
+      const { run_id } = await api(`/api/flows/${encode(flowId)}/nodes/${node.id}/test`, { method: 'POST', body: { app: appName, context: values } })
       for (;;) {
-        const view = await api(`/api/runs/${run_id}`)
+        const view = await api(`/api/runs/${run_id}`).catch((e) => {
+          if (e.status) throw e
+          return { status: 'running', lost: true } // a lost request: ask again
+        })
+        if (view.status === 'running') setTest({ state: 'running', lost: view.lost })
         if (view.status !== 'running') {
           setTest({ state: view.status === 'finished' ? 'ok' : 'failed', status: view.status })
           break
@@ -40,7 +59,7 @@ export default function NodeDetail({ node, meta, refs, data, showValues, onShowV
       }
       onTested()
     } catch (e) {
-      setTest({ state: 'failed', status: e.message })
+      setTest({ state: 'failed', error: e.message })
     }
   }
 
@@ -50,7 +69,7 @@ export default function NodeDetail({ node, meta, refs, data, showValues, onShowV
   return (
     <div className="scrim" onClick={onClose}>
       <div className="detail" role="dialog" aria-modal="true" aria-label={`${title} details`} data-testid="detail" tabIndex={-1}
-        ref={dialog} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+        ref={dialog} onClick={(e) => e.stopPropagation()} onKeyDown={onKeys}>
         <header className="detail-head">
           {chip
             ? <span className="chip" style={{ background: chip.colour }} aria-hidden="true">{chip.letter}</span>
@@ -69,6 +88,7 @@ export default function NodeDetail({ node, meta, refs, data, showValues, onShowV
             <h3>Settings</h3>
             {fields.map((spec) => (
               <FieldEditor key={`${node.id}-${spec.name}`} spec={spec} binding={node.fields?.[spec.name]} refs={refs}
+                draft={drafts?.[spec.name]} onDraft={(draft) => onDraft(spec.name, draft)}
                 onChange={(binding) => onChange({ fields: { ...node.fields, [spec.name]: binding } })} />
             ))}
             {fields.length === 0 && system && <p className="empty">Nothing to set on this node.</p>}
@@ -78,7 +98,7 @@ export default function NodeDetail({ node, meta, refs, data, showValues, onShowV
                 <label className="check">
                   <input type="checkbox" data-testid="exclusive" checked={Boolean(node.exclusive_input)}
                     onChange={(e) => onChange({ exclusive_input: e.target.checked })} />
-                  needs the mouse or keyboard
+                  Needs the mouse or keyboard
                 </label>
                 <h4>Typed inputs</h4>
                 {node.inputs.map(([name, type], i) => (
@@ -119,33 +139,33 @@ export default function NodeDetail({ node, meta, refs, data, showValues, onShowV
           </section>
         </div>
 
-        {asking && (
-          <div className="warning" role="alertdialog" aria-label="Before the test" data-testid="test-warning">
-            <p><b>This will use your mouse and keyboard</b> on {meta?.app ? appLabel(meta.app) : 'the app'}. Keep your hands off them until the test ends.</p>
-            <div className="row">
-              <button className="ghost small" onClick={() => setAsking(false)}>Cancel</button>
-              <button className="primary small" data-testid="confirm-test" onClick={runTest}>Start the test</button>
-            </div>
-          </div>
-        )}
-
         <footer className="detail-foot">
           <label className="check">
             <input type="checkbox" data-testid="show-values" checked={showValues} onChange={(e) => onShowValues(e.target.checked)} />
             Show values
           </label>
           <span className="test-result" role="status" data-testid="test-result">
-            {test.state === 'running' && 'Testing…'}
+            {test.state === 'running' && (test.lost ? 'Testing… the editor cannot reach the server, still trying.' : 'Testing…')}
             {test.state === 'ok' && 'Test finished'}
-            {test.state === 'failed' && `Test did not finish: ${test.status}`}
+            {test.state === 'failed' && `Test did not finish: ${test.error ?? runWords(test.status)}`}
           </span>
-          <button className="danger small" data-testid="detail-delete" onClick={onDelete}><Icon name="trash" size={15} /> Delete node</button>
+          <button className="ghost small quiet-danger" data-testid="detail-delete" onClick={onDelete}><Icon name="trash" size={15} /> Delete node</button>
           <button className="primary small" data-testid="test-node" disabled={!testable || test.state === 'running'}
             title={testable ? '' : 'This kind of node is tested by running the flow'}
             onClick={() => (physical ? setAsking(true) : runTest())}>
             <Icon name="flask" size={15} /> Test this node
           </button>
         </footer>
+
+        {asking && (
+          <div className="warning" role="alertdialog" aria-label="Before the test" aria-describedby="test-warning-words" data-testid="test-warning">
+            <p id="test-warning-words"><b>This will use your mouse and keyboard</b> on {meta?.app ? appLabel(meta.app) : 'the app'}. Keep your hands off them until the test ends.</p>
+            <div className="row">
+              <button className="ghost small" onClick={() => { setAsking(false); dialog.current?.focus() }}>Cancel</button>
+              <button className="primary small" data-testid="confirm-test" autoFocus onClick={runTest}>Start the test</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

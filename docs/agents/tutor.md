@@ -53,8 +53,25 @@ A step becomes one node. Name it as the card should read: a verb and what it act
 Some pages cannot be written by accessibility. Two actions put text there with real input, so they take the mouse and keyboard and
 the foreground window: `paste_text` (instant and exact, uses the person's clipboard and puts it back) and `press_keys` (types
 letters, digits, spaces and new lines one key at a time; slow, and the app may change what it receives). Prefer `paste_text` for anything
-longer than a few words. `teach_step` with either action only proves the control can be reached; it pastes and types nothing. A run
+longer than a few words. `teach_step` with either action (and with `type_value`) only proves the control can be reached; it
+clicks, pastes and types nothing. Neither action moves the focus: put a click step on the target before it. A run
 refuses to send keys when the foreground window is not the app and says so with a doubt. Warn the person that these steps take over the keyboard.
+
+## Grids, cells and crowded windows
+
+`type_value` on a cell is refused (`cell_requires_paste_text`): a grid can report the value and stay empty. To write: select the
+cell, then a `paste_text` step. Text with tabs and new lines can fill a block of cells in one paste.
+
+`action="select"` clicks and then presses Escape: the control stays selected and the editor the click opened is closed. Use it
+where a plain click starts editing (a cell in many grids), so a later paste lands on the selection and not inside the editor.
+It takes the keyboard, teaches no effect, and a plain `click` never presses a key. If another window is in front after the
+click, nothing is pressed and nothing is saved (`wrong_window`). A control present in two windows of the app is refused as
+ambiguous: ask the person to close the extra window.
+
+When an app hides controls in dropdown menus that cannot be read, teach with the window large enough to show them as buttons,
+and tell the person the window size is part of the step. When opening a file from an open document adds a second window, open
+it from the app's start screen instead. What you find out about one app belongs in its step names and in what you tell the
+person, never in the engine.
 
 ## Recipes: teach a pattern once, reuse it on another app
 
