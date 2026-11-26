@@ -346,7 +346,7 @@ def test_new_chore_opens_an_empty_flow_screen_under_a_name_of_its_own(tmp_path):
         on_the_flow_screen(page, "My flow 2", 0)
 
 
-def test_unsaved_changes_survive_home_and_are_never_dropped_without_asking(tmp_path):
+def test_changes_survive_home_and_what_cannot_be_kept_is_never_dropped_without_asking(tmp_path):
     chores(tmp_path)
     chore(tmp_path, "weekly", "Weekly export", "open-menu")
     with home(tmp_path) as (page, _):
@@ -359,6 +359,18 @@ def test_unsaved_changes_survive_home_and_are_never_dropped_without_asking(tmp_p
         page.get_by_test_id("open-chore-morning").click()  # the same chore: still as it was left, nothing to ask
         on_the_flow_screen(page, "Morning report", 3)
         assert asked == []
+        page.get_by_test_id("run-status").filter(has_text="Saved").wait_for()  # it was kept by itself
+        page.get_by_test_id("back-home").click()
+        page.get_by_test_id("open-chore-weekly").click()  # kept, so leaving it asks nothing
+        on_the_flow_screen(page, "Weekly export", 1)
+        assert asked == []
+        page.get_by_test_id("back-home").click()
+        page.get_by_test_id("open-chore-morning").click()
+        on_the_flow_screen(page, "Morning report", 3)
+
+        page.get_by_test_id("search").fill("two paths")  # a choice with no yes path cannot be kept yet
+        page.get_by_test_id("system-if").click()
+        page.get_by_test_id("run-status").filter(has_text="Not saved").wait_for()
         page.get_by_test_id("back-home").click()
         for other in ("open-chore-weekly", "new-chore"):
             page.get_by_test_id(other).click()

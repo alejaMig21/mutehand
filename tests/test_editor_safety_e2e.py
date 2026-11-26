@@ -115,46 +115,33 @@ def test_every_button_on_every_screen_can_be_read(app):
     assert unreadable == {}
 
 
-def test_a_new_flow_gets_its_own_name_and_saving_over_a_change_made_elsewhere_asks_first(app):
-    page, folder, _ = app
-    accept = {"now": False}
-    asked = answer_dialogs(page, accept)
+def test_a_new_flow_gets_its_own_name(app):
+    page, _, _ = app
     open_flow(page, "morning")
     page.get_by_test_id("open-flows").click()
     page.get_by_test_id("new-flow").click()
     assert page.get_by_test_id("flow-title").input_value() not in ("morning", "weekly")
 
-    open_flow(page, "weekly")
-    add_wait(page)
-    save_flow(folder / "user.db", Flow(id="weekly", nodes=[Node("n1", "save-file")]))  # another window
-    page.get_by_test_id("save").click()
-    page.wait_for_timeout(600)
-    assert asked and "weekly" in asked[-1] and stored(folder, "weekly") == ["save-file"]
-
-    accept["now"] = True
-    page.get_by_test_id("save").click()
-    wait_status(page, "saved")
-    assert stored(folder, "weekly") == ["open-menu", "Close dialog", "wait"]
-
 
 def test_a_new_flow_named_like_another_destroys_nothing(app):
     page, folder, _ = app
-    add_wait(page)
     page.get_by_test_id("flow-title").fill("morning")
-    page.get_by_test_id("save").click()
+    add_wait(page)
     wait_status(page, "saved")
 
     assert stored(folder, "morning") == ["open-menu", "save-file"] and stored(folder, "morning-2") == ["wait"]
 
 
-def test_unsaved_changes_are_shown_and_never_dropped_without_asking(app):
+def test_a_change_that_cannot_be_kept_is_shown_and_never_dropped_without_asking(app):
     page, folder, _ = app
     accept = {"now": False}
     asked = answer_dialogs(page, accept)
     open_flow(page, "morning")
     wait_status(page, "saved")
-    add_wait(page)
-    wait_status(page, "unsaved changes")
+    assert page.evaluate("() => window.dispatchEvent(new Event('beforeunload', {cancelable: true}))")  # nothing to lose
+    page.get_by_test_id("search").fill("two paths")
+    page.get_by_test_id("system-if").click()  # a choice with no yes path cannot be stored yet
+    wait_status(page, "not saved")
     assert page.evaluate("() => !window.dispatchEvent(new Event('beforeunload', {cancelable: true}))")
 
     page.get_by_test_id("open-flows").click()
@@ -212,21 +199,6 @@ def test_a_run_that_cannot_start_says_why_and_where_to_go(app):
     doubt = page.get_by_test_id("doubt-1")
     doubt.wait_for()
     assert "Close dialog" in doubt.inner_text() and "control_not_found" not in doubt.inner_text()
-
-
-def test_a_value_the_field_cannot_hold_blocks_saving(app):
-    page, folder, _ = app
-    add_wait(page)
-    page.locator('.react-flow__node[data-id="n1"]').dblclick()
-    page.get_by_test_id("value-seconds").fill("2,5")
-    page.get_by_test_id("close-detail").click()
-    page.get_by_test_id("flow-title").fill("waiting")
-    page.get_by_test_id("save").click()
-
-    assert "Seconds to wait" in page.get_by_test_id("error").inner_text()
-    assert load_flow(folder / "user.db", None, "waiting") is None
-    page.locator('.react-flow__node[data-id="n1"]').dblclick()
-    assert page.get_by_test_id("value-seconds").input_value() == "2,5"  # what was typed is still there to fix
 
 
 def test_the_editor_notices_what_changed_on_the_other_screens(app):
@@ -302,6 +274,7 @@ def test_a_screen_that_could_not_load_never_claims_there_is_nothing(app):
 
 def test_a_flow_is_built_and_its_node_opened_with_the_keyboard_alone(app):
     page, folder, _ = app
+    page.get_by_test_id("flow-title").fill("by-keys")
     for entry in ("palette-open-menu", "palette-save-file"):
         page.get_by_test_id(entry).press("Enter")
     page.locator('.react-flow__node[data-id="n1"]').press("Space")  # select it
@@ -325,8 +298,6 @@ def test_a_flow_is_built_and_its_node_opened_with_the_keyboard_alone(app):
     page.get_by_test_id("open-flows").press("Enter")
     page.keyboard.press("Escape")
     assert page.get_by_test_id("new-flow").count() == 0
-    page.get_by_test_id("flow-title").fill("by-keys")
-    page.get_by_test_id("save").press("Enter")
     wait_status(page, "saved")
     assert load_flow(folder / "user.db", None, "by-keys").edges == [("n1", "n2")]
 
@@ -337,7 +308,7 @@ def test_at_double_zoom_the_main_actions_stay_on_screen_and_the_canvas_is_not_co
     page.reload()
     page.get_by_test_id("search").wait_for()
     assert page.locator(".canvas").bounding_box()["height"] >= 220  # the boxes to add go under it, not over it
-    for test_id in ("save", "run", "tab-checks", "quit"):
+    for test_id in ("undo", "run", "tab-checks", "quit"):
         box = page.get_by_test_id(test_id).bounding_box()
         assert box["x"] >= 0 and box["x"] + box["width"] <= 683, test_id
     assert page.evaluate("() => document.querySelector('main').scrollWidth <= 683")
@@ -401,6 +372,7 @@ def remove_the_wires_of(page, node_id):
 
 def test_nodes_nobody_wired_are_pointed_out_and_can_be_chained_in_one_press(app):
     page, folder, _ = app
+    page.get_by_test_id("flow-title").fill("chained")
     for entry in ("palette-open-menu", "palette-save-file", "palette-Close dialog"):
         page.get_by_test_id(entry).click()
     assert page.get_by_test_id("unwired").count() == 0  # new boxes join by themselves
@@ -410,8 +382,6 @@ def test_nodes_nobody_wired_are_pointed_out_and_can_be_chained_in_one_press(app)
     notice.filter(has_text="at the same time").wait_for()
     notice.get_by_role("button", name="Connect them in order").click()
     assert page.get_by_test_id("unwired").count() == 0
-    page.get_by_test_id("flow-title").fill("chained")
-    page.get_by_test_id("save").click()
     wait_status(page, "saved")
 
     assert load_flow(folder / "user.db", None, "chained").edges == [("n1", "n2"), ("n2", "n3")]

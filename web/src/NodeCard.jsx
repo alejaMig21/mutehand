@@ -41,6 +41,7 @@ export default function NodeCard({ id, data, selected }) {
   const marks = marksFor(node, meta, runStatus, doubts)
   const daily = node.kind === 'trigger' && node.fields?.mode?.value === 'daily'
   if (daily && !data.scheduled) marks.push(['alert', 'Not set up in Windows yet', 'warn'])
+  if (Object.values(data.drafts ?? {}).some(Boolean)) marks.push(['alert', 'Not saved: a value is not valid yet', 'bad'])
   return (
     <div className={`card${selected ? ' selected' : ''}`} data-testid={`node-${id}`}>
       <Handle type="target" position={Position.Top} />

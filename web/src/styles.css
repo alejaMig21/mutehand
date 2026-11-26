@@ -97,6 +97,7 @@ td small { display: block; }
 /* editor */
 .editor { display: flex; flex-direction: column; height: 100%; }
 .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; background: var(--ground); border-bottom: 1px solid var(--line); }
+.topbar button { min-height: 44px; }
 .flow-name { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-weight: 700; font-size: 16px; width: 280px; }
 .flow-name:hover, .flow-name:focus { border-color: var(--muted); }
 .spacer { flex: 1; }
@@ -104,14 +105,14 @@ td small { display: block; }
 .pill-saved, .pill-finished { color: var(--ok); }
 .pill-running { color: var(--info); }
 .pill-stopped, .pill-error { color: var(--bad); }
-.pill-emergency, .pill-unsaved { color: var(--warn); }
+.pill-emergency, .pill-problem, .pill-conflict, .pill-template { color: var(--warn); }
+.pill-saving { color: var(--muted); }
 .pill-draft { color: var(--muted); }
 .pill-none, .pill-waiting { color: var(--muted); }
 .primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700; }
 .danger { background: var(--bad); border-color: var(--bad); color: var(--on-bad); font-weight: 700; }
 .primary:hover:not(:disabled), .danger:hover:not(:disabled) { filter: brightness(1.1); }
 .quiet-danger { color: var(--bad); }
-.wants-save { border-color: var(--warn); }
 .small { padding: 5px 10px; font-size: 13px; }
 .icon-button { flex: none; width: 32px; height: 32px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); }
 .icon-button:hover:not(:disabled) { color: var(--ink); background: var(--sunk); }
@@ -263,6 +264,7 @@ input[type="number"] { width: 70px; }
 .summary { display: flex; gap: 14px; margin: 0; padding: 0; list-style: none; font-size: 13px; font-weight: 600; }
 .summary li { display: flex; align-items: center; gap: 5px; }
 .notice { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 16px; background: var(--sunk); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.notice button { min-height: 44px; }
 .notice-stopped, .notice-error { border-left: 4px solid var(--bad); }
 .notice-waiting, .notice-emergency, .notice-busy { border-left: 4px solid var(--warn); }
 .run-log { flex: none; max-height: 30%; overflow: auto; padding: 8px 20px 12px; background: var(--surface); border-top: 1px solid var(--line); }

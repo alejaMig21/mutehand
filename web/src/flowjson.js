@@ -227,6 +227,16 @@ export function toFlowJson(nodes, edges) {
   }
 }
 
+// What keeps stored nodes (as toFlowJson gives them) from being kept yet, in words; '' when nothing does. The server refuses a
+// choice with no yes path and a repeat with nothing to repeat, and a box added a moment ago is exactly that.
+export function unfinished(stored) {
+  for (const node of stored) {
+    if (node.kind === 'if' && !node.then) return 'A two-paths box needs a line to its yes path.'
+    if (node.kind === 'foreach' && !node.body) return 'A repeat box needs the action it repeats: connect it to one.'
+  }
+  return ''
+}
+
 // What the API stores -> the graph the editor edits. `lookup(step)` may give extra facts about a step (app, sensitive).
 export function fromFlowJson(flow, lookup = () => ({})) {
   const owned = new Set(flow.nodes.filter((n) => n.kind === 'foreach' && n.body).map((n) => n.body))

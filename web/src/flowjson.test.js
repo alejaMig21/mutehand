@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { autoLayout, boxNumbers, chainLoose, fromFlowJson, joinBoxes, looseNodes, nextNodeId, toFlowJson, withBranch } from './flowjson.js'
+import { autoLayout, boxNumbers, chainLoose, fromFlowJson, joinBoxes, looseNodes, nextNodeId, toFlowJson, unfinished, withBranch } from './flowjson.js'
 
 test('a flow survives the trip from API JSON to the canvas and back', () => {
   const flow = {
@@ -249,4 +249,10 @@ test('boxes are numbered in the order they are read, and the start box is not co
   const canvas = built(['t', 'trigger'], ['a'], ['d', 'if'], ['y'], ['n', 'step', { after: 'd' }])
 
   assert.deepEqual(boxNumbers(canvas.nodes, canvas.edges), { a: 1, d: 2, y: 3, n: 4 })
+})
+
+test('a choice with no yes path and a repeat with nothing to repeat cannot be kept yet', () => {
+  assert.match(unfinished([{ id: 'a', kind: 'if', then: null }]), /yes/)
+  assert.match(unfinished([{ id: 'a', kind: 'foreach', body: null }]), /repeats/)
+  assert.equal(unfinished([{ id: 'a', kind: 'if', then: 'b' }, { id: 'b', kind: 'foreach', body: 'c' }, { id: 'c', step: 'x' }]), '')
 })

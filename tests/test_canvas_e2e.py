@@ -15,6 +15,7 @@ from test_editor_e2e import DIST, open_page
 
 from workflow_factory import Flow, Node, load_flow, save_flow, save_step
 from workflow_factory.api import ApiServer
+from workflow_factory.flows import flow_summaries
 
 from fake_desktop import FakeDesktop, button, step
 
@@ -64,7 +65,6 @@ def open_flow(page, flow_id, last):
 
 
 def save(page):
-    page.get_by_test_id("save").click()
     page.get_by_test_id("run-status").filter(has_text=re.compile("^Saved$")).wait_for()
 
 
@@ -132,8 +132,13 @@ def choose(page, node_id):
     node(page, node_id).click()
 
 
-def stored_wires(db, name="made"):
-    return lines(load_flow(db, None, name))
+def only(db):
+    """The one chore a test built: it is kept under the name it had when its first box was added."""
+    return next(f["id"] for f in flow_summaries(db, None))
+
+
+def stored_wires(db, name=None):
+    return lines(load_flow(db, None, name or only(db)))
 
 
 def save_as(page, title="made"):
@@ -168,7 +173,7 @@ def test_the_two_paths_of_a_decision_are_labelled_and_filled_by_adding_boxes(tmp
         assert middle(page, "n3")[0] < middle(page, "n2")[0] < middle(page, "n4")[0]
         save_as(page)
 
-        decision = load_flow(db, None, "made").nodes[1]
+        decision = load_flow(db, None, only(db)).nodes[1]
         assert (decision.then, decision.otherwise) == ("n3", "n4")
 
 
@@ -196,7 +201,7 @@ def test_a_repeat_takes_the_next_action_and_a_start_box_leads_to_the_first_one(t
         assert node(page, "n4").bounding_box()["y"] < node(page, "n1").bounding_box()["y"]
         save_as(page)
 
-        flow = load_flow(db, None, "made")
+        flow = load_flow(db, None, only(db))
         assert flow.nodes[0].body == "n2" and sorted(flow.edges) == [("n1", "n3"), ("n4", "n1")]
 
 

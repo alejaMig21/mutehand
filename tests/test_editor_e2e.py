@@ -60,6 +60,7 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
     server, tmp_path = editor
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
+        page.get_by_test_id("flow-title").fill("e2e-flow")  # a chore is kept as soon as it has a box, under its name then
 
         # palette: steps from the user and factory layers
         for name in ("open-menu", "save-file", "factory-only"):
@@ -76,8 +77,6 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
         page.get_by_test_id("open-detail").click()
         page.get_by_test_id("add-input").click()
         page.get_by_test_id("close-detail").click()
-        page.get_by_test_id("flow-title").fill("e2e-flow")
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
 
         saved = load_flow(tmp_path / "user.db", None, "e2e-flow")
@@ -121,7 +120,6 @@ def test_a_loaded_flow_keeps_unique_node_ids_and_drops_the_previous_run_colours(
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         page.get_by_test_id("palette-open-menu").click()  # n1 on a fresh canvas
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
         page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run").click()
@@ -291,6 +289,7 @@ def test_system_nodes_and_steps_are_added_wired_deleted_saved_and_reopened(edito
     server, tmp_path = editor
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
+        page.get_by_test_id("flow-title").fill("built")
         page.get_by_text("Other boxes").click()
         page.get_by_test_id("system-manual-trigger").click()  # n1
         page.get_by_test_id("palette-open-menu").click()  # n2
@@ -304,8 +303,6 @@ def test_system_nodes_and_steps_are_added_wired_deleted_saved_and_reopened(edito
         page.locator('.react-flow__node[data-id="n3"]').click()
         page.get_by_test_id("delete-node").click()
         assert page.locator('.react-flow__node[data-id="n3"]').count() == 0
-        page.get_by_test_id("flow-title").fill("built")
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
 
         saved = load_flow(tmp_path / "user.db", None, "built")
@@ -353,6 +350,7 @@ def test_a_flow_with_an_if_and_a_for_each_keeps_what_the_wires_mean_after_saving
     server, tmp_path = editor
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
+        page.get_by_test_id("flow-title").fill("looped")
         page.get_by_test_id("system-foreach").click()  # n1
         page.get_by_test_id("palette-open-menu").click()  # n2: the body
         page.get_by_test_id("palette-save-file").click()  # n3: after the loop
@@ -360,8 +358,6 @@ def test_a_flow_with_an_if_and_a_for_each_keeps_what_the_wires_mean_after_saving
         for a, b in (("n1", "n2"), ("n1", "n3")):
             drag_between(page, page.locator(f'.react-flow__node[data-id="{a}"] .react-flow__handle.source'),
                          page.locator(f'.react-flow__node[data-id="{b}"] .react-flow__handle.target'))
-        page.get_by_test_id("flow-title").fill("looped")
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
 
         saved = load_flow(tmp_path / "user.db", None, "looped")
@@ -376,7 +372,8 @@ def test_nothing_in_the_editor_starts_a_lesson(editor):
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         sent = []
-        page.on("request", lambda request: sent.append(request.method))
+        # the chore itself is kept by itself once it has a box: that is the only thing the editor may write
+        page.on("request", lambda request: sent.append(request.method) if "/api/flows" not in request.url else None)
         page.get_by_test_id("palette-open-menu").click()
         page.get_by_test_id("open-flows").click()
         page.locator(".react-flow__node").first.click()
@@ -469,7 +466,6 @@ def test_a_field_is_edited_as_a_fixed_value_or_as_a_reference_and_the_node_is_te
         detail.get_by_text("15").first.wait_for()
 
         detail.get_by_test_id("close-detail").click()
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
         saved = load_flow(tmp_path / "user.db", None, "datas")
         math = next(n for n in saved.nodes if n.id == "m")
@@ -509,7 +505,6 @@ def test_a_node_takes_a_failure_policy_in_its_settings(editor):
         page.get_by_test_id("on-failure").select_option("retry")
         page.get_by_test_id("retries").fill("4")
         page.get_by_test_id("close-detail").click()
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
         node = next(n for n in load_flow(tmp_path / "user.db", None, "datas").nodes if n.id == "p")
         assert (node.on_failure, node.retries) == ("retry", 4)

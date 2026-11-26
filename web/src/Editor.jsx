@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Panel, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
 import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
-import { boxNumbers, chainLoose, fromFlowJson, joinBoxes, looseNodes, nextNodeId, toFlowJson, withBranch } from './flowjson.js'
+import { boxNumbers, chainLoose, fromFlowJson, joinBoxes, looseNodes, nextNodeId, toFlowJson, unfinished, withBranch } from './flowjson.js'
 import { changeDaily, DailyForm } from './Daily.jsx'
 import { Icon } from './icons.jsx'
 import { refOptions } from './bindings.js'
@@ -46,7 +46,6 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   const [flows, setFlows] = useState([])
   const [flowId, setFlowId] = useState(null) // null: a new flow, which gets its identifier when it is first saved
   const [title, setTitle] = useState(FIRST_TITLE)
-  const [revision, setRevision] = useState(null) // of the stored flow on screen, as it was read
   const [saved, setSaved] = useState({ json: EMPTY_FLOW, title: FIRST_TITLE, app: '' })
   const [appName, setAppName] = useState('')
   const [context, setContext] = useState('{}')
@@ -68,18 +67,33 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   const [settingDaily, setSettingDaily] = useState(false)
   const [focusStart, setFocusStart] = useState(0)
   const [framed, setFramed] = useState(false) // a stored flow is fitted to the window; a drawn one stays where it is put
-  const busy = useRef({ saving: false, starting: false, ticket: 0, named: false })
+  const [problem, setProblem] = useState('') // what the server said when it would not keep the flow
+  const [conflict, setConflict] = useState('') // the flow was changed somewhere else: the person chooses
+  const [retry, setRetry] = useState(0)
+  const [undoable, setUndoable] = useState(0) // how many changes can be taken back
+  const [removed, setRemoved] = useState('') // the box just removed, for the notice that offers Undo
+  const busy = useRef({ starting: false, ticket: 0, named: false })
+  const stored = useRef({ id: null, revision: null }) // the flow on screen as the server last had it: saves carry it forward
+  const queue = useRef(Promise.resolve()) // one save at a time, each on top of the last
+  const history = useRef({ past: [], key: '', at: 0 })
+  const now = useRef({ nodes: [], edges: [] })
   const { runs, offline, settled, follow, attach, forget, patch } = following
 
+  now.current = { nodes, edges }
   const body = useMemo(() => toFlowJson(nodes, edges), [nodes, edges])
   const invalid = useMemo(() => nodes.flatMap((n) => Object.values(n.data.drafts ?? {}).filter(Boolean)
     .map((draft) => ({ ...draft, node: titleOf(n.data.node) }))), [nodes])
   const isStored = flowId !== null
+  const template = flows.some((f) => f.id === flowId && f.origin === 'factory') // read-only: a copy is what is edited
   const apps = useMemo(() => [...new Set(steps.map((s) => s.app))], [steps])
   const runsOn = taughtApp(appName, apps)
   // choosing an app on a new flow is not work to lose; on a stored one it is a change to keep
   const dirty = JSON.stringify(body) !== saved.json || title !== saved.title || invalid.length > 0
     || (isStored && runsOn !== taughtApp(saved.app, apps)) // both as taught: the steps may arrive after the flow
+  // changes the server has not got: a chore with no box yet is not stored, so its name alone is nothing to lose
+  const unkept = dirty && (isStored || nodes.length > 0)
+  // what keeps the flow from being stored, in the person's words (the box says it too)
+  const held = invalid.length ? `Fix “${invalid[0].label}” in ${invalid[0].node}: ${invalid[0].error}.` : unfinished(body.nodes)
 
   const refresh = useCallback(() => {
     const fail = (e) => setError(e.message)
@@ -108,13 +122,22 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
     return () => window.removeEventListener('focus', refresh)
   }, [active, settled, tested, refresh])
 
-  useEffect(() => { onUnsaved(dirty) }, [dirty, onUnsaved])
+  useEffect(() => { onUnsaved(unkept) }, [unkept, onUnsaved])
   useEffect(() => {
-    if (!dirty) return undefined
+    if (!unkept) return undefined
     const warn = (event) => { event.preventDefault(); event.returnValue = '' }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty])
+  }, [unkept])
+
+  // Every change is kept a moment after it is made: no button. Held back while the flow cannot be stored, while it was
+  // changed somewhere else (the person chooses first) and for a read-only template.
+  useEffect(() => {
+    if (!unkept || held || conflict || opening || template) return undefined
+    setProblem('')
+    const timer = setTimeout(() => save(), 400)
+    return () => clearTimeout(timer)
+  }, [unkept, held, conflict, opening, template, body, title, runsOn, retry]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { // popovers close with Escape or a click elsewhere
     if (!menu) return undefined
@@ -148,17 +171,59 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
     if (nodes.length === 0 && flows.some((f) => f.id === last)) show(last).catch((e) => setError(e.message))
   }, [steps, flows]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Undo: the canvas as it was before each change, newest last. A change made again and again (typing in one field) is one step.
+  const record = (key = '') => {
+    const h = history.current
+    setRemoved('')
+    if (key && key === h.key && Date.now() - h.at < 1000) { h.at = Date.now(); return }
+    h.past.push(now.current)
+    if (h.past.length > 100) h.past.shift()
+    Object.assign(h, { key, at: Date.now() })
+    setUndoable(h.past.length)
+  }
+  const clearHistory = () => { history.current = { past: [], key: '', at: 0 }; setUndoable(0); setRemoved('') }
+  function undo() {
+    const h = history.current
+    const shown = JSON.stringify(toFlowJson(now.current.nodes, now.current.edges))
+    let back
+    do back = h.past.pop(); while (back && JSON.stringify(toFlowJson(back.nodes, back.edges)) === shown) // a step that changed nothing is skipped
+    h.key = ''
+    setUndoable(h.past.length)
+    setRemoved('')
+    if (!back) return
+    setNodes(back.nodes.map((n) => ({ ...n, selected: false })))
+    setEdges(back.edges)
+    setSelectedId(null)
+    say('Undone')
+  }
+  useEffect(() => { // Ctrl+Z outside a text field; inside one, the field's own undo is the person's
+    if (!active) return undefined
+    const key = (event) => {
+      if (!(event.ctrlKey || event.metaKey) || event.shiftKey || event.key.toLowerCase() !== 'z') return
+      if (event.target.closest?.('input, textarea, select, [contenteditable], [role=dialog]')) return
+      event.preventDefault()
+      undo()
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [active]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const onConnect = useCallback((connection) => {
     if (edges.some((e) => e.source === connection.source && e.target === connection.target)) return
     const wire = withBranch(nodes, edges, connection)
-    if (wire) setEdges([...edges, wire])
+    if (wire) { record(); setEdges([...edges, wire]) }
     else setError('Those two cannot be joined: a decision has only two paths, yes and no, and a repeated box takes no lines of its own.')
-  }, [nodes, edges, setEdges])
+  }, [nodes, edges, setEdges]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const changeNodes = useCallback((changes) => { // selecting with the keyboard is selecting too
     onNodesChange(changes)
     for (const change of changes) {
-      if (change.type === 'remove') { say('Node deleted'); focusSoon('search') }
+      if (change.type === 'remove') {
+        const gone = now.current.nodes.find((n) => n.id === change.id)
+        say('Node deleted. Undo is in the top bar.')
+        if (gone) setRemoved(titleOf(gone.data.node))
+        focusSoon('search')
+      }
       if (change.type !== 'select') continue
       if (change.selected) setSelectedId(change.id)
       else setSelectedId((current) => (current === change.id ? null : current))
@@ -173,6 +238,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   // New boxes join after the chosen box, or after the last one. With a box chosen the new one takes its place as the
   // chosen one, so the next goes after it: the order is the order of the presses. A dropped box stays where it fell.
   const join = (added, dropped) => {
+    record()
     const joined = joinBoxes(nodes, edges, added, { after: selectedId, at: dropped })
     const chosen = nodes.some((n) => n.id === selectedId) ? added[added.length - 1].id : null
     setNodes(joined.nodes.map((n) => ({ ...n, selected: n.id === chosen })))
@@ -221,19 +287,33 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   const addSystem = (entry) => addNode(structuredClone(entry.node))
 
   const updateNode = (id, change) => setNodes((current) => current.map((n) => (n.id === id ? { ...n, data: change(n.data) } : n)))
-  const updateSelected = (change) => updateNode(selectedId, (data) => ({ ...data, node: { ...data.node, ...change } }))
+  const updateSelected = (change) => { record(`settings:${selectedId}`); updateNode(selectedId, (data) => ({ ...data, node: { ...data.node, ...change } })) }
   const draftSelected = (field, draft) => updateNode(selectedId, (data) => ({ ...data, drafts: { ...data.drafts, [field]: draft } }))
 
   function deleteSelected() {
     const gone = nodes.find((n) => n.id === selectedId)
-    if (gone) say(`Deleted ${titleOf(gone.data.node)}`)
+    record()
+    if (gone) { say(`Deleted ${titleOf(gone.data.node)}. Undo is in the top bar.`); setRemoved(titleOf(gone.data.node)) }
     focusSoon('search')
     setNodes((current) => current.filter((n) => n.id !== selectedId))
     setEdges((current) => current.filter((e) => e.source !== selectedId && e.target !== selectedId))
     setSelectedId(null)
   }
 
-  const mayLeave = () => !dirty || window.confirm(`“${title.trim() || saved.title}” has changes that are not saved. Discard them?`)
+  // Changes that can be kept are kept by themselves: only what cannot be kept asks before it goes.
+  const mayLeave = () => {
+    if (!unkept) return true
+    if (!held && !conflict && !template && !problem) { save(); return true }
+    return window.confirm(`“${title.trim() || saved.title}” has changes that are not saved. Discard them?`)
+  }
+
+  // what the server has of the flow on screen: what the next save is built on; a new flow or another one starts clean
+  function keep(id, revision) {
+    stored.current = { id, revision }
+    setProblem('')
+    setConflict('')
+    clearHistory()
+  }
 
   // Put a stored flow on the canvas. Only the latest request wins.
   async function show(id) {
@@ -241,19 +321,19 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
     setOpening(true)
     try {
       const time = await api(`${flowUrl(id)}/daily`).catch(() => null) // reading it brings an older schedule onto the first box
-      const stored = await api(flowUrl(id))
+      const read = await api(flowUrl(id))
       if (ticket !== busy.current.ticket) return
       setDaily(time)
       setSettingDaily(false)
-      const loaded = fromFlowJson(stored)
+      const loaded = fromFlowJson(read)
       setNodes(loaded.nodes)
       setEdges(loaded.edges)
       setFlowId(id)
-      setRevision(stored.revision)
-      setTitle(stored.title)
-      if (stored.app) setAppName(stored.app)
-      setSaved({ json: JSON.stringify(toFlowJson(loaded.nodes, loaded.edges)), title: stored.title,
-        app: stored.app || runsOn })
+      keep(id, read.revision)
+      setTitle(read.title)
+      if (read.app) setAppName(read.app)
+      setSaved({ json: JSON.stringify(toFlowJson(loaded.nodes, loaded.edges)), title: read.title,
+        app: read.app || runsOn })
       setSelectedId(null)
       setNodeData({})
       if (id !== flowId) setContext('{}') // starting values belong to one flow
@@ -288,7 +368,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
     setEdges([])
     const fresh = freshTitle(flows)
     setFlowId(null)
-    setRevision(null)
+    keep(null, null)
     setDaily(null)
     setSettingDaily(false)
     setTitle(fresh)
@@ -312,7 +392,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
       return shown
     },
     open(id) {
-      if (id !== flowId || !dirty) { // the flow on screen with unsaved changes is shown as it was left
+      if (id !== flowId || !unkept) { // the flow on screen with changes not kept is shown as it was left
         if (!mayLeave()) return false
         load(id)
       }
@@ -337,45 +417,62 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
     }
   }
 
-  // Save what is on screen. A new flow is created beside the others, whatever it is called; a stored one changed
-  // somewhere else is never replaced without asking. The flow's identifier when stored, else null.
-  async function save() {
-    setError('')
-    if (invalid.length) {
-      setError(`Fix “${invalid[0].label}” in ${invalid[0].node} before saving: ${invalid[0].error}.`)
-      return null
+  // Keep what is on screen, one save after another, each carrying the revision the last one got. A new flow is created
+  // beside the others, whatever it is called; a stored one changed somewhere else is never replaced unless the person says so
+  // (`force`). The flow's identifier when stored, else null.
+  function save(force = false) {
+    if (template) {
+      setError('This is a template, so it is not changed. Use “Duplicate to edit”, then change the copy.')
+      return Promise.resolve(null)
     }
-    if (busy.current.saving) return null
-    busy.current.saving = true
-    const ticket = busy.current.ticket
-    const sent = toFlowJson(nodes, edges)
-    const flow = { ...sent, title, app: runsOn }
-    const put = (extra) => api(flowUrl(flowId), { method: 'PUT', body: { ...flow, ...extra } })
+    if (held) {
+      setError(`${held} Nothing was kept since.`)
+      return Promise.resolve(null)
+    }
+    const snap = { nodes, edges, title, app: runsOn, ticket: busy.current.ticket, was: { ...stored.current } }
+    const done = queue.current.then(() => store(snap, force))
+    queue.current = done
+    return done
+  }
+
+  async function store(snap, force) {
+    const here = () => snap.ticket === busy.current.ticket // false: another flow is on the screen by now
+    const was = here() ? stored.current : snap.was
+    const sent = toFlowJson(snap.nodes, snap.edges)
+    const flow = { ...sent, title: snap.title, app: snap.app }
     try {
-      let stored
+      let kept
       try {
-        stored = isStored ? await put({ base: revision }) : await api('/api/flows', { method: 'POST', body: flow })
+        kept = was.id
+          ? await api(flowUrl(was.id), { method: 'PUT', body: force ? flow : { ...flow, base: was.revision } })
+          : await api('/api/flows', { method: 'POST', body: flow })
       } catch (e) {
-        if (e.status !== 409) throw e
-        if (!window.confirm(`${e.message}. Replace it with what is on the screen?`)) return null
-        stored = await put({})
+        if (e.status !== 409 || !was.id) throw e
+        if (here()) setConflict(e.message)
+        return null
       }
       refresh()
-      if (ticket !== busy.current.ticket) return null // another flow is on the screen by now
-      setFlowId(stored.id)
-      setRevision(stored.revision)
-      setSaved({ json: JSON.stringify(sent), title: stored.title, app: runsOn })
-      setTitle((current) => (current === title ? stored.title : current))
-      patch(stored.id, { acknowledged: true }) // the badge now speaks about the save, not the last run
-      sessionStorage.setItem('wf-flow', stored.id)
-      return stored.id
+      if (!here()) return kept.id
+      stored.current = { id: kept.id, revision: kept.revision }
+      setFlowId(kept.id)
+      setSaved({ json: JSON.stringify(sent), title: kept.title, app: snap.app })
+      setTitle((current) => (current === snap.title ? kept.title : current))
+      setProblem('')
+      setConflict('')
+      patch(kept.id, { acknowledged: true }) // the badge now speaks about the save, not the last run
+      sessionStorage.setItem('wf-flow', kept.id)
+      return kept.id
     } catch (e) {
-      setError(e.message)
+      if (here()) {
+        setProblem(e.message)
+        if (!e.status) setTimeout(() => setRetry((n) => n + 1), 3000) // the server could not be reached: try again
+      }
       return null
-    } finally {
-      busy.current.saving = false
     }
   }
+
+  const keepMine = () => { setConflict(''); save(true) }
+  const showTheirs = () => { setConflict(''); load(flowId) }
 
   // The daily time lives on the stored flow and in Windows: save first, change both, and show the first box as it is now.
   async function submitDaily(at) {
@@ -404,9 +501,10 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
 
   // Before a run or a test: what is stored must be what is on the screen. The identifier to run, else null.
   async function ensureStored() {
-    if (dirty || !isStored) return save()
-    const now = await api(flowUrl(flowId))
-    if (now.revision === revision) return flowId
+    if (conflict) { setError(`${conflict}. Choose what to do about it above, then try again.`); return null }
+    if (unkept || !isStored) return save()
+    const current = await api(flowUrl(flowId))
+    if (current.revision === stored.current.revision) return flowId
     await show(flowId)
     setError('This flow was changed somewhere else. It is shown as it is now: check it and try again.')
     return null
@@ -446,8 +544,10 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   const running = shownRun?.status === 'running'
   const elsewhere = Object.entries(runs).filter(([name, r]) => r.status === 'running' && !(running && name === flowId))
   const lastRun = shownRun?.acknowledged ? undefined : shownRun?.status
-  const status = running ? 'running' : dirty ? 'unsaved' : lastRun ?? (isStored ? 'saved' : 'draft')
-  const statusWords = { unsaved: 'Unsaved changes', saved: 'Saved', draft: 'Draft' }[status] ?? runWords(status)
+  const status = running ? 'running' : conflict ? 'conflict' : unkept && template ? 'template'
+    : unkept && (held || problem) ? 'problem' : unkept ? 'saving' : lastRun ?? (isStored ? 'saved' : 'draft')
+  const statusWords = { conflict: 'Changed elsewhere', template: 'Not kept', problem: 'Not saved', saving: 'Saving…', saved: 'Saved',
+    draft: 'Draft' }[status] ?? runWords(status)
   // a run puts a notice over the canvas and a log under it: the whole flow comes back into sight as it goes and ends
   // (a canvas that is not on screen has no size to fit into: that waits until it is shown again)
   useEffect(() => { if (active && shownRun) refit() }, [active, shownRun?.runId, shownRun?.status]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -570,7 +670,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
             </div>
           )}
         </div>
-        <button className={dirty ? 'ghost wants-save' : 'ghost'} data-testid="save" onClick={save}>Save</button>
+        <button className="ghost" data-testid="undo" disabled={undoable === 0} onClick={undo}><Icon name="undo" size={16} /> Undo</button>
         {running ? (
           <button className="danger" data-testid="stop" disabled={!shownRun.armed} onClick={() => stop(shownRun.runId)}>
             <Icon name="stop" size={16} /> Stop
@@ -597,6 +697,30 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
           openDetail(e.target.dataset.id)
         }}>
         <div className="notices">
+        {conflict && (
+          <div className="notice notice-waiting" data-testid="changed-elsewhere" role="status">
+            <span>{conflict}. Your changes are not kept yet.</span>
+            <button className="small" onClick={keepMine}>Keep what I see</button>
+            <button className="small" onClick={showTheirs}>Show the other version</button>
+          </div>
+        )}
+        {unkept && template && (
+          <div className="notice notice-waiting" data-testid="template-notice" role="status">
+            <span>This is a template, so changes to it are not kept.</span>
+            <button className="small" onClick={() => duplicate(flowId)}>Duplicate to edit</button>
+          </div>
+        )}
+        {unkept && !template && !conflict && (held || problem) && (
+          <div className="notice notice-waiting" data-testid="not-saved" role="status">
+            <Icon name="alert" size={16} /> <span>Not saved: {held || problem}</span>
+          </div>
+        )}
+        {removed && (
+          <div className="notice" data-testid="removed-notice" role="status">
+            <span>Removed “{removed}”.</span>
+            <button className="small" onClick={undo}>Undo</button>
+          </div>
+        )}
         {blocked && (
           <div className="notice" role="status">
             <span data-testid="cannot-start">{blocked}</span>
@@ -619,7 +743,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
         {loose.length > 0 && (
           <div className="notice" data-testid="unwired" role="status">
             <span>{loose.length === 1 ? '1 box is' : `${loose.length} boxes are`} not connected: what is not connected runs at the same time, in no set order.</span>
-            <button className="small" onClick={() => setEdges(chainLoose(nodes, edges))}>Connect them in order</button>
+            <button className="small" onClick={() => { record(); setEdges(chainLoose(nodes, edges)) }}>Connect them in order</button>
           </div>
         )}
         <p className="sr-only" data-testid="editor-announce" role="status">{said}</p>
@@ -646,6 +770,8 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
           onNodesChange={changeNodes}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeDragStart={() => record()}
+          onBeforeDelete={async () => { record(); return true }}
           onNodeClick={(_, node) => setSelectedId(node.id)}
           onNodeDoubleClick={(_, node) => openDetail(node.id)}
           onPaneClick={() => setSelectedId(null)}
@@ -689,7 +815,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
       </div>
           <ExplanationStrip node={selected} meta={selected?.data.meta} nodes={viewNodes} edges={edges}
             appName={runsOn} context={context} onConnect={onConnect} onSettings={() => openDetail(selected.id)} onRemove={deleteSelected}
-            onDisconnect={(edge) => setEdges((current) => current.filter((e) => e.id !== edge.id))}
+            onDisconnect={(edge) => { record(); setEdges((current) => current.filter((e) => e.id !== edge.id)) }}
             ensureSaved={async () => {
               const id = await ensureStored()
               if (!id) throw new Error('the flow was not saved, so nothing was tested')

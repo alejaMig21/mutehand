@@ -30,6 +30,7 @@ const PATHS = {
   spinner: 'M12 3a9 9 0 019 9',
   arrow: 'M7 17L17 7M9 7h8v8',
   back: 'M10 6l-6 6 6 6M4 12h16',
+  undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3',
   skip: 'M5 6l7 6-7 6zM13 6l7 6-7 6z',
 }
 
