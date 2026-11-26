@@ -11,9 +11,12 @@ from dataclasses import asdict
 from functools import cache
 from pathlib import Path
 
+from workflow_factory.data import expressions
+from workflow_factory.desktop import plain_app
 from workflow_factory.flow import Flow, Node
 from workflow_factory.legacy import upgrade_node
-from workflow_factory.steps import Step, list_steps
+from workflow_factory.queue import last_runs, list_doubts
+from workflow_factory.steps import Origin, Status, Step, list_steps, seen_versions, step_reports
 
 SCHEMA = "CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, definition TEXT NOT NULL)"
 # where the editor drew each node: kept apart so moving a card never changes the definition a checkpoint belongs to
@@ -191,3 +194,54 @@ def flow_summaries(user_db: Path, factory_db: Path | None) -> list[dict]:
     return [{**entry, **describe_flow(entry["id"], info.get(entry["id"], {}),
                                       lambda i=entry["id"]: load_flow(user_db, factory_db, i), steps)}
             for entry in list_flows(user_db, factory_db)]
+
+
+def taught_app(app: str, steps: list[Step]) -> str:
+    """The app as the taught steps spell it, so a run finds them: 'Paint' is paint.exe. Else as it was given."""
+    known = sorted({step.app for step in steps})
+    return app if app in known else next((name for name in known if plain_app(name) == plain_app(app)), app)
+
+
+def _older(version: str, than: str) -> bool:
+    return [int(n) for n in re.findall(r"\d+", version)] < [int(n) for n in re.findall(r"\d+", than)]
+
+
+def _why_not(flow: Flow, app: str, learned: dict, seen: dict, waiting: bool) -> dict | None:
+    """The first thing a run of `flow` on `app` would refuse or stop on, as {"why": code, "steps": [names]}, or None.
+
+    `learned` is {(app, step name): (step, state)}; `seen` the newest version of each app a run has met."""
+    used = list(dict.fromkeys(node.step for node in flow.nodes if node.kind in ("step", "loop")))
+    known = {name: learned[app, name] for name in used if (app, name) in learned}
+    # A step taught again since the last run is newer than what was seen: only the mark a run left on it, or (for factory
+    # knowledge, which holds no mark) an older version, means it has to be learned again.
+    stale = [name for name, (step, state) in known.items() if state == Status.TO_REVALIDATE and (
+        step.status == Status.TO_REVALIDATE or (step.origin == Origin.FACTORY and _older(step.version, seen[app])))]
+    found = (
+        ("empty", not flow.nodes, []),
+        ("expression", any(expressions(node.fields) for node in flow.nodes), []),
+        ("not_learned", len(known) < len(used), [name for name in used if name not in known]),
+        ("rejected", None, [name for name, (_, state) in known.items() if state == Status.REJECTED]),
+        ("to_revalidate", None, stale),
+        ("no_app", not app, []),
+        ("question", waiting, []),
+    )
+    return next(({"why": why, "steps": names} for why, true, names in found if (names if true is None else true)), None)
+
+
+def flow_overview(user_db: Path, factory_db: Path | None) -> list[dict]:
+    """What Home says about each flow: `flow_summaries` with the app as taught, how the last run went, and `blocked`:
+    why it cannot run (see `_why_not`), or None. No desktop is asked and nothing seen on a screen is included."""
+    steps = list_steps(user_db, factory_db)
+    learned = {(step.app, step.name): (step, report["state"])
+               for step, report in zip(steps, step_reports(user_db, steps), strict=True)}
+    seen, runs = seen_versions(user_db), last_runs(user_db)
+    waiting = {doubt.flow_id for doubt in list_doubts(user_db, "open")}
+    overview = []
+    for entry in flow_summaries(user_db, factory_db):
+        app = taught_app(entry["app"], steps)
+        try:
+            blocked = _why_not(load_flow(user_db, factory_db, entry["id"]), app, learned, seen, entry["id"] in waiting)
+        except (ValueError, TypeError, KeyError):  # a definition that cannot be read must not hide the other flows
+            blocked = {"why": "unreadable", "steps": []}
+        overview.append({**entry, "app": app, "last_run": runs.get(entry["id"]), "blocked": blocked})
+    return overview

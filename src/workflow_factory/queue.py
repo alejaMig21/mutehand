@@ -184,6 +184,14 @@ def list_runs(user_db: Path, flow_id: str | None = None, limit: int = 50) -> lis
     return runs
 
 
+def last_runs(user_db: Path) -> dict[str, dict]:
+    """{flow id: {"status", "at"}} of the newest recorded run of each flow."""
+    with closing(_connect(user_db)) as db:
+        # ponytail: only the runs `record_run` keeps (the newest 500): a flow idle for longer reads as never run
+        return {flow_id: {"status": status, "at": at} for flow_id, status, at in db.execute(
+            "SELECT flow_id, status, finished_at FROM run_history WHERE id IN (SELECT MAX(id) FROM run_history GROUP BY flow_id)")}
+
+
 def _pid_alive(pid: int) -> bool:
     kernel = ctypes.windll.kernel32
     kernel.OpenProcess.restype = ctypes.c_void_p

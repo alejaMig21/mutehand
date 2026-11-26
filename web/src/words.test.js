@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { doubtWords, effectWords, flowTitle, flowWords, freshTitle, reasonWords, runWords, stateWords, whenWords, whyWords } from './words.js'
+import { blockedWords, doubtWords, effectWords, flowTitle, flowWords, freshTitle, lastRunWords, reasonWords, runNoteWords, runWords, stateWords, whenWords, whyWords } from './words.js'
 
 test('every reason a run can stop for is said in a sentence, never as a code', () => {
   const reasons = ['no_consent', 'control_not_found', 'unreadable', 'out_of_frame', 'rejected', 'to_revalidate',
@@ -53,4 +53,40 @@ test('a test of one node is named after its flow', () => {
 
   assert.equal(flowWords('morning#test:n2', flows), 'Morning report (one node tested)')
   assert.equal(flowWords('morning', flows), 'Morning report')
+})
+
+test('a run that left no record says what happened, and never repeats a code', () => {
+  assert.match(runNoteWords({ status: 'waiting' }, 'Paint'), /open question/)
+  assert.match(runNoteWords({ status: 'busy' }, 'Paint'), /already running/)
+  assert.match(runNoteWords({ status: 'error', error: 'APP_NOT_FOUND' }, 'Paint'), /^It failed to run\. Check that Paint is open/)
+  assert.match(runNoteWords({ status: 'error', error: 'INTERNAL' }, 'Paint'), /problem inside Workflow Factory/)
+  assert.equal(runNoteWords({ status: 'error', error: 'no such run' }, 'Paint'), 'The run was lost (no such run).')
+  for (const run of [undefined, { status: 'finished' }, { status: 'running' }, { status: 'stopped' }]) assert.equal(runNoteWords(run, 'Paint'), '')
+})
+
+test('why a chore cannot run is said with its actions and its app, never as a code', () => {
+  const words = (why, steps = []) => blockedWords({ why, steps }, 'Paint')
+
+  for (const why of ['empty', 'no_app', 'expression', 'question', 'unreadable', 'something_new']) assert.match(words(why), /^[A-Z][^_]*\.$/, why)
+  assert.equal(words('not_learned', ['a', 'b']), '“a”, “b” are not learned for Paint yet.')
+  assert.equal(blockedWords({ why: 'not_learned', steps: ['a'] }, ''), '“a” is not learned yet.')
+  assert.equal(words('rejected', ['a', 'b']), '“a”, “b” are rejected. To run this chore, restore them in Steps.')
+  assert.equal(words('to_revalidate', ['a', 'b']), 'Paint was updated: “a”, “b” have to be learned again.')
+  assert.equal(blockedWords(null, 'Paint'), '')
+})
+
+test('how the last run of a chore went is said with the day and the time', () => {
+  const now = new Date(2026, 10, 26, 18, 0)
+  const at = (...when) => new Date(...when).toISOString()
+  const words = (status, when) => lastRunWords({ status, at: when }, now).words
+
+  assert.equal(words('finished', at(2026, 10, 26, 7, 0)), 'Worked today at 07:00')
+  assert.equal(words('stopped', at(2026, 10, 25, 9, 0)), 'Stopped yesterday at 09:00')
+  assert.equal(words('emergency', at(2026, 10, 3, 23, 5)), 'You stopped it on 3 Nov at 23:05')
+  assert.equal(words('error', at(2025, 11, 31, 0, 30)), 'Failed on 31 Dec 2025 at 00:30')
+  assert.equal(lastRunWords({ status: 'finished', at: at(2026, 9, 31, 12, 0) }, new Date(2026, 10, 1, 1, 0)).words, 'Worked yesterday at 12:00')
+  assert.equal(words('finished', 'soon'), 'Worked soon')
+  assert.deepEqual(lastRunWords(null, now), { words: 'Never run', tone: 'muted', icon: 'help' })
+  assert.deepEqual(['finished', 'stopped', 'emergency', 'error'].map((s) => lastRunWords({ status: s, at: 'x' }, now).tone),
+    ['ok', 'bad', 'warn', 'bad'])
 })

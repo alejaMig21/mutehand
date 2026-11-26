@@ -177,11 +177,14 @@ def test_a_sensitive_step_is_marked_in_words_in_the_palette_not_only_by_colour(e
         browser.close()
 
 
-def open_page(playwright, server):
+def open_page(playwright, server, screen="editor"):
+    """A new headless page on `screen`; None leaves it where a person first lands (Home)."""
     browser = playwright.chromium.launch(
         headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
     page = browser.new_page()
     page.goto(f"{server.url}/#token=e2e-token")
+    if screen:
+        page.get_by_test_id(f"tab-{screen}").click()
     return browser, page
 
 

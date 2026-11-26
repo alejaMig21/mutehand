@@ -343,6 +343,13 @@ def revalidate_changed_versions(user_db: Path, app: str, current_version: str) -
         )
 
 
+def seen_versions(user_db: Path) -> dict[str, str]:
+    """The newest version of each app that a run has met."""
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute(SEEN_SCHEMA)
+        return dict(db.execute("SELECT app, version FROM app_seen"))
+
+
 def record_app_name(user_db: Path, key: AppKey) -> None:
     """Call whenever an app is seen: keeps the name it declares, under the plain name of the app."""
     name = key.name.strip()

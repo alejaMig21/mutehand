@@ -70,6 +70,30 @@ tr.why small { display: block; margin-top: 4px; }
 td small { display: block; }
 .cell-action { text-align: right; }
 
+/* Home: the list of chores, with the larger type and targets of the mockup */
+.home .page { max-width: 1160px; font-size: 16px; }
+.home .page-head { align-items: center; }
+.home h1 { font-size: 20px; }
+.home button { min-height: 44px; border-radius: 12px; font-weight: 600; }
+.chores { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.chore { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 20px;
+  background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; }
+.chore .chip { width: 48px; height: 48px; border-radius: 14px; font-size: 22px; }
+.chore-words { flex: 1; min-width: min(220px, 100%); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.chore h2 { font-size: 18px; }
+.home .chore-open { display: inline; min-height: 0; padding: 0; background: transparent; border: 0; font: inherit; text-align: left; overflow-wrap: anywhere; }
+.chore-open::after { content: ''; position: absolute; inset: 0; border-radius: 14px; }
+.chore-open:focus-visible { outline: none; }
+.chore-open:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chore:has(.chore-open:hover) { border-color: var(--muted); }
+.chore-run { position: relative; z-index: 1; } /* above the row's own button */
+.chore-line { display: flex; align-items: flex-start; gap: 6px; }
+.chore-line svg { flex: none; margin-top: 2px; }
+.home .chore-run { min-width: 180px; min-height: 56px; font-size: 18px; }
+.chore-run[aria-disabled="true"] { cursor: default; }
+.chore-run.cannot { background: transparent; border-style: dashed; color: var(--muted); }
+.chore-run.cannot:hover { border-color: var(--line); }
+
 /* editor */
 .editor { display: flex; flex-direction: column; height: 100%; }
 .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; background: var(--ground); border-bottom: 1px solid var(--line); }

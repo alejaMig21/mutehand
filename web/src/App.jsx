@@ -1,15 +1,18 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { api, loadAppNames, LOCKED } from './api.js'
 import { getAppNames, onAppNames } from './catalog.js'
 import Checks from './Checks.jsx'
 import Consents from './Consents.jsx'
 import Editor from './Editor.jsx'
 import History from './History.jsx'
+import Home from './Home.jsx'
 import Library from './Library.jsx'
 import Queue from './Queue.jsx'
 import Schedules from './Schedules.jsx'
+import { useRuns } from './useRuns.js'
 
 const SCREENS = [
+  ['home', 'Home', null],
   ['editor', 'Flow editor', null],
   ['library', 'Steps', Library],
   ['queue', 'Tutor queue', Queue],
@@ -22,7 +25,7 @@ const SCREENS = [
 // the screen survives a reload of this tab, except the setup check: it is shown once
 const remembered = () => {
   const id = sessionStorage.getItem('wf-screen')
-  return id !== 'checks' && SCREENS.some(([known]) => known === id) ? id : 'editor'
+  return id !== 'checks' && SCREENS.some(([known]) => known === id) ? id : 'home'
 }
 
 export default function App() {
@@ -30,11 +33,16 @@ export default function App() {
   const [closed, setClosed] = useState(false)
   const [locked, setLocked] = useState(false)
   const [unsaved, setUnsaved] = useState(false)
+  const following = useRuns() // shared by Home and the flow screen: a run stays followed across screens
+  const flowScreen = useRef(null)
+  // the flow screen answers false when the person keeps what it holds instead: then Home stays
+  const showFlow = (shown) => shown && setScreen('editor')
   useEffect(() => {
     const lock = () => setLocked(true)
     window.addEventListener(LOCKED, lock)
-    // the first time, say what is ready before anything else
-    api('/api/checks').then((r) => r.first_run && setScreen('checks')).catch(() => {})
+    // the first time, a setup that lacks something says so before anything else; a working one stays on Home
+    api('/api/checks').then((r) => r.first_run && r.checks.some((c) => !c.ok && !c.optional)
+      && setScreen((now) => (now === 'home' ? 'checks' : now))).catch(() => {})
     return () => window.removeEventListener(LOCKED, lock)
   }, [])
   const [, label, Current] = SCREENS.find(([id]) => id === screen)
@@ -80,8 +88,12 @@ export default function App() {
       <main className="screen">
         {/* the editor stays mounted so unsaved nodes, edges and run context survive a tab change */}
         <div style={{ display: screen === 'editor' ? 'block' : 'none', height: '100%' }}>
-          <Editor active={screen === 'editor'} onOpen={setScreen} onUnsaved={setUnsaved} />
+          <Editor ref={flowScreen} active={screen === 'editor'} onOpen={setScreen} onUnsaved={setUnsaved} following={following} />
         </div>
+        {screen === 'home' && (
+          <Home following={following} onOpen={(id) => showFlow(flowScreen.current.open(id))}
+            onNew={() => showFlow(flowScreen.current.create())} />
+        )}
         {Current && <Current onStart={() => setScreen('editor')} />}
       </main>
     </div>
