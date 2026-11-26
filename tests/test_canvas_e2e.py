@@ -7,6 +7,7 @@ import json
 import re
 import sqlite3
 from contextlib import closing, contextmanager
+from itertools import pairwise
 
 import pytest
 from fake_scheduler import FakeScheduler
@@ -474,6 +475,36 @@ def test_the_panel_and_zoom_buttons_are_large_enough_and_readable_in_a_wide_wind
         assert page.evaluate(CONTRAST) == [] and page.evaluate(SMALL) == []
         canvas = page.get_by_role("region", name="Boxes of this chore").bounding_box()
         assert panel(page).bounding_box()["x"] >= canvas["x"] + canvas["width"] - 1  # beside the canvas, over none of it
+
+
+def test_every_box_stays_in_sight_while_the_flow_runs_and_where_it_stopped(tmp_path):
+    db = three_actions(tmp_path)
+    boxes = [Node(f"b{i}", "open-menu") for i in range(4)] + [Node("last", "save-file")]
+    save_flow(db, Flow(id="tall", nodes=boxes, edges=[(a.id, b.id) for a, b in pairwise(boxes)]))
+    with editor(tmp_path, FakeDesktop(controls=[button("Alpha")]), size=(1280, 800)) as page:
+        open_flow(page, "tall", "last")
+        page.get_by_test_id("run").click()
+        page.get_by_test_id("run-outcome").wait_for()
+        page.wait_for_timeout(800)  # the canvas has made room for what the run shows
+
+        canvas = page.get_by_role("region", name="Boxes of this chore").bounding_box()
+        notices = page.locator(".notices").bounding_box()
+        for box in (n.bounding_box() for n in page.locator(".react-flow__node").all()):
+            assert notices["y"] + notices["height"] <= box["y"], "no notice lies over a box"
+            assert box["y"] + box["height"] <= canvas["y"] + canvas["height"], "no box is under the run log"
+
+
+def test_in_a_narrow_window_what_can_be_done_with_the_chosen_box_covers_no_box(tmp_path):
+    three_in_a_row(tmp_path)
+    with editor(tmp_path, size=(390, 740)) as page:
+        open_flow(page, "row", "c")
+        choose(page, "a")
+        chosen = page.get_by_role("region", name="Selected node").bounding_box()
+        canvas = page.get_by_role("region", name="Boxes of this chore").bounding_box()
+
+        assert chosen["y"] >= canvas["y"] + canvas["height"] - 1
+        assert chosen["y"] + chosen["height"] <= panel(page).bounding_box()["y"] + 1
+        assert chosen["x"] >= 0 and chosen["x"] + chosen["width"] <= 390
 
 
 def test_where_the_person_puts_a_box_is_kept_after_a_reload(tmp_path):

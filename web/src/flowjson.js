@@ -79,14 +79,18 @@ export function looseNodes(nodes, edges) {
   return nodes.length > 1 ? nodes.filter((n) => !wired.has(n.id)) : []
 }
 
-// Wire each loose node after the nearest one added before it that can take a wire.
+// Wire each loose node after the nearest one added before it that can take a wire. A start box counts as added first:
+// it is wired from, never into.
 export function chainLoose(nodes, edges) {
   const loose = new Set(looseNodes(nodes, edges).map((n) => n.id))
+  const isStart = (n) => kindOf(n) === 'trigger'
+  const ordered = [...nodes.filter(isStart), ...nodes.filter((n) => !isStart(n))]
   let wired = edges
-  nodes.forEach((node, i) => {
+  ordered.forEach((node, i) => {
     if (!loose.has(node.id)) return
     const owner = bodiesOf(wired) // a body takes no wires of its own: its for each stands in for it
-    const pairs = i > 0 ? nodes.slice(0, i).reverse().map((n) => [n.id, node.id]) : [[node.id, nodes[1].id]]
+    const pairs = i > 0 && !isStart(node) ? ordered.slice(0, i).reverse().map((n) => [n.id, node.id])
+      : ordered.filter((n) => n !== node && !isStart(n)).map((n) => [node.id, n.id])
     for (const pair of pairs) {
       const [source, target] = pair.map((id) => owner.get(id) ?? id)
       if (source === target) continue
@@ -155,6 +159,10 @@ export function joinBoxes(nodes, edges, added, { after, at } = {}) {
       const link = { id: `${end.id}-${old.target}`, source: end.id, target: old.target }
       // what followed a box is never what a repeat repeats; a decision with no path left leaves the wire where it was
       wired = [...wired, (kindOf(end) === 'foreach' ? marked(link, 'next') : withBranch(all, wired, link)) ?? old]
+    }
+    if (kindOf(anchor) === 'trigger') { // other start boxes that lead nowhere yet lead here too
+      const idle = nodes.filter((n) => kindOf(n) === 'trigger' && !wired.some((e) => e.source === n.id))
+      wired = [...wired, ...idle.map((n) => ({ id: `${n.id}-${head}`, source: n.id, target: head }))]
     }
   }
   let placed = nodes

@@ -203,6 +203,19 @@ test('a start box is joined before the first box, never after the last one', () 
   assert.ok(joined(next).some(([source, target]) => source === 'b' && target === 'c'))
 })
 
+test('the first box after two start boxes is led to by both, so nothing is left unconnected', () => {
+  const canvas = built(['manual', 'trigger'], ['daily', 'trigger'], ['a'])
+
+  assert.deepEqual(joined(canvas), [['daily', 'a', null], ['manual', 'a', null]])
+})
+
+test('connecting in order leads from a loose start box, never into it', () => {
+  const nodes = [bare('n1'), bare('n2'), bare('t', 'trigger')]
+
+  assert.deepEqual(wires(chainLoose(nodes, [{ id: 'n1-n2', source: 'n1', target: 'n2' }])), [['n1', 'n2', null], ['t', 'n1', null]])
+  assert.deepEqual(wires(chainLoose([bare('a'), bare('t', 'trigger'), bare('b')], [])), [['t', 'a', null], ['a', 'b', null]])
+})
+
 test('a dropped box stays where it was dropped and still joins', () => {
   const canvas = built(['a'], ['b', 'step', { at: { x: 900, y: 20 } }])
 

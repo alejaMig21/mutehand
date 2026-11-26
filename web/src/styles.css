@@ -118,8 +118,7 @@ input, select, textarea { background: var(--sunk); border: 1px solid var(--line)
 .notices { position: absolute; top: 0; left: 0; right: 0; z-index: 7; display: flex; flex-direction: column; }
 .opening { position: absolute; inset: 0; z-index: 25; display: grid; place-items: center; background: rgba(13, 21, 32, .8); }
 .react-flow__node:focus-visible .card { outline: 3px solid var(--accent); outline-offset: 5px; }
-.react-flow__node:hover .card { border-color: var(--muted); }
-.react-flow__node:hover .card.selected { border-color: var(--accent); }
+.react-flow__node.status-pending:hover .card { border-color: var(--muted); }
 .react-flow__edge-textbg { fill: var(--sunk); stroke: var(--line); stroke-width: 1.5; }
 .react-flow__edge-text { fill: var(--ink); font-size: 14px; font-weight: 700; }
 button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent; border-color: var(--line); }
@@ -134,7 +133,7 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .zoom button { min-width: 48px; min-height: 44px; border-radius: 12px; font-weight: 600; }
 .card { width: 260px; min-height: 76px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 8px;
   padding: 12px; background: var(--surface); border: 2px solid var(--line); border-radius: 14px; }
-.card.selected { border-color: var(--accent); outline: 3px solid var(--accent); outline-offset: 5px; }
+.card.selected { outline: 3px solid var(--accent); outline-offset: 5px; } /* its border still says how the run went */
 .status-running .card { border-color: var(--info); box-shadow: 0 0 0 4px rgba(125, 184, 255, .25); }
 .status-done .card, .status-continued .card { border-color: var(--ok); }
 .status-blocked .card { border-color: var(--bad); box-shadow: 0 0 0 6px rgba(255, 122, 122, .2); }
@@ -149,7 +148,7 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .chip.system { background: var(--sunk); color: var(--ink); border: 1px solid var(--line); }
 .empty-canvas { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; pointer-events: none; color: var(--muted); }
 
-.settings { position: absolute; left: 14px; bottom: 72px; z-index: 5; width: 260px; max-height: calc(100% - 86px); overflow: auto;
+.settings { position: absolute; left: 14px; bottom: 72px; z-index: 8; width: 260px; max-height: calc(100% - 86px); overflow: auto;
   display: flex; flex-direction: column; gap: 8px; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .settings > * { flex: none; }
 .settings h2 { font-size: 16px; }
@@ -274,6 +273,7 @@ input[type="number"] { width: 70px; }
   .canvas { height: min(520px, 70vh); min-height: 220px; }
   .search-panel { overflow: visible; border-left: 0; border-top: 1.5px solid var(--line); padding: 16px; }
   .run-log { max-height: 240px; }
+  .settings { position: static; width: auto; max-height: none; border-radius: 0; border-width: 1px 0 0; }
   .detail { max-height: 96vh; overflow: auto; }
   .detail > * { flex: none; } /* the whole window scrolls; nothing shrinks under its neighbour */
   .panes { overflow: visible; }

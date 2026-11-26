@@ -18,9 +18,13 @@ const NODE_TYPES = { card: NodeCard }
 const EDGE_LOOK = { labelBgPadding: [10, 4], labelBgBorderRadius: 999 } // yes and no on a pill
 const metaOf = (step) => ({ app: step.app, sensitive: step.sensitive, origin: step.origin, action: step.action,
   state: step.state, private: step.private, consent: step.consent, adapted_from: step.adapted_from })
-// the whole flow in sight, clear of the zoom buttons; a narrow window has no room to spare
-const fit = () => ({ maxZoom: 1, padding: window.innerWidth > 860
-  ? { top: '40px', left: '40px', bottom: '76px', right: '40px' } : { top: '16px', left: '16px', bottom: '68px', right: '16px' } })
+// the whole flow in sight, clear of the notices over the top of the canvas and of the zoom buttons at its foot; a narrow
+// window has no room to spare
+const fit = () => {
+  const covered = document.querySelector('.notices')?.offsetHeight ?? 0
+  const edge = window.innerWidth > 860 ? 40 : 16
+  return { maxZoom: 1, padding: { top: `${covered + edge}px`, left: `${edge}px`, bottom: '76px', right: `${edge}px` } }
+}
 // after something is gone from the screen, the keyboard focus goes to what is left
 const focusSoon = (...testIds) => setTimeout(() => {
   testIds.map((id) => document.querySelector(`[data-testid=${id}]`)).find(Boolean)?.focus()
@@ -382,6 +386,8 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   const lastRun = shownRun?.acknowledged ? undefined : shownRun?.status
   const status = running ? 'running' : dirty ? 'unsaved' : lastRun ?? (isStored ? 'saved' : 'draft')
   const statusWords = { unsaved: 'Unsaved changes', saved: 'Saved', draft: 'Draft' }[status] ?? runWords(status)
+  // a run puts a notice over the canvas and a log under it: the whole flow comes back into sight as it goes and ends
+  useEffect(() => { if (shownRun) refit() }, [shownRun?.runId, shownRun?.status]) // eslint-disable-line react-hooks/exhaustive-deps
   const flowDoubts = useMemo(() => doubts.filter((d) => isStored && d.flow_id === flowId), [doubts, flowId, isStored])
   const doubtCounts = useMemo(() => {
     const counts = {}
@@ -499,7 +505,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
           </button>
         ) : (
           <button className="primary" data-testid="run" onClick={run} disabled={starting || nodes.length === 0 || Boolean(blocked)}
-            title={nodes.length === 0 ? 'Add a node first' : blocked}>
+            title={nodes.length === 0 ? 'Add a box first' : blocked}>
             <Icon name="play" size={16} /> {starting ? 'Starting…' : 'Run flow'}
           </button>
         )}
@@ -586,12 +592,6 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
           </div>
         )}
 
-        {selected && !detailOpen && (
-          <NodePanel node={selected} nodes={viewNodes} edges={edges} onConnect={onConnect}
-            onDisconnect={(edge) => setEdges((current) => current.filter((e) => e.id !== edge.id))}
-            onOpen={() => openDetail(selected.id)} onDelete={deleteSelected} />
-        )}
-
         {selected && detailOpen && (
           <NodeDetail
             key={selected.id}
@@ -618,6 +618,12 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
         )}
 
       </div>
+        {/* over the foot of the canvas; between it and the panel in a narrow window */}
+        {selected && !detailOpen && (
+          <NodePanel node={selected} nodes={viewNodes} edges={edges} onConnect={onConnect}
+            onDisconnect={(edge) => setEdges((current) => current.filter((e) => e.id !== edge.id))}
+            onOpen={() => openDetail(selected.id)} onDelete={deleteSelected} />
+        )}
         <SearchPanel steps={steps} recipes={recipes} apps={apps} app={runsOn} onApp={setAppName} onAddSystem={addSystem}
           onAddStep={addStep} onAddRecipe={addRecipe} />
         {opening && <div className="opening" role="status">Opening…</div>}

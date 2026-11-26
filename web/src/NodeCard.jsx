@@ -6,7 +6,7 @@ import { Icon } from './icons.jsx'
 function describe(node, meta) {
   if (node.kind && node.kind !== 'step') return { title: titleOf(node), icon: systemEntryFor(node)?.icon ?? 'braces' }
   const app = meta?.app
-  return { title: node.step, subtitle: app ? appLabel(app) : 'Not learned', chip: app ? chipFor(app) : null }
+  return { title: node.step, subtitle: app ? appLabel(app) : '', chip: app ? chipFor(app) : null }
 }
 
 // Every mark is an icon and a word, never colour alone.
