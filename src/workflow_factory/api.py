@@ -9,6 +9,7 @@ import hmac
 import json
 import re
 import secrets
+import subprocess
 import threading
 import time
 import urllib.parse
@@ -18,12 +19,14 @@ from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from workflow_factory import schedule
 from workflow_factory.consent import consents, effective_sensitivity, is_permitted, revoke_consent
 from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.flow import clear_emergency_stop, emergency_stop, rejected_steps, run_flow
 from workflow_factory.flows import flow_from_dict, flow_to_dict, list_flows, load_flow, save_flow
 from workflow_factory.knowledge import duplicate_flow
 from workflow_factory.nodedata import present, single_node_flow, snapshot
+from workflow_factory.paths import default_user_db
 from workflow_factory.queue import answer_doubt, dismiss_doubt, list_doubts, list_runs
 from workflow_factory.recipes import adapted_from, recipes_overview
 from workflow_factory.steps import (
@@ -47,12 +50,14 @@ CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", 
 class ApiServer:
     def __init__(self, user_db: Path, factory_db: Path | None, desktop_for: Callable[[str], Desktop],
                  token: str | None = None, host: str = "127.0.0.1", port: int = 0,
-                 web_dir: Path | None = None, max_active_runs: int = 4, max_kept_runs: int = 50):
+                 web_dir: Path | None = None, max_active_runs: int = 4, max_kept_runs: int = 50,
+                 schedule_runner=subprocess.run):
         if host not in LOOPBACK_HOSTS:
             raise ValueError("the editor API only binds to the loopback interface")
         self.user_db, self.factory_db, self.desktop_for = user_db, factory_db, desktop_for
         self.token = token or secrets.token_urlsafe(32)
         self.web_dir = web_dir
+        self.schedule_runner = schedule_runner  # how schtasks is called: tests give a stand-in
         self.max_active_runs, self.max_kept_runs = max_active_runs, max_kept_runs
         self._runs: dict[str, dict] = {}
         self._runs_lock = threading.Lock()
@@ -226,6 +231,8 @@ class ApiServer:
                 if method == "GET" and path == "/api/steps":
                     return self._send(200, [{**_step_view(step), **_safety(api.user_db, step)} for step in
                                             list_steps(api.user_db, api.factory_db)])
+                if path == "/api/schedules":
+                    return self._schedules(method)
                 if method == "GET" and path == "/api/recipes":
                     return self._send(200, recipes_overview(api.user_db))
                 if method == "GET" and path == "/api/flows":
@@ -310,6 +317,35 @@ class ApiServer:
                     view = api._run_view(status_match[1])
                     return self._send(200, view) if view else self._send(404, {"error": "no such run"})
                 self._send(404, {"error": "not found"})
+
+            def _schedules(self, method: str):
+                runner = api.schedule_runner
+                if method == "GET":
+                    return self._send(200, schedule.describe_schedules(runner=runner))
+                body = self._body()
+                if method == "POST":
+                    flow_id, app, at = body["flow"], body["app"], body["at"]
+                    if not schedule.SAFE_NAME.fullmatch(str(flow_id)):
+                        raise ValueError("a flow name may only use letters, digits, '_', '.' and '-'")
+                    if load_flow(api.user_db, api.factory_db, flow_id) is None:
+                        return self._send(404, {"error": "no such flow"})
+                    name = f"{flow_id} daily {str(at).replace(':', '')}"
+                    extra = ["--user-db", str(api.user_db)] if api.user_db != default_user_db() else []
+                    try:
+                        schedule.create_schedule(name, flow_id, app, at, extra, runner=runner)
+                    except RuntimeError as error:  # schtasks said no: its words, which hold no screen content
+                        return self._send(502, {"error": str(error)})
+                    return self._send(201, {"name": name, "flow": flow_id, "app": app, "at": at})
+                if method == "DELETE":
+                    try:
+                        name = schedule.full_name(str(body["name"]))
+                    except ValueError:  # not a name this product could have made
+                        return self._send(404, {"error": "no such schedule"})
+                    if name not in schedule.list_schedules(runner=runner):  # only what this product made can be removed
+                        return self._send(404, {"error": "no such schedule"})
+                    schedule.delete_schedule(name, runner=runner)
+                    return self._send(200, {"removed": body["name"]})
+                return self._send(405, {"error": "method"})
 
             def _static(self, path: str):
                 if api.web_dir is None:

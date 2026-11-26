@@ -10,6 +10,7 @@ import io
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 SAFE_NAME = re.compile(r"[\w.-]+")
@@ -74,6 +75,40 @@ def list_schedules(runner=subprocess.run) -> list[str]:
     return [name for name in names if name.startswith(SCHEDULE_PREFIX)]
 
 
+def _bare(name: str) -> str:
+    return name.removeprefix(SCHEDULE_PREFIX)
+
+
+def describe_schedules(runner=subprocess.run) -> list[dict]:
+    """What the screen shows for each schedule this tool made: its name, the flow, the app and the daily time.
+
+    The details come from the task's XML, which does not depend on the language of Windows. A task whose XML cannot be read is
+    still listed by name."""
+    result = []
+    for name in list_schedules(runner=runner):
+        info = {"name": _bare(name), "flow": None, "app": None, "at": None}
+        done = runner(["schtasks", "/Query", "/TN", name, "/XML"], capture_output=True, text=True, timeout=60)
+        if done.returncode == 0:
+            info.update(_read_task_xml(done.stdout))
+        result.append(info)
+    return result
+
+
+def _read_task_xml(xml: str) -> dict:
+    try:
+        root = ET.fromstring(re.sub(r"^<\?xml[^>]*\?>", "", xml.strip()))
+    except ET.ParseError:
+        return {}
+
+    def text(tag: str) -> str:
+        return next((e.text or "" for e in root.iter() if e.tag.endswith(tag)), "")
+
+    arguments = text("Arguments")
+    flow, app = re.search(r"--flow (\S+)", arguments), re.search(r"--app (\S+)", arguments)
+    at = re.search(r"T(\d\d:\d\d)", text("StartBoundary"))
+    return {"flow": flow and flow[1], "app": app and app[1], "at": at and at[1]}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="workflow_factory.schedule")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -82,6 +117,7 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--flow", required=True)
     create.add_argument("--app", required=True)
     create.add_argument("--daily-at", required=True, metavar="HH:MM")
+    commands.add_parser("list", help="the schedules this tool created")
     delete = commands.add_parser("delete", help="remove a schedule created by this tool")
     delete.add_argument("--name", required=True)
     args = parser.parse_args(argv)

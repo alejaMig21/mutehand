@@ -158,3 +158,9 @@ input[type="number"] { width: 70px; }
 .status-running .card-mark.tone-info svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .status-running .card-mark.tone-info svg { animation: none; } }
+
+/* the schedules screen */
+.schedule-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 12px 0 18px; }
+.schedule-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; }
+.schedule-list { list-style: none; padding: 0; margin: 0; }
+.schedule-list li { padding: 8px 0; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; }

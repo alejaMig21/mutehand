@@ -664,3 +664,32 @@ def test_a_recipe_with_an_unfilled_hole_cannot_run_and_says_which(tmp_path):
             browser.close()
     finally:
         server.stop()
+
+
+def test_a_schedule_is_added_listed_and_removed_from_the_screen_and_other_tasks_stay_hidden(tmp_path):
+    from fake_scheduler import FOREIGN, FakeScheduler
+    from playwright.sync_api import sync_playwright
+
+    from workflow_factory import save_flow
+
+    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=[Node("a", "open-menu")]))
+    scheduler = FakeScheduler()
+    server = ApiServer(tmp_path / "user.db", None, lambda app: None, token="e2e-token", web_dir=DIST, schedule_runner=scheduler)
+    server.start()
+    try:
+        with sync_playwright() as playwright:
+            browser, page = open_page(playwright, server)
+            page.get_by_test_id("tab-schedules").click()
+            page.get_by_test_id("no-schedules").wait_for()  # the foreign task is not shown
+            page.get_by_test_id("schedule-app").fill("mspaint.exe")
+            page.get_by_test_id("schedule-time").fill("07:45")
+            page.get_by_test_id("schedule-add").click()
+            row = page.get_by_test_id("schedule-row-morning daily 0745")
+            row.wait_for()
+            assert "morning" in row.inner_text() and "mspaint.exe" in row.inner_text() and "07:45" in row.inner_text()
+            page.get_by_test_id("schedule-remove-morning daily 0745").click()
+            page.get_by_test_id("no-schedules").wait_for()
+            assert list(scheduler.tasks) == [FOREIGN]
+            browser.close()
+    finally:
+        server.stop()

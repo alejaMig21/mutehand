@@ -5,12 +5,14 @@ import Editor from './Editor.jsx'
 import History from './History.jsx'
 import Library from './Library.jsx'
 import Queue from './Queue.jsx'
+import Schedules from './Schedules.jsx'
 
 const SCREENS = [
   ['editor', 'Flow editor', Editor],
   ['library', 'Steps', Library],
   ['queue', 'Tutor queue', Queue],
   ['history', 'Run history', History],
+  ['schedules', 'Schedules', Schedules],
   ['consents', 'Consents', Consents],
 ]
 

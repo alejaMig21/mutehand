@@ -154,3 +154,46 @@ def test_listing_shows_only_the_schedules_made_by_this_tool():
         return subprocess.CompletedProcess(args, 0, stdout=csv, stderr="")
 
     assert list_schedules(runner=runner) == ["Workflow factory - morning", "Workflow factory - evening"]
+
+
+def test_a_schedule_is_described_by_its_flow_app_and_daily_time_not_just_its_name():
+    from fake_scheduler import FakeScheduler
+
+    from workflow_factory.schedule import describe_schedules
+
+    scheduler = FakeScheduler()
+    create_schedule("morning", "morning", "mspaint.exe", daily_at="09:30", runner=scheduler)
+
+    assert describe_schedules(runner=scheduler) == [{"name": "morning", "flow": "morning", "app": "mspaint.exe", "at": "09:30"}]
+
+
+def test_a_schedule_whose_details_cannot_be_read_is_still_listed_by_name():
+    from workflow_factory.schedule import describe_schedules
+
+    def runner(args, **kwargs):
+        if "/XML" in args:
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="no")
+        return subprocess.CompletedProcess(args, 0, stdout='"\\Workflow factory - odd","N/A","Ready"\n', stderr="")
+
+    assert describe_schedules(runner=runner) == [{"name": "odd", "flow": None, "app": None, "at": None}]
+
+
+def test_the_command_line_can_list_schedules_too(capsys):
+    from workflow_factory.schedule import main
+
+    assert main(["list"]) in (0, 1)  # reads the real scheduler: only checks that the subcommand exists
+
+
+@pytest.mark.live
+def test_the_real_task_scheduler_gives_back_the_flow_app_and_time_of_a_schedule_this_tool_made():
+    from workflow_factory.schedule import describe_schedules
+
+    name = f"{SCHEDULE_PREFIX}dwf-live-describe-{uuid.uuid4().hex[:8]}"
+    try:
+        create_schedule(name, "describe-me", "mspaint.exe", daily_at="03:07")
+        found = [s for s in describe_schedules() if SCHEDULE_PREFIX + s["name"] == name]
+    finally:
+        delete_schedule(name)
+
+    assert found == [{"name": name.removeprefix(SCHEDULE_PREFIX), "flow": "describe-me", "app": "mspaint.exe", "at": "03:07"}]
+    assert not [s for s in describe_schedules() if SCHEDULE_PREFIX + s["name"] == name]  # and it is gone
