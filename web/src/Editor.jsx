@@ -3,10 +3,12 @@ import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, 
 import { api } from './api.js'
 import { fromFlowJson, layout, nextNodeId, toFlowJson } from './flowjson.js'
 import { Icon } from './icons.jsx'
+import { refOptions } from './bindings.js'
+import { titleOf } from './catalog.js'
 import NodeCard from './NodeCard.jsx'
+import NodeDetail from './NodeDetail.jsx'
 import SearchPanel from './SearchPanel.jsx'
 
-const INPUT_TYPES = ['str', 'int', 'float', 'bool']
 const NODE_TYPES = { card: NodeCard }
 // the search panel floats over the right edge, so the nodes are fitted into what is left
 const FIT = { maxZoom: 1, padding: { top: '60px', left: '60px', bottom: '60px', right: '440px' } }
@@ -32,6 +34,9 @@ function EditorScreen() {
   const [panelOpen, setPanelOpen] = useState(true)
   const [flowsOpen, setFlowsOpen] = useState(false)
   const [runDataOpen, setRunDataOpen] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [nodeData, setNodeData] = useState({})
+  const [showValues, setShowValues] = useState(false)
   const [view, setView] = useState(0) // bumped when another flow is shown, so the canvas fits it
 
   const refreshFlows = useCallback(() => api('/api/flows').then(setFlows).catch((e) => setError(e.message)), [])
@@ -40,6 +45,15 @@ function EditorScreen() {
     api('/api/steps').then(setSteps).catch((e) => setError(e.message))
     refreshFlows()
   }, [refreshFlows])
+
+  // The Data of the last run (or test) of each node. Only shapes unless the person asked to see the values.
+  const loadData = useCallback(async (values) => {
+    try {
+      setNodeData(await api(`/api/flows/${flowId}/data${values ? '?values=1' : ''}`))
+    } catch {
+      setNodeData({}) // an unsaved flow has none yet
+    }
+  }, [flowId])
 
   const onConnect = useCallback((connection) => setEdges((current) => addEdge(connection, current)), [setEdges])
 
@@ -56,7 +70,7 @@ function EditorScreen() {
     setTimeout(() => fitView({ ...FIT, duration: 200 }), 60) // once the new node is on the canvas
   }
 
-  const addStep = (step) => addNode({ step: step.name }, { app: step.app, sensitive: step.sensitive, origin: step.origin })
+  const addStep = (step) => addNode({ step: step.name }, { app: step.app, sensitive: step.sensitive, origin: step.origin, action: step.action })
   const addSystem = (entry) => addNode(structuredClone(entry.node))
 
   function updateSelected(patch) {
@@ -72,7 +86,7 @@ function EditorScreen() {
 
   const lookup = (name) => {
     const step = steps.find((s) => s.name === name)
-    return step ? { app: step.app, sensitive: step.sensitive, origin: step.origin } : {}
+    return step ? { app: step.app, sensitive: step.sensitive, origin: step.origin, action: step.action } : {}
   }
 
   async function openFlow(id) {
@@ -142,6 +156,7 @@ function EditorScreen() {
         setStatuses(view.nodes)
         if (view.status !== 'running') {
           setStatus(view.status)
+          loadData(showValues)
           break
         }
         await new Promise((resolve) => setTimeout(resolve, 250))
@@ -155,6 +170,15 @@ function EditorScreen() {
 
   const selected = nodes.find((n) => n.id === selectedId)
   const selectedNode = selected?.data.node
+  const runKeys = useMemo(() => {
+    try { return Object.keys(JSON.parse(context || '{}')) } catch { return [] }
+  }, [context])
+  const openDetail = (id) => { setSelectedId(id); setDetailOpen(true); loadData(showValues) }
+  const toggleValues = (on) => { setShowValues(on); loadData(on) }
+  async function ensureSaved() { // a test works on the stored flow
+    await api(`/api/flows/${flowId}`, { method: 'PUT', body: toFlowJson(nodes, edges) })
+    refreshFlows()
+  }
   const shownNodes = useMemo(
     () => nodes.map((n) => ({ ...n, className: `status-${statuses[n.id] ?? 'pending'}` })),
     [nodes, statuses],
@@ -225,6 +249,7 @@ function EditorScreen() {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeClick={(_, node) => setSelectedId(node.id)}
+          onNodeDoubleClick={(_, node) => openDetail(node.id)}
           onPaneClick={() => setSelectedId(null)}
           deleteKeyCode={['Backspace', 'Delete']}
           colorMode="dark"
@@ -242,37 +267,34 @@ function EditorScreen() {
           </div>
         )}
 
-        {selected && (
+        {selected && !detailOpen && (
           <section className="settings" aria-label="Selected node">
-            <h2>{selectedNode.step ?? selectedNode.kind}</h2>
-            {selectedNode.step && (
-              <>
-                <label className="check">
-                  <input type="checkbox" data-testid="exclusive" checked={selectedNode.exclusive_input}
-                    onChange={(e) => updateSelected({ exclusive_input: e.target.checked })} />
-                  needs the mouse or keyboard
-                </label>
-                <h3>Typed inputs</h3>
-                {selectedNode.inputs.map(([name, type], i) => (
-                  <div className="row" key={i}>
-                    <input aria-label="input name" value={name} onChange={(e) =>
-                      updateSelected({ inputs: selectedNode.inputs.map((p, j) => (j === i ? [e.target.value, p[1]] : p)) })} />
-                    <select aria-label="input type" value={type} onChange={(e) =>
-                      updateSelected({ inputs: selectedNode.inputs.map((p, j) => (j === i ? [p[0], e.target.value] : p)) })}>
-                      {INPUT_TYPES.map((t) => <option key={t}>{t}</option>)}
-                    </select>
-                  </div>
-                ))}
-                <button className="ghost small" data-testid="add-input"
-                  onClick={() => updateSelected({ inputs: [...selectedNode.inputs, ['value', 'str']] })}>
-                  Add input
-                </button>
-              </>
-            )}
+            <h2>{titleOf(selectedNode)}</h2>
+            <button className="ghost small" data-testid="open-detail" onClick={() => openDetail(selected.id)}>Open details</button>
             <button className="danger small" data-testid="delete-node" onClick={deleteSelected}>
               <Icon name="trash" size={15} /> Delete node
             </button>
           </section>
+        )}
+
+        {selected && detailOpen && (
+          <NodeDetail
+            key={selected.id}
+            node={selectedNode}
+            meta={selected.data.meta}
+            refs={refOptions(nodes, selected.id, runKeys, (n) => titleOf(n.data.node))}
+            data={nodeData[selected.id]}
+            showValues={showValues}
+            onShowValues={toggleValues}
+            onChange={updateSelected}
+            onClose={() => setDetailOpen(false)}
+            onDelete={() => { deleteSelected(); setDetailOpen(false) }}
+            flowId={flowId}
+            appName={appName}
+            context={context}
+            ensureSaved={ensureSaved}
+            onTested={() => loadData(showValues)}
+          />
         )}
 
         {panelOpen

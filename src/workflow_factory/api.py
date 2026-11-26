@@ -22,6 +22,7 @@ from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.flow import run_flow
 from workflow_factory.flows import flow_from_dict, flow_to_dict, list_flows, load_flow, save_flow
 from workflow_factory.knowledge import duplicate_flow
+from workflow_factory.nodedata import present, single_node_flow, snapshot
 from workflow_factory.queue import answer_doubt, dismiss_doubt, list_doubts, list_runs
 from workflow_factory.steps import (
     find_step,
@@ -51,6 +52,7 @@ class ApiServer:
         self.max_active_runs, self.max_kept_runs = max_active_runs, max_kept_runs
         self._runs: dict[str, dict] = {}
         self._runs_lock = threading.Lock()
+        self._node_data: dict[str, dict] = {}  # flow id -> node id -> {in, out}: the latest, in memory only
         self.quit_requested = threading.Event()  # set by POST /api/quit; whoever started the server waits on it
         self._http = ThreadingHTTPServer((host, port), self._handler())
         self._thread = threading.Thread(target=self._http.serve_forever, name="editor-api", daemon=True)
@@ -85,12 +87,17 @@ class ApiServer:
         flow = load_flow(self.user_db, self.factory_db, flow_id)
         if flow is None:
             return 404, None
+        return self._launch(flow, flow_id, flow_id, app, context)
+
+    def _launch(self, flow, run_key: str, data_key: str, app: str, context: dict) -> tuple[int, str | None]:
+        """Run `flow` in the background. `run_key` says what may not run twice at once; `data_key` is the flow whose
+        node data this run updates (a test of one node updates the data of the flow it belongs to)."""
         run_id = uuid.uuid4().hex
-        record = {"flow_id": flow_id, "status": "running", "stopped": None,
+        record = {"flow_id": run_key, "status": "running", "stopped": None,
                   "nodes": {n.id: "pending" for n in flow.nodes}}
         with self._runs_lock:
             active = [run for run in self._runs.values() if run["status"] == "running"]
-            if any(run["flow_id"] == flow_id for run in active):
+            if any(run["flow_id"] == run_key for run in active):
                 return 409, None  # two runs of one flow would race on its checkpoint
             if len(active) >= self.max_active_runs:
                 return 429, None
@@ -106,6 +113,8 @@ class ApiServer:
                 result = run_flow(flow, self.desktop_for(app), self.user_db, self.factory_db,
                                   context=context, progress=progress)
                 final = {"status": result.status, "stopped": result.stopped}
+                with self._runs_lock:
+                    self._node_data.setdefault(data_key, {}).update(snapshot(flow, result.outputs, context))
             except DesktopError as error:  # the code only: its text could echo what is on screen
                 final = {"status": "error", "error": getattr(error, "code", "DESKTOP_ERROR")}
             except Exception:  # noqa: BLE001 - a run must always end in a final state
@@ -116,6 +125,16 @@ class ApiServer:
 
         threading.Thread(target=work, name=f"run-{run_id[:8]}", daemon=True).start()
         return 202, run_id
+
+    def _start_node_test(self, flow_id: str, node_id: str, app: str, context: dict) -> tuple[int, str | None]:
+        """Run one node alone, on the data the last run gave it. ValueError (a 400) says why it cannot be done."""
+        flow = load_flow(self.user_db, self.factory_db, flow_id)
+        if flow is None:
+            return 404, None
+        with self._runs_lock:
+            last = {n: sides["out"] for n, sides in self._node_data.get(flow_id, {}).items()}
+        alone = single_node_flow(flow, node_id, last)
+        return self._launch(alone, f"{flow_id}#test:{node_id}", flow_id, app, context)
 
     def _run_view(self, run_id: str) -> dict | None:
         with self._runs_lock:
@@ -197,6 +216,21 @@ class ApiServer:
                 if copy_match and method == "POST":
                     copy = duplicate_flow(api.user_db, api.factory_db, copy_match[1], self._body()["new_id"])
                     return self._send(201, flow_to_dict(copy))
+                data_match = re.fullmatch(r"/api/flows/([\w.-]+)/data", path)
+                if data_match and method == "GET":
+                    if load_flow(api.user_db, api.factory_db, data_match[1]) is None:
+                        return self._send(404, {"error": "no such flow"})
+                    with api._runs_lock:
+                        latest = dict(api._node_data.get(data_match[1], {}))
+                    return self._send(200, present(latest, values=(self.query.get("values") or ["0"])[0] == "1"))
+                test_match = re.fullmatch(r"/api/flows/([\w.-]+)/nodes/([\w.-]+)/test", path)
+                if test_match and method == "POST":
+                    body = self._body()
+                    code, run_id = api._start_node_test(test_match[1], test_match[2], body["app"], body.get("context") or {})
+                    if code == 202:
+                        return self._send(202, {"run_id": run_id})
+                    return self._send(code, {"error": {404: "no such flow", 409: "this node is already being tested",
+                                                       429: "too many runs at once"}[code]})
                 run_match = re.fullmatch(r"/api/flows/([\w.-]+)/run", path)
                 if run_match and method == "POST":
                     body = self._body()

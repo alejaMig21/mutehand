@@ -68,7 +68,9 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
         drag_between(page, page.locator('.react-flow__node[data-id="n1"] .react-flow__handle.source'),
                      page.locator('.react-flow__node[data-id="n2"] .react-flow__handle.target'))
         page.locator('.react-flow__node[data-id="n2"]').click()
+        page.get_by_test_id("open-detail").click()
         page.get_by_test_id("add-input").click()
+        page.get_by_test_id("close-detail").click()
         page.get_by_test_id("flow-id").fill("e2e-flow")
         page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text="saved").wait_for()
@@ -377,4 +379,129 @@ def test_nothing_in_the_editor_starts_a_lesson(editor):
         words = page.locator("body").inner_text() + " ".join(
             b.get_attribute("aria-label") or "" for b in page.get_by_role("button").all())
         assert not re.search(r"lesson|teach|learn|study", words, re.IGNORECASE)
+        browser.close()
+
+
+def seed_data_flow(tmp_path):
+    from workflow_factory import save_flow
+
+    def fixed(value):
+        return {"value": value}
+
+    nodes = [
+        Node("d", kind="data", op="fixed", fields={"value": fixed("hello world")}),
+        Node("c", kind="data", op="convert", fields={"value": {"ref": {"node": "d", "field": "value"}}, "to": fixed("text")}),
+        Node("m", kind="data", op="math", fields={"a": fixed(1), "b": fixed(2), "operation": fixed("add")}),
+        Node("p", "open-menu"),
+    ]
+    save_flow(tmp_path / "user.db", Flow(id="datas", nodes=nodes, edges=[("d", "c"), ("c", "m"), ("m", "p")]))
+
+
+def open_seeded_flow(page):
+    page.get_by_test_id("open-flows").click()
+    page.get_by_test_id("flow-datas").click()
+    page.locator('.react-flow__node[data-id="p"]').wait_for()
+
+
+def test_the_node_detail_shows_data_hidden_until_asked_and_never_before_a_run(editor):
+    from playwright.sync_api import sync_playwright
+
+    server, tmp_path = editor
+    seed_data_flow(tmp_path)
+    with sync_playwright() as playwright:
+        browser, page = open_page(playwright, server)
+        open_seeded_flow(page)
+        page.locator('.react-flow__node[data-id="c"]').dblclick()
+        detail = page.get_by_test_id("detail")
+        detail.wait_for()
+        assert "No data yet" in detail.inner_text()  # nothing ran
+
+        page.get_by_test_id("close-detail").click()
+        page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("run").click()
+        page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
+        page.locator('.react-flow__node[data-id="c"]').dblclick()
+        out = detail.get_by_test_id("data-value")
+        out.first.wait_for()
+        assert "text · 11 characters" in detail.inner_text() and "hello world" not in detail.inner_text()
+
+        detail.get_by_test_id("show-values").check()
+        detail.get_by_text("hello world").first.wait_for()
+        detail.get_by_test_id("show-values").uncheck()
+        detail.get_by_text("text · 11 characters").first.wait_for()
+        assert "hello world" not in detail.inner_text()
+        browser.close()
+
+
+def test_a_field_is_edited_as_a_fixed_value_or_as_a_reference_and_the_node_is_tested_alone(editor):
+    from playwright.sync_api import sync_playwright
+
+    server, tmp_path = editor
+    seed_data_flow(tmp_path)
+    with sync_playwright() as playwright:
+        browser, page = open_page(playwright, server)
+        open_seeded_flow(page)
+        page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("run").click()
+        page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
+
+        page.locator('.react-flow__node[data-id="m"]').dblclick()
+        detail = page.get_by_test_id("detail")
+        detail.get_by_test_id("value-a").fill("10")  # a fixed number
+        detail.get_by_test_id("mode-b").select_option("ref")  # b now comes from another node
+        assert page.get_by_test_id("ref-b").locator("option").count() >= 2
+        detail.get_by_test_id("mode-b").select_option("value")
+        detail.get_by_test_id("value-b").fill("5")
+
+        detail.get_by_test_id("test-node").click()  # a data node touches no control: no warning first
+        detail.get_by_test_id("test-result").filter(has_text="Test finished").wait_for(timeout=10_000)
+        detail.get_by_test_id("show-values").check()
+        detail.get_by_text("15").first.wait_for()
+
+        detail.get_by_test_id("close-detail").click()
+        page.get_by_test_id("save").click()
+        page.get_by_test_id("run-status").filter(has_text="saved").wait_for()
+        saved = load_flow(tmp_path / "user.db", None, "datas")
+        math = next(n for n in saved.nodes if n.id == "m")
+        assert math.fields["a"] == {"value": 10} and math.fields["b"] == {"value": 5}
+        browser.close()
+
+
+def test_testing_a_step_warns_about_the_mouse_and_keyboard_first_then_runs_only_that_step(editor):
+    from playwright.sync_api import sync_playwright
+
+    server, tmp_path = editor
+    seed_data_flow(tmp_path)
+    with sync_playwright() as playwright:
+        browser, page = open_page(playwright, server)
+        open_seeded_flow(page)
+        page.get_by_test_id("app-name").fill("paint.exe")
+        page.locator('.react-flow__node[data-id="p"]').dblclick()
+        detail = page.get_by_test_id("detail")
+        detail.get_by_test_id("test-node").click()
+        warning = page.get_by_test_id("test-warning")
+        warning.wait_for()
+        assert "mouse and keyboard" in warning.inner_text()
+        assert page.locator(".react-flow__node.status-done").count() == 0  # nothing ran yet
+        page.get_by_test_id("confirm-test").click()
+        detail.get_by_test_id("test-result").filter(has_text="Test finished").wait_for(timeout=10_000)
+        browser.close()
+
+
+def test_a_node_takes_a_failure_policy_in_its_settings(editor):
+    from playwright.sync_api import sync_playwright
+
+    server, tmp_path = editor
+    seed_data_flow(tmp_path)
+    with sync_playwright() as playwright:
+        browser, page = open_page(playwright, server)
+        open_seeded_flow(page)
+        page.locator('.react-flow__node[data-id="p"]').dblclick()
+        page.get_by_test_id("on-failure").select_option("retry")
+        page.get_by_test_id("retries").fill("4")
+        page.get_by_test_id("close-detail").click()
+        page.get_by_test_id("save").click()
+        page.get_by_test_id("run-status").filter(has_text="saved").wait_for()
+        node = next(n for n in load_flow(tmp_path / "user.db", None, "datas").nodes if n.id == "p")
+        assert (node.on_failure, node.retries) == ("retry", 4)
         browser.close()

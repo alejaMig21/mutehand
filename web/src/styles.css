@@ -110,3 +110,33 @@ input, select, textarea { background: var(--sunk); border: 1px solid var(--line)
 .empty { color: var(--muted); margin: 8px; }
 .open-panel { position: absolute; top: 14px; right: 14px; z-index: 6; width: 44px; height: 44px; display: grid; place-items: center;
   background: var(--accent); color: var(--on-accent); border: 0; border-radius: 12px; }
+
+/* the node detail: a window over the dimmed canvas with three panes */
+.scrim { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(5, 9, 14, .72); }
+.detail { width: min(1100px, 94vw); max-height: 88vh; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.detail:focus-visible { outline: none; }
+.detail-head { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.detail-head h2 { font-size: 18px; }
+.detail-head .close { margin-left: auto; }
+.panes { display: grid; grid-template-columns: 1fr 1.3fr 1fr; min-height: 260px; overflow: auto; }
+.pane { padding: 16px 20px; border-right: 1px solid var(--line); min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.pane:last-child { border-right: 0; }
+.pane h3 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.pane h4 { margin: 6px 0 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.settings-pane { background: rgba(10, 17, 26, .35); }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field-label { font-size: 12px; color: var(--muted); }
+.field-row { display: flex; gap: 6px; }
+.field-row input, .field-row select { min-width: 0; }
+.field-row input { flex: 1; font-family: var(--mono); font-size: 13px; }
+.field-error { color: var(--bad); font-size: 12px; }
+.field code { font-family: var(--mono); color: var(--warn); }
+.data-rows { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.data-row dt { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.data-row dd { margin: 2px 0 0; font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.detail-foot { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line); }
+.test-result { flex: 1; color: var(--muted); }
+.warning { margin: 0 20px 12px; padding: 12px 14px; background: var(--sunk); border: 1px solid var(--warn); border-radius: 10px; }
+.warning p { margin: 0 0 8px; }
+.warning .row { justify-content: flex-end; }
+input[type="number"] { width: 70px; }

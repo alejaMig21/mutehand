@@ -1,13 +1,12 @@
 import { Handle, Position } from '@xyflow/react'
-import { appLabel, chipFor, SYSTEM_NODES } from './catalog.js'
+import { appLabel, chipFor, systemEntryFor, titleOf } from './catalog.js'
 import { Icon } from './icons.jsx'
 
 // What a node is called and drawn as: a system node by its kind (and operation), a step by its app.
 function describe(node, meta) {
   if (node.kind && node.kind !== 'step') {
-    const known = SYSTEM_NODES.find((s) => s.node.kind === node.kind && (s.node.op ?? null) === (node.op ?? null)
-      && (node.kind !== 'trigger' || s.node.fields.mode.value === node.fields?.mode?.value))
-    return { title: known?.title ?? node.kind, subtitle: known?.group ?? 'System node', icon: known?.icon ?? 'braces' }
+    const known = systemEntryFor(node)
+    return { title: titleOf(node), subtitle: known?.group ?? 'System node', icon: known?.icon ?? 'braces' }
   }
   const app = meta?.app
   return { title: node.step, subtitle: app ? appLabel(app) : 'Step', chip: app ? chipFor(app) : null }

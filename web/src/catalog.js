@@ -63,3 +63,10 @@ export function chipFor(app) {
   for (const ch of label.toLowerCase()) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
   return { letter: label.charAt(0), colour: CHIP_COLOURS[hash % CHIP_COLOURS.length] }
 }
+
+// The catalogue entry a stored system node came from (by kind, operation and, for a trigger, its mode).
+export const systemEntryFor = (node) => SYSTEM_NODES.find((s) => s.node.kind === node.kind && (s.node.op ?? null) === (node.op ?? null)
+  && (node.kind !== 'trigger' || s.node.fields.mode.value === node.fields?.mode?.value))
+
+// What a node is called on screen.
+export const titleOf = (node) => (node.kind && node.kind !== 'step' ? systemEntryFor(node)?.title ?? node.kind : node.step)
