@@ -579,7 +579,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
           fitView={framed}
           fitViewOptions={fit()}
           zoomOnDoubleClick={false}
-          minZoom={0.3}
+          minZoom={0.15}
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#26384C" />
           <Panel position="bottom-left" className="zoom">
