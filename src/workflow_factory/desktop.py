@@ -66,12 +66,18 @@ class Frame:
         return bool(np.all(gap[picked] <= FRAME_TOLERANCE[picked]))
 
 
+def plain_app(app: str) -> str:
+    """'Telegram', 'TELEGRAM.EXE' and 'telegram.exe' are one app."""
+    return app.lower().removesuffix(".exe")
+
+
 @dataclass(frozen=True)
 class AppKey:
     """An app's identity: process name plus executable version."""
 
     process: str
     version: str
+    name: str = field(default="", compare=False)  # the product name the executable declares; "" = none
 
 
 @runtime_checkable

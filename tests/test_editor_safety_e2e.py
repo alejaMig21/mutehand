@@ -61,7 +61,7 @@ def open_flow(page, name):
     page.get_by_test_id("open-flows").click()
     page.get_by_test_id(f"flow-{name}").click()
     page.locator('.react-flow__node[data-id="n2"]').wait_for()
-    page.get_by_test_id("app-name").fill("paint.exe")
+    page.get_by_test_id("app-name").select_option("paint.exe")
 
 
 def wait_status(page, words):
@@ -337,6 +337,21 @@ def test_at_double_zoom_the_main_actions_stay_on_screen_and_the_canvas_is_not_co
         box = page.get_by_test_id(test_id).bounding_box()
         assert box["x"] >= 0 and box["x"] + box["width"] <= 683, test_id
     assert page.evaluate("() => document.querySelector('main').scrollWidth <= 683")
+
+
+@pytest.mark.parametrize("width", [683, 390])
+def test_in_a_narrow_window_no_notice_covers_the_panel_of_nodes(app, width):
+    page, folder, _ = app
+    reject_step(folder / "user.db", "paint.exe", "save-file")
+    page.set_viewport_size({"width": width, "height": 800})
+    page.reload()
+    open_flow(page, "morning")
+    page.get_by_test_id("cannot-start").wait_for()
+    page.get_by_test_id("open-panel").click()
+    page.get_by_test_id("search").click(timeout=2_000)
+    page.get_by_label("Close the panel").click(timeout=2_000)
+
+    page.get_by_test_id("open-panel").wait_for()
 
 
 def test_history_and_steps_speak_plain_words(app):

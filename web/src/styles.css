@@ -53,7 +53,7 @@ summary { cursor: pointer; }
 .answer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .answer-actions small { margin-right: auto; }
 .badge { display: inline-block; padding: 2px 8px; border: 1px solid currentColor; border-radius: 999px; font-size: 12px; font-weight: 600; }
-.group h2 { font-size: 16px; margin-bottom: 8px; }
+.group h2 { font-size: 16px; margin-bottom: 8px; overflow-wrap: anywhere; }
 .table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 520px; }
 .col-state { width: 150px; } .col-number { width: 80px; } .col-action { width: 110px; }
@@ -93,7 +93,7 @@ td small { display: block; }
 .icon-button:hover:not(:disabled) { color: var(--ink); background: var(--sunk); }
 .field-inline { display: flex; align-items: center; gap: 6px; color: var(--muted); }
 input, select, textarea { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
-.field-inline input { width: 130px; font-family: var(--mono); font-size: 13px; }
+.field-inline select { max-width: 220px; } /* a long product name is cut short, never wider than the window */
 .menu-anchor { position: relative; }
 .menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 240px; padding: 6px; display: flex; flex-direction: column; gap: 4px;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); }
@@ -165,7 +165,7 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .panel-scroll h2 span { margin-left: 4px; }
 .entry { justify-content: flex-start; gap: 10px; width: 100%; text-align: left; padding: 8px; border-color: transparent; background: transparent; border-radius: 10px; }
 .entry:hover:not(:disabled) { background: var(--sunk); }
-.entry-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.entry-text { display: flex; flex-direction: column; min-width: 0; flex: 1; overflow-wrap: anywhere; }
 .entry-text small { color: var(--muted); }
 .tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .more { margin: 4px 0 0 8px; padding: 4px 6px; border-color: transparent; background: transparent; color: var(--info); }
@@ -210,7 +210,7 @@ input[type="number"] { width: 70px; }
 .card-mark { margin-top: 6px; }
 .summary { display: flex; gap: 14px; margin: 0; padding: 0; list-style: none; font-size: 13px; font-weight: 600; }
 .summary li { display: flex; align-items: center; gap: 5px; }
-.notice { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 16px; background: var(--sunk); border-bottom: 1px solid var(--line); }
+.notice { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 16px; background: var(--sunk); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .notice-stopped, .notice-error { border-left: 4px solid var(--bad); }
 .notice-waiting, .notice-emergency, .notice-busy { border-left: 4px solid var(--warn); }
 .run-log { flex: none; max-height: 30%; overflow: auto; padding: 8px 20px 12px; background: var(--surface); border-top: 1px solid var(--line); }
@@ -226,7 +226,7 @@ input[type="number"] { width: 70px; }
 
 /* the schedules screen */
 .schedule-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
-.schedule-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; }
+.schedule-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; max-width: min(320px, 100%); }
 .schedule-form input, .schedule-form select, .schedule-form button { height: 40px; box-sizing: border-box; font-size: 14px; }
 
 /* the setup check */
@@ -241,7 +241,7 @@ input[type="number"] { width: 70px; }
   .summary { display: none; }
   .panes { grid-template-columns: 1fr; }
   .pane { border-right: 0; border-bottom: 1px solid var(--line); }
-  .search-panel { width: min(300px, calc(100% - 28px)); }
+  .search-panel { width: min(300px, calc(100% - 28px)); z-index: 8; } /* the notices span the window: it opens over them */
   .empty-canvas { inset: 0; }
   .notices { right: 0; }
   .detail { max-height: 96vh; overflow: auto; }

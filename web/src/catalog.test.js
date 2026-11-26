@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { appLabel, CHIP_COLOURS, chipFor, guessApp, searchCatalog, SYSTEM_NODES } from './catalog.js'
+import { appLabel, CHIP_COLOURS, chipFor, guessApp, onAppNames, searchCatalog, setAppNames, SYSTEM_NODES } from './catalog.js'
 
 const steps = [
   { app: 'telegram.exe', name: 'Send', origin: 'local' },
@@ -49,6 +49,26 @@ test('app names read like names and every chip has readable text', () => {
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
   }
   for (const colour of CHIP_COLOURS) assert.ok(1.05 / (luminance(colour) + 0.05) >= 4.5, colour)
+})
+
+test('an app is called by its product name once it is known, and keeps its chip colour', () => {
+  const before = chipFor('zzqx.exe')
+  let heard = 0
+  const stop = onAppNames(() => { heard += 1 })
+  try {
+    setAppNames({ zzqx: 'Quill Ledger', vvrt: 'Atlas' })
+    setAppNames({ zzqx: 'Quill Ledger', vvrt: 'Atlas' }) // the same names again: nothing to redraw
+
+    assert.equal(heard, 1)
+    assert.equal(appLabel('ZZQX.EXE'), 'Quill Ledger')
+    assert.equal(appLabel('other.exe'), 'Other')
+    assert.deepEqual(chipFor('zzqx.exe'), { letter: 'Q', colour: before.colour })
+    const found = searchCatalog('', [{ app: 'zzqx.exe', name: 'a', origin: 'local' }, { app: 'vvrt.exe', name: 'b', origin: 'local' }])
+    assert.deepEqual(found.apps.map((s) => s.name), ['b', 'a']) // Atlas before Quill Ledger
+  } finally {
+    stop()
+    setAppNames({})
+  }
 })
 
 test('a flow runs on the app that has most of its steps', () => {

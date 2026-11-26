@@ -42,6 +42,7 @@ from workflow_factory.paths import default_user_db
 from workflow_factory.queue import answer_doubt, dismiss_doubt, list_doubts, list_runs
 from workflow_factory.recipes import adaptations, recipes_overview
 from workflow_factory.steps import (
+    app_names,
     find_step,
     list_steps,
     reject_step,
@@ -57,8 +58,25 @@ MAX_NOTE_CHARS = 500
 MAX_LOG_EVENTS = 200
 MAX_FLOW_NAME_CHARS = 100
 MAX_SCHEDULES = 20  # more than a person can manage: a stray client cannot fill Windows Task Scheduler
+# the ports from 1024 up that browsers refuse to open ("bad ports" in the Fetch standard)
+BROWSER_BLOCKED_PORTS = frozenset({1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667,
+                                   6668, 6669, 6679, 6697, 10080})
 CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css",
                  ".svg": "image/svg+xml", ".json": "application/json", ".map": "application/json"}
+
+
+def _listen(host: str, port: int, handler) -> ThreadingHTTPServer:
+    """Port 0 lets the system choose, and it may choose one no browser will open: those are held until it offers another."""
+    refused = []
+    try:
+        while True:
+            server = ThreadingHTTPServer((host, port), handler)
+            if port or server.server_address[1] not in BROWSER_BLOCKED_PORTS:
+                return server
+            refused.append(server)
+    finally:
+        for server in refused:
+            server.server_close()
 
 
 class ApiServer:
@@ -78,7 +96,7 @@ class ApiServer:
         self._save_lock = threading.Lock()  # "is it unchanged?" and "save it" happen as one
         self._node_data: dict[str, dict] = {}  # flow id -> node id -> {in, out}: the latest, in memory only
         self.quit_requested = threading.Event()  # set by POST /api/quit; whoever started the server waits on it
-        self._http = ThreadingHTTPServer((host, port), self._handler())
+        self._http = _listen(host, port, self._handler())
         self._thread = threading.Thread(target=self._http.serve_forever, name="editor-api", daemon=True)
 
     @property
@@ -291,6 +309,8 @@ class ApiServer:
                     steps = list_steps(api.user_db, api.factory_db)
                     return self._send(200, [{**_step_view(step), **safety} for step, safety in
                                             zip(steps, _safety(api.user_db, steps), strict=True)])
+                if method == "GET" and path == "/api/app-names":
+                    return self._send(200, app_names(api.user_db))
                 if method == "GET" and path == "/api/checks":
                     data_dir = api.user_db.parent
                     return self._send(200, {"first_run": not seen_before(data_dir), "checks": run_checks(data_dir)})

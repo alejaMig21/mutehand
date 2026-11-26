@@ -89,7 +89,7 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
         assert saved.nodes[1].inputs == (("value", "str"),)
 
         # run it with the typed value and watch the per-node status
-        page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run-data").click()
         page.get_by_test_id("context").fill(json.dumps({"value": "hello"}))
         page.get_by_test_id("run").click()
@@ -129,7 +129,7 @@ def test_a_loaded_flow_keeps_unique_node_ids_and_drops_the_previous_run_colours(
         page.get_by_test_id("palette-open-menu").click()  # n1 on a fresh canvas
         page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
-        page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
         assert page.locator(".react-flow__node.status-done").count() == 1
@@ -427,7 +427,7 @@ def test_the_node_detail_shows_data_hidden_until_asked_and_never_before_a_run(ed
         assert "No data yet" in detail.inner_text()  # nothing ran
 
         page.get_by_test_id("close-detail").click()
-        page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
         page.locator('.react-flow__node[data-id="c"]').dblclick()
@@ -451,7 +451,7 @@ def test_a_field_is_edited_as_a_fixed_value_or_as_a_reference_and_the_node_is_te
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         open_seeded_flow(page)
-        page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
 
@@ -485,7 +485,7 @@ def test_testing_a_step_warns_about_the_mouse_and_keyboard_first_then_runs_only_
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         open_seeded_flow(page)
-        page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("app-name").select_option("paint.exe")
         page.locator('.react-flow__node[data-id="p"]').dblclick()
         detail = page.get_by_test_id("detail")
         detail.get_by_test_id("test-node").click()
@@ -540,7 +540,7 @@ def test_stop_ends_a_run_at_once_and_the_run_button_comes_back(tmp_path):
             page.get_by_test_id("open-flows").click()
             page.get_by_test_id("flow-slow").click()
             page.locator('.react-flow__node[data-id="b"]').wait_for()
-            page.get_by_test_id("app-name").fill("paint.exe")
+            page.get_by_test_id("app-name").select_option("paint.exe")
             page.get_by_test_id("run").click()
             page.get_by_test_id("run-log").wait_for()
             page.get_by_test_id("stop").click()
@@ -601,7 +601,7 @@ def test_cards_say_how_far_a_step_is_trusted_and_doubts_are_counted_but_cannot_b
             b = page.get_by_test_id("node-b").inner_text()
             assert "On trial" in b and "Consent given" in b and "Private app" in b
 
-            page.get_by_test_id("app-name").fill("telegram.exe")
+            page.get_by_test_id("app-name").select_option("telegram.exe")
             page.get_by_test_id("run").click()
             page.get_by_test_id("run-status").filter(has_text="stopped").wait_for(timeout=10_000)
             page.get_by_text("1 doubt").first.wait_for()
@@ -640,14 +640,14 @@ def test_dropping_a_recipe_adds_its_connected_nodes_and_adapted_steps_say_where_
             entry = page.get_by_test_id("recipe-send-message")
             entry.wait_for()
             assert "3 steps" in entry.inner_text() and "A" in entry.inner_text()
-            page.get_by_test_id("app-name").fill("b.exe")
+            page.get_by_test_id("app-name").select_option("b.exe")
             entry.click()
             page.locator('.react-flow__node[data-id="n3"]').wait_for()
             assert page.locator(".react-flow__node").count() == 3 and page.locator(".react-flow__edge").count() == 2
             assert "Adapted from A" in page.get_by_test_id("node-n2").inner_text()  # compose was taught for b on its own
             assert page.get_by_test_id("cannot-start").count() == 0 and not page.get_by_test_id("run").is_disabled()
 
-            page.get_by_test_id("app-name").fill("a.exe")  # the original app: nothing is adapted
+            page.get_by_test_id("app-name").select_option("a.exe")  # the original app: nothing is adapted
             assert "Adapted" not in page.get_by_test_id("node-n2").inner_text()
             browser.close()
     finally:
@@ -662,7 +662,7 @@ def test_a_recipe_with_an_unfilled_hole_cannot_run_and_says_which(tmp_path):
     try:
         with sync_playwright() as playwright:
             browser, page = open_page(playwright, server)
-            page.get_by_test_id("app-name").fill("b.exe")
+            page.get_by_test_id("app-name").select_option("b.exe")
             page.get_by_test_id("recipe-send-message").click()
             page.locator('.react-flow__node[data-id="n3"]').wait_for()
             note = page.get_by_test_id("cannot-start")
@@ -682,6 +682,7 @@ def test_a_schedule_is_added_listed_and_removed_from_the_screen_and_other_tasks_
 
     from workflow_factory import save_flow
 
+    save_step(tmp_path / "user.db", step("stamp", "Stamp", app="vvrt.exe"))
     save_flow(tmp_path / "user.db", Flow(id="morning", nodes=[Node("a", "open-menu")]))
     scheduler = FakeScheduler()
     server = ApiServer(tmp_path / "user.db", None, lambda app: None, token="e2e-token", web_dir=DIST, schedule_runner=scheduler)
@@ -694,12 +695,14 @@ def test_a_schedule_is_added_listed_and_removed_from_the_screen_and_other_tasks_
             page.get_by_test_id("no-schedules").wait_for()  # the foreign task is not shown
             assert page.get_by_test_id("schedule-add").is_disabled()  # no flow is chosen for the person
             page.get_by_test_id("schedule-flow").select_option("morning")
-            page.get_by_test_id("schedule-app").fill("mspaint.exe")
+            page.get_by_test_id("schedule-app").select_option("vvrt.exe")
             page.get_by_test_id("schedule-time").fill("07:45")
             page.get_by_test_id("schedule-add").click()
             row = page.get_by_test_id("schedule-row-morning daily 0745")
             row.wait_for()
-            assert "morning" in row.inner_text() and "mspaint.exe" in row.inner_text() and "07:45" in row.inner_text()
+            assert "morning" in row.inner_text() and "Vvrt" in row.inner_text() and "07:45" in row.inner_text()
+            created = next(task for name, task in scheduler.tasks.items() if name != FOREIGN)
+            assert "--app vvrt.exe" in created["arguments"]  # the screen names the app, Windows gets its file name
             page.get_by_test_id("schedule-remove-morning daily 0745").click()
             page.get_by_test_id("no-schedules").wait_for()
             assert list(scheduler.tasks) == [FOREIGN]

@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { api, encode } from './api.js'
+import AppSelect from './AppSelect.jsx'
 import { appLabel, guessApp } from './catalog.js'
 import Screen from './Screen.jsx'
 import { useAction, useLoad } from './useLoad.js'
+
+const named = (app) => (app ? appLabel(app) : 'unknown app')
 
 // The schedules this product made in Windows Task Scheduler. Nothing else is listed and nothing else can be removed here.
 export default function Schedules() {
@@ -29,7 +32,7 @@ export default function Schedules() {
   function add(event) {
     event.preventDefault()
     const same = load.data.find((s) => s.flow === flow && s.at === at)
-    if (same && !window.confirm(`'${flow}' is already scheduled at ${at} on ${same.app}. Replace it?`)) return
+    if (same && !window.confirm(`'${flow}' is already scheduled at ${at} on ${named(same.app)}. Replace it?`)) return
     act(() => api('/api/schedules', { method: 'POST', body: { flow, app, at } }), `'${flow}' will run every day at ${at}.`)
   }
 
@@ -42,8 +45,7 @@ export default function Schedules() {
         </select>
       </label>
       <label>App to run on
-        <input data-testid="schedule-app" list="schedule-apps" value={app} onChange={(e) => setApp(e.target.value)} required />
-        <datalist id="schedule-apps">{apps.map((a) => <option key={a} value={a}>{appLabel(a)}</option>)}</datalist>
+        <AppSelect data-testid="schedule-app" apps={apps} value={app} onChange={setApp} required />
       </label>
       <label>Every day at
         <input type="time" data-testid="schedule-time" value={at} onChange={(e) => setAt(e.target.value)} required />
@@ -61,7 +63,7 @@ export default function Schedules() {
           <li key={s.name} data-testid={`schedule-row-${s.name}`} className="row-card">
             <div className="card-body">
               <b>{s.flow ?? s.name}</b>
-              <small>every day at {s.at ?? '?'} · {s.app ?? 'unknown app'}</small>
+              <small>every day at {s.at ?? '?'} · {named(s.app)}</small>
             </div>
             <button className="small" disabled={busy} data-testid={`schedule-remove-${s.name}`} aria-label={`Remove the schedule ${s.name}`}
               onClick={() => {

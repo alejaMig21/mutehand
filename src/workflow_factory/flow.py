@@ -45,6 +45,7 @@ from workflow_factory.steps import (
     Status,
     current_status,
     find_step,
+    record_app_name,
     record_outcome,
     refused_write,
     revalidate_changed_versions,
@@ -874,6 +875,7 @@ def run_flow(
 def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="manual") -> RunResult:
     key = desktop.app_key()
     revalidate_changed_versions(user_db, key.process, key.version)
+    record_app_name(user_db, key)
     saved = load_checkpoint(user_db, flow.key, flow.definition)
     state = _State.load(saved) if saved else _State()
     state.context.update(context or {})

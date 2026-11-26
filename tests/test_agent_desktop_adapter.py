@@ -1,5 +1,8 @@
 import json
+import os
 import re
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -7,6 +10,8 @@ from workflow_factory.agent_desktop import (
     SNAPSHOT_ATTEMPTS,
     AgentDesktop,
     AgentDesktopError,
+    product_name,
+    product_name_of_pid,
     read_secret,
     resolve_binary,
     system_frame_fields,
@@ -305,6 +310,41 @@ def test_app_name_matches_regardless_of_case():
     desktop = AgentDesktop("mspaint.exe", runner, settle_seconds=0, version_of=lambda pid: "1.0")
 
     assert desktop.app_key() == AppKey("mspaint.exe", "1.0")
+
+
+def test_the_product_name_is_the_one_the_executable_file_declares():
+    assert product_name(sys._base_executable) == "Python"  # the interpreter itself, read from disk
+    assert product_name_of_pid(os.getpid()) == "Python"  # and found from this running test
+
+
+def test_an_executable_that_declares_the_name_of_windows_itself_declares_none_of_its_own():
+    system32 = Path(os.environ["SystemRoot"]) / "System32"  # any component of Windows: here, two files read from disk
+
+    assert product_name(str(system32 / "cmd.exe")) == ""
+    assert product_name(str(system32 / "schtasks.exe")) == ""
+
+
+@pytest.mark.parametrize("content", [b"", b"not a program"])
+def test_a_file_that_declares_no_name_gives_none(tmp_path, content):
+    (tmp_path / "zzqx.exe").write_bytes(content)
+
+    assert product_name(str(tmp_path / "zzqx.exe")) == ""
+    assert product_name(str(tmp_path / "missing.exe")) == ""
+
+
+def test_app_key_carries_the_name_the_executable_declares_without_it_becoming_part_of_the_identity():
+    runner = FakeRunner(ok({"apps": [{"name": "zzqx.exe", "pid": 42}]}))
+    desktop = AgentDesktop("zzqx.exe", runner, settle_seconds=0, version_of=lambda pid: "1.0",
+                           name_of=lambda pid: f"Quill {pid}")
+
+    key = desktop.app_key()
+
+    assert key.name == "Quill 42"
+    assert key == AppKey("zzqx.exe", "1.0")
+
+
+def test_a_name_that_cannot_be_read_never_stops_the_app_from_being_seen():
+    assert product_name_of_pid(0) == ""  # Windows lets nobody open process 0
 
 
 @pytest.mark.live

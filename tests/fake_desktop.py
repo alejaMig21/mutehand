@@ -14,13 +14,13 @@ from workflow_factory.desktop import AppKey, Control, DesktopError, Frame
 class FakeDesktop:
     def __init__(
         self, controls, reveals=None, removes=None, seconds_per_action=0, vanish_after=None,
-        app="paint.exe", version="1.0", frame=None, secrets=None, captures=None,
+        app="paint.exe", version="1.0", frame=None, secrets=None, captures=None, product_name="",
     ):
         self._captures = captures or {}  # anchor name -> pixel array the fake "screen" shows there
         self._secrets = secrets or {}
         self.delivered = []  # (control name, value) the target received; never part of `calls`
         self._frame = frame or Frame()
-        self._app_key = AppKey(app, version)
+        self._app_key = AppKey(app, version, product_name)
         self._controls = list(controls)
         self._reveals = reveals or {}  # (role, name) -> controls shown after a click
         self._removes = removes or {}  # (role, name) -> controls hidden after a click

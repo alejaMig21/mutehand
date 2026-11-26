@@ -1,3 +1,5 @@
+import { setAppNames } from './catalog.js'
+
 // The server prints a URL like http://127.0.0.1:PORT/#token=XXXX. The token lives in the fragment, so
 // it is never sent to the server in a request line or logged; it is kept for this tab only.
 function readToken() {
@@ -36,5 +38,8 @@ export async function api(path, { method = 'GET', body } = {}) {
   if (!response.ok) throw Object.assign(new Error(data?.error ?? `HTTP ${response.status}`), { status: response.status })
   return data
 }
+
+// A name that cannot be read now leaves the screen with the file names it can work out itself.
+export const loadAppNames = () => api('/api/app-names').then(setAppNames).catch(() => {})
 
 export const encode = encodeURIComponent

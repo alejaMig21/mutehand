@@ -28,7 +28,7 @@ def workday_command(flow_id: str, app: str, extra: list[str] | None = None) -> s
     """The command line the scheduler runs. pythonw (no console window) when it is there."""
     for label, value in (("flow", flow_id), ("app", app)):
         if not SAFE_NAME.fullmatch(value):
-            raise ValueError(f"the {label} name may only use letters, digits, '_', '.' and '-': {value!r}")
+            raise ValueError(f"the {label} name may only use letters, digits, '_', '.' and '-': {value.removesuffix('.exe')!r}")
     if any('"' in part for part in (extra or [])):
         raise ValueError("extra arguments may not contain double quotes")
     python = Path(sys.executable)

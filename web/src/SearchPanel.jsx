@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { appLabel, chipFor, searchCatalog, SYSTEM_NODES } from './catalog.js'
+import { appLabel, chipFor, getAppNames, searchCatalog, SYSTEM_NODES } from './catalog.js'
 import { Icon } from './icons.jsx'
 
 const SYSTEM_PREVIEW = 4 // like n8n: a few first, the rest on request or by searching
@@ -12,7 +12,8 @@ const draggable = (entry) => ({ draggable: true, onDragStart: (e) => e.dataTrans
 export default function SearchPanel({ steps, recipes, onAddSystem, onAddStep, onAddRecipe, onClose }) {
   const [query, setQuery] = useState('')
   const [all, setAll] = useState(false)
-  const { system, apps, recipes: foundRecipes } = useMemo(() => searchCatalog(query, steps, undefined, recipes), [query, steps, recipes])
+  const names = getAppNames() // searching and ordering use the names on screen: again when they change
+  const { system, apps, recipes: foundRecipes } = useMemo(() => searchCatalog(query, steps, undefined, recipes), [query, steps, recipes, names])
   const shown = query || all ? system : system.slice(0, SYSTEM_PREVIEW)
   const rest = system.length - shown.length
   const systemList = useRef(null)

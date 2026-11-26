@@ -35,14 +35,31 @@ export const SYSTEM_NODES = [
     data('math', { a: 0, b: 0, operation: 'add' })),
 ]
 
-// 'telegram.exe' -> 'Telegram'
+// 'Telegram', 'TELEGRAM.EXE' and 'telegram.exe' are one app
+export const appKey = (app) => String(app).toLowerCase().replace(/\.exe$/, '')
+
+// The product names the apps' executables declare, by app key, as the server recorded them when it saw each app. The
+// screens subscribe, so they are drawn again when the names arrive.
+let productNames = {}
+const listeners = new Set()
+export const getAppNames = () => productNames
+export const onAppNames = (listener) => {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+export function setAppNames(found) {
+  if (JSON.stringify(found) === JSON.stringify(productNames)) return
+  productNames = found
+  listeners.forEach((listener) => listener())
+}
+
+// What an app is called on screen: its product name, else its file name without the extension, capitalised.
 export const appLabel = (app) => {
+  const known = productNames[appKey(app)]
+  if (known) return known
   const base = String(app).replace(/\.exe$/i, '')
   return base.charAt(0).toUpperCase() + base.slice(1)
 }
-
-// 'Telegram', 'TELEGRAM.EXE' and 'telegram.exe' are one app
-export const appKey = (app) => String(app).toLowerCase().replace(/\.exe$/, '')
 
 const has = (text, query) => String(text).toLowerCase().includes(query)
 
@@ -52,7 +69,7 @@ export function searchCatalog(query, steps, systemNodes = SYSTEM_NODES, recipes 
   const system = systemNodes.filter((n) => !q || [n.title, n.hint, n.group].some((t) => has(t, q)))
   const apps = steps
     .filter((s) => !q || [s.name, s.app, appLabel(s.app), s.origin].some((t) => has(t, q)))
-    .sort((a, b) => a.app.localeCompare(b.app) || a.name.localeCompare(b.name))
+    .sort((a, b) => appLabel(a.app).localeCompare(appLabel(b.app)) || a.name.localeCompare(b.name))
   const found = recipes.filter((r) => !q || [r.name, ...r.holes.map((h) => h.hole), ...Object.keys(r.apps).map(appLabel)].some((t) => has(t, q)))
   return { system, apps, recipes: found }
 }
@@ -60,12 +77,12 @@ export function searchCatalog(query, steps, systemNodes = SYSTEM_NODES, recipes 
 // Letter chip colours: white text on each is at least 4.5:1 (checked by the tests).
 export const CHIP_COLOURS = ['#1F6FA8', '#7B4FC4', '#1B7A4E', '#B0405F', '#3F5FB8', '#8A5A12']
 
-// The same app always gets the same chip, whatever the case of its name.
+// The same app always gets the same chip, whatever the case of its name: the letter of the name on screen, and a colour
+// that does not change when that name arrives.
 export function chipFor(app) {
-  const label = appLabel(app)
   let hash = 0
-  for (const ch of label.toLowerCase()) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
-  return { letter: label.charAt(0), colour: CHIP_COLOURS[hash % CHIP_COLOURS.length] }
+  for (const ch of appKey(app)) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0
+  return { letter: appLabel(app).charAt(0).toUpperCase(), colour: CHIP_COLOURS[hash % CHIP_COLOURS.length] }
 }
 
 // The catalogue entry a stored system node came from (by kind, operation and, for a trigger, its mode).

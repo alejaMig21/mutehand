@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { api, LOCKED } from './api.js'
+import { useEffect, useState, useSyncExternalStore } from 'react'
+import { api, loadAppNames, LOCKED } from './api.js'
+import { getAppNames, onAppNames } from './catalog.js'
 import Checks from './Checks.jsx'
 import Consents from './Consents.jsx'
 import Editor from './Editor.jsx'
@@ -37,6 +38,12 @@ export default function App() {
     return () => window.removeEventListener(LOCKED, lock)
   }, [])
   const [, label, Current] = SCREENS.find(([id]) => id === screen)
+  useSyncExternalStore(onAppNames, getAppNames) // every screen is drawn again when the apps' names arrive
+  useEffect(() => { // an app may have been seen since: the tutor teaching, or a scheduled run
+    loadAppNames()
+    window.addEventListener('focus', loadAppNames)
+    return () => window.removeEventListener('focus', loadAppNames)
+  }, [screen])
   useEffect(() => {
     sessionStorage.setItem('wf-screen', screen)
     document.title = `${label} · Workflow Factory`

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
-import { api, encode, UNREACHABLE } from './api.js'
+import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
 import { chainLoose, fromFlowJson, layout, looseNodes, nextNodeId, toFlowJson, withBranch } from './flowjson.js'
+import AppSelect from './AppSelect.jsx'
 import { Icon } from './icons.jsx'
 import { refOptions } from './bindings.js'
 import { appKey, appLabel, guessApp, SYSTEM_NODES, titleOf } from './catalog.js'
@@ -68,6 +69,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
 
   const refresh = useCallback(() => {
     const fail = (e) => setError(e.message)
+    loadAppNames() // a run just seen may have told the name of its app
     api('/api/steps').then((found) => {
       setSteps(found)
       setAppName((current) => current || found[0]?.app || '')
@@ -409,7 +411,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
     [viewNodes, shownRun, doubtCounts, onOpen],
   )
   const safety = useMemo(() => safetySummary(viewNodes, doubtCounts), [viewNodes, doubtCounts])
-  const blocked = whyNotRunnable(safety, appName)
+  const blocked = whyNotRunnable(safety, appName ? appLabel(appName) : undefined)
   const paused = running && Object.values(shownRun.nodes).includes('paused')
   const apps = [...new Set(steps.map((s) => s.app))]
   const loose = looseNodes(nodes, edges)
@@ -462,8 +464,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
         <div className="spacer" />
 
         <label className="field-inline">App
-          <input aria-label="App to run on" data-testid="app-name" list="editor-apps" value={appName} onChange={(e) => setAppName(e.target.value)} />
-          <datalist id="editor-apps">{apps.map((a) => <option key={a} value={a}>{appLabel(a)}</option>)}</datalist>
+          <AppSelect aria-label="App to run on" data-testid="app-name" apps={apps} value={appName} onChange={setAppName} />
         </label>
         <div className="menu-anchor">
           <button className="ghost" data-testid="run-data" aria-expanded={menu === 'data'} onClick={() => setMenu(menu === 'data' ? null : 'data')}>

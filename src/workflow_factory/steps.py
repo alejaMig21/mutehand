@@ -5,6 +5,7 @@ import io
 import json
 import math
 import sqlite3
+from collections import Counter
 from contextlib import closing
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -12,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-from workflow_factory.desktop import FRAME_FIELDS, Frame
+from workflow_factory.desktop import FRAME_FIELDS, AppKey, Frame, plain_app
 from workflow_factory.legacy import add_text_column, migrate_names, readable_table
 
 SCHEMA = """
@@ -56,6 +57,8 @@ CREATE TABLE IF NOT EXISTS step_state (
 """
 # the newest version of each app a run has seen: lets the library show to_revalidate before any lookup
 SEEN_SCHEMA = "CREATE TABLE IF NOT EXISTS app_seen (app TEXT PRIMARY KEY, version TEXT NOT NULL)"
+# the product name each app's executable declared when it was last seen: what screens call it once it is closed
+NAMES_SCHEMA = "CREATE TABLE IF NOT EXISTS app_names (app TEXT PRIMARY KEY, name TEXT NOT NULL)"
 COLUMNS = (
     "app, version, name, precondition, action, role, control_name, automation_id,"
     " effect, origin, status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref, derived, template, drag_to"
@@ -338,6 +341,27 @@ def revalidate_changed_versions(user_db: Path, app: str, current_version: str) -
             "UPDATE steps SET status = ? WHERE app = ? AND version != ? AND status != ?",
             (str(Status.TO_REVALIDATE), app, current_version, str(Status.REJECTED)),
         )
+
+
+def record_app_name(user_db: Path, key: AppKey) -> None:
+    """Call whenever an app is seen: keeps the name it declares, under the plain name of the app."""
+    name = key.name.strip()
+    if name.lower().endswith(".exe"):  # no screen shows an extension, whoever wrote it
+        name = name[:-4]
+    if name:
+        with closing(sqlite3.connect(user_db)) as db, db:
+            db.execute(NAMES_SCHEMA)
+            db.execute("INSERT OR REPLACE INTO app_names (app, name) VALUES (?, ?)", (plain_app(key.process), name))
+
+
+def app_names(user_db: Path) -> dict[str, str]:
+    """Plain app name -> what to call it, for every app seen that declares a product name. Apps that declare the same
+    one (parts of one suite) carry their file name too, so the person can tell them apart."""
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute(NAMES_SCHEMA)
+        names = dict(db.execute("SELECT app, name FROM app_names"))
+    shared = Counter(name.casefold() for name in names.values())
+    return {app: f"{name} ({app.capitalize()})" if shared[name.casefold()] > 1 else name for app, name in names.items()}
 
 
 def confidence(successes: int, failures: int) -> float:

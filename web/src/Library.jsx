@@ -17,7 +17,7 @@ export default function Library() {
   const load = useLoad('/api/library')
   const { act, busy, said } = useAction(load.reload, load.setError)
   const steps = load.data
-  const apps = [...new Set(steps.map((step) => step.app))]
+  const apps = [...new Set(steps.map((step) => step.app))].sort((a, b) => appLabel(a).localeCompare(appLabel(b)))
   const mark = (step, action, done) =>
     act(() => api(`/api/steps/${encode(step.app)}/${encode(step.name)}/${action}`, { method: 'POST', body: {} }), done)
 

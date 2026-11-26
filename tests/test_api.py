@@ -59,6 +59,27 @@ def test_the_server_only_binds_to_the_loopback_interface(tmp_path):
         server.stop()
 
 
+def test_the_editor_never_opens_on_a_port_a_browser_refuses(tmp_path, monkeypatch):
+    handed_out, closed = iter([1719, 6667, 50123]), []
+
+    class SystemThatHandsOutBlockedPorts:
+        def __init__(self, address, handler):
+            self.server_address = (address[0], next(handed_out))
+
+        def server_close(self):
+            closed.append(self.server_address[1])
+
+        def serve_forever(self):
+            pass
+
+    monkeypatch.setattr("workflow_factory.api.ThreadingHTTPServer", SystemThatHandsOutBlockedPorts)
+
+    server = ApiServer(tmp_path / "u.db", None, lambda app: None)
+
+    assert server.address == ("127.0.0.1", 50123)
+    assert closed == [1719, 6667]  # the refused ones are given back
+
+
 def test_a_request_whose_host_header_is_not_loopback_is_refused_against_dns_rebinding(server):
     status, _, _ = call(server, "/api/steps", host="evil.example.com")
 
