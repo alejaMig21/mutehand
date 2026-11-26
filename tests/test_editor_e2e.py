@@ -321,7 +321,7 @@ def test_system_nodes_and_steps_are_added_wired_deleted_saved_and_reopened(edito
 
 
 def test_the_search_panel_finds_system_nodes_and_steps_by_name_and_by_app(editor):
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import expect, sync_playwright
 
     server, _ = editor
     with sync_playwright() as playwright:
@@ -331,11 +331,12 @@ def test_the_search_panel_finds_system_nodes_and_steps_by_name_and_by_app(editor
 
         search.fill("wait")
         page.get_by_test_id("system-wait").wait_for()
-        assert page.get_by_test_id("palette-open-menu").count() == 0
+        expect(page.get_by_test_id("palette-open-menu")).to_have_count(0)  # retried: the panel re-renders after the typing
 
         search.fill("paint")  # by app: both steps of Paint, no system node
         page.get_by_test_id("palette-open-menu").wait_for()
-        assert page.get_by_test_id("palette-save-file").count() == 1 and page.get_by_test_id("system-wait").count() == 0
+        expect(page.get_by_test_id("palette-save-file")).to_have_count(1)
+        expect(page.get_by_test_id("system-wait")).to_have_count(0)
 
         search.fill("nothing like this")
         page.get_by_text("Nothing matches").wait_for()
