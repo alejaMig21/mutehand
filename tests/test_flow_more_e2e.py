@@ -50,10 +50,11 @@ def more(page, flow_id):
     page.get_by_test_id(f"more-rename-{flow_id}").wait_for()
 
 
-def daily(scheduler, flow_id="morning", at="09:30"):
+def daily(scheduler, tmp_path, flow_id="morning", at="09:30"):
     exe = "C:\\py\\pythonw.exe"
     scheduler.tasks[f"\\Workflow factory - {flow_id} daily {at.replace(':', '')}"] = {
-        "command": exe, "arguments": f"-m workflow_factory.workday --flow {flow_id} --app paint.exe --fired daily", "at": at}
+        "command": exe, "at": at,
+        "arguments": f"-m workflow_factory.workday --flow {flow_id} --app paint.exe --fired daily --user-db {tmp_path / 'user.db'}"}
 
 
 def ours(scheduler):
@@ -82,7 +83,7 @@ def test_renaming_by_keyboard_changes_the_title_only(tmp_path):
     run_flow(morning, FakeDesktop(controls=[button("Alpha"), button("Beta")]), db)
     save_checkpoint(db, "morning", {"done": []}, "definition")
     with served(tmp_path) as (page, _, scheduler):
-        daily(scheduler)
+        daily(scheduler, tmp_path)
         says(page, "morning", "Worked")
         more(page, "morning")
         page.get_by_test_id("more-rename-morning").press("Enter")
@@ -119,7 +120,7 @@ def test_a_name_that_cannot_be_kept_is_said_in_words_and_escape_leaves_the_old_o
 def test_deleting_removes_the_chore_and_its_daily_run_and_undo_brings_both_back(tmp_path):
     chores(tmp_path)
     with served(tmp_path) as (page, _, scheduler):
-        daily(scheduler)
+        daily(scheduler, tmp_path)
         says(page, "morning", "Never run")
         more(page, "morning")
         page.get_by_test_id("more-delete-morning").click()
@@ -143,7 +144,7 @@ def test_a_running_chore_cannot_be_deleted_until_it_is_stopped(tmp_path):
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
     desktop.click_seconds = 1.5
     with served(tmp_path, desktop) as (page, _, scheduler):
-        daily(scheduler)
+        daily(scheduler, tmp_path)
         run_button(page, "morning").click()
         says(page, "morning", "Running now")
         more(page, "morning")

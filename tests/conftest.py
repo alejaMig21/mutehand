@@ -38,3 +38,13 @@ def _never_change_real_scheduled_tasks(request, monkeypatch):
         start(self, args, *rest, **kwargs)
 
     monkeypatch.setattr(subprocess.Popen, "__init__", guarded)
+
+
+@pytest.fixture(autouse=True)
+def _editor_server_never_reads_the_real_scheduler(request, monkeypatch):
+    """A server made without a scheduler stand-in gets an empty one, so no default test reads this machine's tasks."""
+    if request.node.get_closest_marker("live"):
+        return
+    from fake_scheduler import FakeScheduler
+
+    monkeypatch.setattr("workflow_factory.api._real_scheduler", FakeScheduler())

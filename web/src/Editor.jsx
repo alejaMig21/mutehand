@@ -2,6 +2,7 @@ import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState 
 import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Panel, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
 import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
 import { boxNumbers, chainLoose, fromFlowJson, joinBoxes, looseNodes, nextNodeId, toFlowJson, withBranch } from './flowjson.js'
+import { changeDaily, DailyForm } from './Daily.jsx'
 import { Icon } from './icons.jsx'
 import { refOptions } from './bindings.js'
 import { appKey, appLabel, SYSTEM_NODES, taughtApp, titleOf } from './catalog.js'
@@ -32,6 +33,7 @@ const focusSoon = (...testIds) => setTimeout(() => {
 const EMPTY_FLOW = JSON.stringify(toFlowJson([], []))
 const flowUrl = (id) => `/api/flows/${encode(id)}`
 const FIRST_TITLE = freshTitle([])
+const isDaily = (n) => n.data.node.kind === 'trigger' && n.data.node.fields?.mode?.value === 'daily'
 
 export default function Editor(props) {
   return <ReactFlowProvider><EditorScreen {...props} /></ReactFlowProvider>
@@ -62,6 +64,9 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   const [opening, setOpening] = useState(false)
   const [tested, setTested] = useState(0)
   const [said, say] = useState('') // for people who cannot see the canvas change
+  const [daily, setDaily] = useState(null) // {at, node_at} as the server says: the Windows task, and the box
+  const [settingDaily, setSettingDaily] = useState(false)
+  const [focusStart, setFocusStart] = useState(0)
   const [framed, setFramed] = useState(false) // a stored flow is fitted to the window; a drawn one stays where it is put
   const busy = useRef({ saving: false, starting: false, ticket: 0, named: false })
   const { runs, offline, settled, follow, attach, forget, patch } = following
@@ -235,8 +240,11 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
     const ticket = ++busy.current.ticket
     setOpening(true)
     try {
+      const time = await api(`${flowUrl(id)}/daily`).catch(() => null) // reading it brings an older schedule onto the first box
       const stored = await api(flowUrl(id))
       if (ticket !== busy.current.ticket) return
+      setDaily(time)
+      setSettingDaily(false)
       const loaded = fromFlowJson(stored)
       setNodes(loaded.nodes)
       setEdges(loaded.edges)
@@ -281,6 +289,8 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
     const fresh = freshTitle(flows)
     setFlowId(null)
     setRevision(null)
+    setDaily(null)
+    setSettingDaily(false)
     setTitle(fresh)
     setSaved({ json: EMPTY_FLOW, title: fresh, app: '' })
     setContext('{}')
@@ -365,6 +375,31 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
     } finally {
       busy.current.saving = false
     }
+  }
+
+  // The daily time lives on the stored flow and in Windows: save first, change both, and show the first box as it is now.
+  async function submitDaily(at) {
+    const id = await ensureStored()
+    if (!id) throw new Error('The chore could not be saved first, so its daily time was not changed.')
+    await changeDaily(id, at)
+    await show(id)
+    refresh()
+    setFocusStart((n) => n + 1) // the form is gone and the first box is new: the focus goes to its button once it is drawn
+  }
+  useEffect(() => { // the canvas draws its boxes a moment after it has them: wait for the button
+    if (!focusStart) return undefined
+    const want = daily?.at ? 'daily-change' : 'daily-add'
+    let tries = 40
+    const timer = setInterval(() => {
+      const button = document.querySelector(`[data-testid=${want}]`)
+      button?.focus()
+      if (button || --tries === 0) clearInterval(timer)
+    }, 50)
+    return () => clearInterval(timer)
+  }, [focusStart]) // eslint-disable-line react-hooks/exhaustive-deps
+  const closeDaily = (changed) => {
+    setSettingDaily(false)
+    if (!changed) focusSoon('daily-change', 'daily-add', 'flow-title')
   }
 
   // Before a run or a test: what is stored must be what is on the screen. The identifier to run, else null.
@@ -454,10 +489,11 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
       const state = boxState(shownRun, n.id)
       return {
         ...n, className: `status-${state ?? 'pending'}`,
-        data: { ...n.data, number: numbers[n.id], runStatus: state, doubts: doubtCounts[n.id] ?? 0, onDoubts: () => onOpen('queue') },
+        data: { ...n.data, number: numbers[n.id], runStatus: state, doubts: doubtCounts[n.id] ?? 0, onDoubts: () => onOpen('queue'),
+          onDaily: () => setSettingDaily((open) => !open), scheduled: Boolean(daily?.at) },
       }
     }),
-    [viewNodes, numbers, shownRun, doubtCounts, onOpen],
+    [viewNodes, numbers, shownRun, doubtCounts, onOpen, daily],
   )
   const safety = useMemo(() => safetySummary(viewNodes, doubtCounts), [viewNodes, doubtCounts])
   const blocked = whyNotRunnable(safety, appName ? appLabel(appName) : undefined)
@@ -514,6 +550,13 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
           )}
         </div>
 
+        {!nodes.some(isDaily) && ( // a chore with no start box starts when Run is pressed: this gives it a time
+          <button className="ghost daily-button" data-testid="daily-add" aria-expanded={settingDaily}
+            title="This chore starts when you press Run now" onClick={() => setSettingDaily((open) => !open)}>
+            <Icon name="clock" size={16} /> Run every day
+          </button>
+        )}
+
         <div className="spacer" />
 
         <div className="menu-anchor">
@@ -539,6 +582,11 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
           </button>
         )}
       </header>
+      {settingDaily && ( // above the canvas, not over it: nothing on the canvas is covered
+        <div className="start-strip">
+          <DailyForm at={daily?.at} initial={daily?.node_at} submit={submitDaily} onDone={closeDaily} />
+        </div>
+      )}
       <div className="workspace">
       <div className="stage">
       <div className="canvas" role="region" aria-label="Boxes of this chore" onDrop={drop} onDragOver={(e) => e.preventDefault()}

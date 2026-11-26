@@ -63,9 +63,12 @@ def create_schedule(name: str, flow_id: str, app: str, daily_at: str, extra: lis
 
 
 def delete_schedule(name: str, runner=subprocess.run) -> None:
-    """Remove a schedule made by this tool (anything else is unreachable: names always get the prefix)."""
+    """Remove a schedule made by this tool (anything else is unreachable: names always get the prefix). RuntimeError when
+    Windows refuses."""
     name = full_name(name)
-    runner(["schtasks", "/Delete", "/TN", name, "/F"], capture_output=True, text=True, timeout=60)
+    done = runner(["schtasks", "/Delete", "/TN", name, "/F"], capture_output=True, text=True, timeout=60)
+    if done.returncode != 0:
+        raise RuntimeError(f"schtasks could not remove the task: {done.stderr.strip() or done.stdout.strip()}")
 
 
 def list_schedules(runner=subprocess.run) -> list[str]:
@@ -79,8 +82,9 @@ def _bare(name: str) -> str:
     return name.removeprefix(SCHEDULE_PREFIX)
 
 
-def describe_schedules(runner=subprocess.run) -> list[dict]:
-    """What the screen shows for each schedule this tool made: its name, the flow, the app and the daily time.
+def describe_schedules(runner=subprocess.run, with_db: bool = False) -> list[dict]:
+    """What the screen shows for each schedule this tool made: its name, the flow, the app and the daily time. With
+    `with_db`, also `db`: the data file the task opens, None for the default one.
 
     The details come from the task's XML, which does not depend on the language of Windows. A task whose XML cannot be read is
     still listed by name."""
@@ -90,6 +94,8 @@ def describe_schedules(runner=subprocess.run) -> list[dict]:
         done = runner(["schtasks", "/Query", "/TN", name, "/XML"], capture_output=True, text=True, timeout=60)
         if done.returncode == 0:
             info.update(_read_task_xml(done.stdout))
+        if not with_db:
+            info.pop("db", None)
         result.append(info)
     return result
 
@@ -106,7 +112,8 @@ def _read_task_xml(xml: str) -> dict:
     arguments = text("Arguments")
     flow, app = re.search(r"--flow (\S+)", arguments), re.search(r"--app (\S+)", arguments)
     at = re.search(r"T(\d\d:\d\d)", text("StartBoundary"))
-    return {"flow": flow and flow[1], "app": app and app[1], "at": at and at[1]}
+    db = re.search(r'--user-db (?:"([^"]+)"|(\S+))', arguments)
+    return {"flow": flow and flow[1], "app": app and app[1], "at": at and at[1], "db": db and (db[1] or db[2])}
 
 
 def main(argv: list[str] | None = None) -> int:

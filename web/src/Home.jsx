@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
 import { appLabel, chipFor } from './catalog.js'
+import { changeDaily, DailyForm } from './Daily.jsx'
 import { Icon } from './icons.jsx'
 import More, { useDeleted } from './More.jsx'
 import Screen from './Screen.jsx'
@@ -56,6 +57,8 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
   const running = run?.status === 'running'
   const [starting, setStarting] = useState(false)
   const [problem, setProblem] = useState('')
+  const [setting, setSetting] = useState(false) // the form of the daily time is open
+  const dailyButton = useRef(null)
   useEffect(() => { if (running) setProblem('') }, [running]) // it runs after all: what went wrong asking no longer matters
 
   const appName = app ? appLabel(app) : 'No app chosen'
@@ -92,6 +95,13 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
     }
   }
 
+  const { daily } = flow
+  const closeDaily = (changed) => {
+    setSetting(false)
+    if (changed) reload()
+    setTimeout(() => dailyButton.current?.focus(), 0) // the form is gone: the focus goes back to the button that opened it
+  }
+
   return (
     <li className="chore" data-testid={`chore-${id}`}>
       <span className="chip" style={{ background: chip.colour }} aria-hidden="true">{chip.letter}</span>
@@ -108,7 +118,13 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
         aria-disabled={unavailable || undefined} aria-describedby={why ? `why-${id}` : undefined} aria-label={`${label}: ${title}`}>
         <Icon name={running ? 'stop' : 'play'} size={20} /> {label}
       </button>
+      <button ref={dailyButton} className="chore-daily" data-testid={`daily-${id}`} onClick={() => setSetting(!setting)}
+        aria-expanded={setting} aria-label={`${daily ? `Every day at ${daily}. Change or stop` : 'Run every day'}: ${title}`}>
+        <Icon name="clock" size={20} />
+        {daily ? <span>Every day at <b>{daily}</b><small>Change or stop</small></span> : 'Run every day'}
+      </button>
       <More flow={flow} title={title} reload={reload} onDeleted={onDeleted} />
+      {setting && <DailyForm at={daily} suffix={`-${id}`} submit={(at) => changeDaily(id, at)} onDone={closeDaily} />}
     </li>
   )
 }
