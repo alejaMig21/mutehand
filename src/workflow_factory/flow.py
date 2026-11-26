@@ -70,7 +70,8 @@ MAX_PARALLEL_NODES = 4
 PHYSICAL_INPUT = threading.Lock()  # one mouse, one keyboard, one focus for the whole machine
 USER_IDLE_SECONDS = 5.0  # how long the person must leave mouse and keyboard alone before we resume
 MAX_USER_WAIT_SECONDS = 600.0  # a person who never stops ends in a doubt, not an endless wait
-KEY_ACTIONS = ("type_value", "type_secret")
+KEY_ACTIONS = ("type_value", "type_secret", "paste_text", "press_keys")  # real keys: the foreground window must be the app's
+TEXT_ACTIONS = ("type_value", "paste_text", "press_keys")  # they write the text of the node
 EMERGENCY_STOP = threading.Event()  # set by the global hotkey: every running flow stops at once
 
 
@@ -282,6 +283,7 @@ DOUBT_REASON = {
     "template_no_match": Reason.TEMPLATE_NO_MATCH,
     "missing_input": Reason.PRECONDITION_NOT_MET,
     "bad_data": Reason.PRECONDITION_NOT_MET,
+    "unsendable_text": Reason.PRECONDITION_NOT_MET,
     "effect_mismatch": Reason.PRECONDITION_NOT_MET,
     "step_missing": Reason.PRECONDITION_NOT_MET,
     "action_failed": Reason.PRECONDITION_NOT_MET,
@@ -350,16 +352,35 @@ def _text_of(node: Node, state) -> str:
     return str(state.context[node.inputs[0][0]])
 
 
+# Keys the product knows by name. Anything else is pasted, not typed: a key name nobody tested could hit the wrong key.
+def _keys_for(text: str) -> list[str] | None:
+    keys = []
+    for ch in text:
+        if ch == "\n":
+            keys.append("return")
+        elif ch == " ":
+            keys.append("space")
+        elif ch.isascii() and ch.isalpha():
+            keys.append(f"shift+{ch.lower()}" if ch.isupper() else ch)
+        elif ch.isascii() and ch.isdigit():
+            keys.append(ch)
+        else:
+            return None
+    return keys
+
+
 def _input_problem(node: Node, step, state) -> str | None:
     """A node does not start while a bound field points at nothing, or a typed input is missing or of the wrong type."""
     context = state.context
-    if step.action == "type_value" and not node.inputs and "text" not in node.fields:
+    if step.action in TEXT_ACTIONS and not node.inputs and "text" not in node.fields:
         return "missing_input"
     for binding in node.fields.values():
         try:
             resolve(binding, state.outputs, context)
         except MissingData:
             return "missing_input"
+    if step.action == "press_keys" and _keys_for(_text_of(node, state)) is None:
+        return "unsendable_text"  # letters, digits, spaces and new lines only: paste anything else
     for name, type_name in node.inputs:
         if name not in context:
             return "missing_input"
@@ -441,6 +462,33 @@ class _Run:
         self.baseline = self.desktop.input_fingerprint()
         return True
 
+    def _paste(self, node: Node) -> str | None:
+        """Put the text on the clipboard, paste it, and put the person's own clipboard back whatever happens."""
+        desktop = self.desktop
+        saved = desktop.clipboard_backup()
+        refused = False
+        try:
+            desktop.clipboard_set(_text_of(node, self.state))
+            if desktop.foreground_app().lower() != self.key.process:  # the window may have changed since the check
+                refused = True
+            else:
+                desktop.press_key("ctrl+v")
+        finally:
+            lost = desktop.clipboard_restore(saved)
+        with self.lock:
+            self.state.outputs[node.id] = {"not_restored": list(lost)}  # what the person's clipboard lost, by name
+        return "wrong_window" if refused else None
+
+    def _type_keys(self, node: Node) -> str | None:
+        """One real key at a time, looking at the foreground window before every key."""
+        for key in _keys_for(_text_of(node, self.state)) or []:
+            if self.desktop.foreground_app().lower() != self.key.process:
+                return "wrong_window"
+            if EMERGENCY_STOP.is_set():  # looked at last, right before the key goes out
+                raise _EmergencyStop
+            self.desktop.press_key(key)
+        return None
+
     def _replay(self, node: Node, step):
         desktop = self.desktop
         physical = node.exclusive_input or step.uses_physical_input
@@ -462,6 +510,14 @@ class _Run:
         if step.action == "read_value":
             with self.lock:
                 self.state.outputs[node.id] = {"value": desktop.read_text(target.control)}
+        elif step.action == "paste_text":
+            reason = self._paste(node)
+            if reason:
+                return reason, None, step
+        elif step.action == "press_keys":
+            reason = self._type_keys(node)
+            if reason:
+                return reason, None, step
         elif step.action == "type_secret":
             desktop.type_secret(target.control, step.secret_ref)  # the value never enters the core
         elif step.action == "type_value":

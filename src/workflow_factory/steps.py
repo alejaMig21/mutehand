@@ -253,7 +253,7 @@ def _row_to_step(row) -> Step:
     )
 
 
-ACTIONS = ("click", "drag", "type_secret", "type_value", "read_value")
+ACTIONS = ("click", "drag", "type_secret", "type_value", "read_value", "paste_text", "press_keys")
 
 
 def validate_step(step: Step) -> None:

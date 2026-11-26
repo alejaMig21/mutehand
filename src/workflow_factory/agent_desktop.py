@@ -19,6 +19,8 @@ from pathlib import Path
 
 import numpy as np
 
+from workflow_factory import clipboard
+from workflow_factory.clipboard import WindowsClipboard
 from workflow_factory.desktop import AppKey, Control, DesktopError, Frame
 from workflow_factory.humanize import glide
 
@@ -229,8 +231,9 @@ class AgentDesktop:
         self, app: str, runner: Runner = _run_cli, settle_seconds: float = 0.5,
         version_of=version_of_pid, system_frame_fields=system_frame_fields,
         read_secret=read_secret, move_cursor=None, cursor_position=None,
-        glide_pause=time.sleep, rng=random,
+        glide_pause=time.sleep, rng=random, clipboard_backend=None,
     ):
+        self._board = clipboard_backend  # None: the real Windows clipboard, opened when a paste needs it
         self._app = app
         self._version_of = version_of
         self._system_frame_fields = system_frame_fields
@@ -332,6 +335,33 @@ class AgentDesktop:
 
     def type_text(self, control: Control, text: str) -> None:
         self._enter(control, text)
+
+    def press_key(self, key: str) -> None:
+        self._call(["--headed", "press", key])  # real input: it goes to whichever window is in the foreground
+
+    def _clipboard(self):
+        try:
+            return self._board or WindowsClipboard()
+        except (AttributeError, OSError) as error:  # not Windows, or no access to the clipboard
+            raise AgentDesktopError("CLIPBOARD_UNAVAILABLE", str(error)) from error
+
+    def clipboard_backup(self):
+        try:
+            return clipboard.backup(self._clipboard())
+        except OSError as error:
+            raise AgentDesktopError("CLIPBOARD_UNAVAILABLE", str(error)) from error
+
+    def clipboard_set(self, text: str) -> None:
+        try:
+            clipboard.set_text(self._clipboard(), text)
+        except OSError as error:
+            raise AgentDesktopError("CLIPBOARD_UNAVAILABLE", str(error)) from error
+
+    def clipboard_restore(self, saved) -> tuple[str, ...]:
+        try:
+            return clipboard.restore(self._clipboard(), saved)
+        except OSError as error:
+            raise AgentDesktopError("CLIPBOARD_UNAVAILABLE", str(error)) from error
 
     def read_text(self, control: Control) -> str:
         return self._call(["get", control.ref, "--property", "value"]).get("value") or ""  # no focus, no input

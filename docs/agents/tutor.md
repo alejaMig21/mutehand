@@ -48,6 +48,14 @@ A step becomes one node. Name it as the card should read: a verb and what it act
 - The measured effect is the one you expected. An unexpected effect is a doubt, not a success: tell the person.
 - No secret, no personal text, no file path from the person's disk went into a name.
 
+## Apps that refuse a value (Word)
+
+Some pages cannot be written by accessibility. Two actions put text there with real input, so they take the mouse and keyboard and
+the foreground window: `paste_text` (instant and exact, uses the person's clipboard and puts it back) and `press_keys` (types
+letters, digits, spaces and new lines one key at a time; slow, and the app may change what it receives). Prefer `paste_text` for anything
+longer than a few words. `teach_step` with either action only proves the control can be reached; it pastes and types nothing. A run
+refuses to send keys when the foreground window is not the app and says so with a doubt. Warn the person that these steps take over the keyboard.
+
 ## Recipes: teach a pattern once, reuse it on another app
 
 When the same sequence will exist in several apps (open chat, write, send), save it once and let each app fill only what differs.

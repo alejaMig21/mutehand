@@ -4,7 +4,10 @@ import threading
 import time
 from datetime import UTC, datetime, timedelta
 
+from fake_clipboard import FakeClipboard
+
 from workflow_factory import Locator, Step
+from workflow_factory.clipboard import backup, restore, set_text
 from workflow_factory.desktop import AppKey, Control, DesktopError, Frame
 
 
@@ -41,6 +44,10 @@ class FakeDesktop:
         self.clicks = []
         self.typed = []
         self.texts = {}  # control name -> the text a read gives
+        self.board = FakeClipboard()  # the person's clipboard
+        self.pressed = []  # (key, foreground process) for every key sent
+        self.page = ""  # what reached the app's own page by keys
+        self.elsewhere = ""  # what reached some other window by keys
         self.reads = []  # names of the controls whose text was read
         self.hits = []  # absolute screen points the fake derived internally; the core never sees them
         self.calls = []  # every action call the apprentice made, in order (names and arguments)
@@ -109,6 +116,32 @@ class FakeDesktop:
         self.typed.append((control, text))
         self._after()
 
+    def clipboard_backup(self):
+        self.calls.append(("clipboard_backup",))
+        return backup(self.board)
+
+    def clipboard_set(self, text):
+        self.calls.append(("clipboard_set",))
+        set_text(self.board, text)
+
+    def clipboard_restore(self, saved):
+        self.calls.append(("clipboard_restore",))
+        return restore(self.board, saved)
+
+    def press_key(self, key):
+        """A real key to whichever window is in the foreground, like the person's keyboard."""
+        self._acting()
+        self.calls.append(("press_key", key))
+        self.pressed.append((key, self.foreground))
+        typed = {"return": "\n", "space": " "}.get(key, key[6:].upper() if key.startswith("shift+") else key if len(key) == 1 else "")
+        if key == "ctrl+v":
+            typed = self.board.text() or ""
+        if self.foreground == self._app_key.process:
+            self.page += typed
+        else:
+            self.elsewhere += typed
+        self._after()
+
     def read_text(self, control):
         self.calls.append(("read_text", control.name))
         self.reads.append(control.name)
@@ -139,6 +172,9 @@ class FakeDesktop:
         return self._seconds() - self._last_input
 
     def foreground_app(self):
+        deferred, self._deferred = self._deferred, []  # what the person did after the last action shows now
+        for hook in deferred:
+            hook()
         return self.foreground
 
     def sleep(self, seconds):
