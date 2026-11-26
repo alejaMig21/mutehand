@@ -10,11 +10,11 @@ export const SYSTEM_NODES = [
     { kind: 'trigger', fields: { mode: fixed('manual') } }),
   system('daily-trigger', 'Daily trigger', 'Starts a flow every day at a time', 'Triggers', 'clock',
     { kind: 'trigger', fields: { mode: fixed('daily'), at: fixed('09:00') } }),
-  system('foreach', 'For each', 'Repeats the first node it connects to, once per item', 'Flow', 'repeat',
+  system('foreach', 'Repeat for each', 'Repeats the first action it connects to, once per item', 'Flow', 'repeat',
     { kind: 'foreach', fields: { items: fixed([]) } }),
-  system('if', 'If', 'Chooses a path: first wire when true, second when false', 'Flow', 'branch',
+  system('if', 'Two paths: yes or no', 'Chooses a path: the first line is yes, the second is no', 'Flow', 'branch',
     { kind: 'if', fields: { condition: fixed(true) } }),
-  system('wait', 'Wait', 'Pauses the flow', 'Flow', 'clock', { kind: 'wait', fields: { seconds: fixed(5) } }),
+  system('wait', 'Wait a while', 'Pauses the flow', 'Flow', 'clock', { kind: 'wait', fields: { seconds: fixed(5) } }),
   system('join', 'Join', 'Waits for every path that leads to it', 'Flow', 'merge', { kind: 'join' }),
   system('stop', 'Stop', 'Ends the flow on purpose', 'Flow', 'stop', { kind: 'stop' }),
   system('compare', 'Compare', 'Two values: equal, greater, contains...', 'Logic', 'scale',
@@ -61,18 +61,27 @@ export const appLabel = (app) => {
   return base.charAt(0).toUpperCase() + base.slice(1)
 }
 
-const has = (text, query) => String(text).toLowerCase().includes(query)
+// 'open-menu', 'Open_menu' and 'open menu' are the same words
+const plain = (text) => String(text).toLowerCase().replace(/[-_]+/g, ' ')
 
-// What the panel shows for a search: system nodes by name, hint or group; steps by name, app or origin.
+// What the panel shows for a search, which is plain words in any order: system nodes by name, hint or group; steps by
+// name, app or origin.
 export function searchCatalog(query, steps, systemNodes = SYSTEM_NODES, recipes = []) {
-  const q = query.trim().toLowerCase()
-  const system = systemNodes.filter((n) => !q || [n.title, n.hint, n.group].some((t) => has(t, q)))
+  const words = plain(query).split(/\s+/).filter(Boolean)
+  const matches = (texts) => {
+    const text = plain(texts.join(' '))
+    return words.every((word) => text.includes(word))
+  }
+  const system = systemNodes.filter((n) => matches([n.title, n.hint, n.group]))
   const apps = steps
-    .filter((s) => !q || [s.name, s.app, appLabel(s.app), s.origin].some((t) => has(t, q)))
+    .filter((s) => matches([s.name, s.app, appLabel(s.app), s.origin]))
     .sort((a, b) => appLabel(a.app).localeCompare(appLabel(b.app)) || a.name.localeCompare(b.name))
-  const found = recipes.filter((r) => !q || [r.name, ...r.holes.map((h) => h.hole), ...Object.keys(r.apps).map(appLabel)].some((t) => has(t, q)))
+  const found = recipes.filter((r) => matches([r.name, ...r.holes.map((h) => h.hole), ...Object.keys(r.apps).map(appLabel)]))
   return { system, apps, recipes: found }
 }
+
+// The system nodes a person meets first: a choice, a repeat and a pause, in this order.
+export const DECISIONS = ['if', 'foreach', 'wait']
 
 // Letter chip colours: white text on each is at least 4.5:1 (checked by the tests).
 export const CHIP_COLOURS = ['#1F6FA8', '#7B4FC4', '#1B7A4E', '#B0405F', '#3F5FB8', '#8A5A12']

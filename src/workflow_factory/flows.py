@@ -19,8 +19,9 @@ from workflow_factory.queue import last_runs, list_doubts
 from workflow_factory.steps import Origin, Status, Step, list_steps, seen_versions, step_reports
 
 SCHEMA = "CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, definition TEXT NOT NULL)"
-# where the editor drew each node: kept apart so moving a card never changes the definition a checkpoint belongs to
-LAYOUT_SCHEMA = "CREATE TABLE IF NOT EXISTS flow_layout (id TEXT PRIMARY KEY, positions TEXT NOT NULL)"
+# where the editor drew each node: kept apart so moving a card never changes the definition a checkpoint belongs to.
+# These are the places of the top-to-bottom canvas; the `flow_layout` table of the left-to-right one is no longer read.
+LAYOUT_SCHEMA = "CREATE TABLE IF NOT EXISTS flow_positions (id TEXT PRIMARY KEY, positions TEXT NOT NULL)"
 # what the person calls a flow and the app it runs on: kept apart too, so a rename never drops a checkpoint
 INFO_SCHEMA = "CREATE TABLE IF NOT EXISTS flow_info (id TEXT PRIMARY KEY, title TEXT, app TEXT)"
 MAX_TITLE_CHARS = 100
@@ -128,13 +129,13 @@ def check_positions(positions) -> dict:
 def save_layout(db_path: Path, flow_id: str, positions: dict) -> None:
     with closing(sqlite3.connect(db_path)) as db, db:
         db.execute(LAYOUT_SCHEMA)
-        db.execute("INSERT OR REPLACE INTO flow_layout VALUES (?, ?)", (flow_id, json.dumps(check_positions(positions))))
+        db.execute("INSERT OR REPLACE INTO flow_positions VALUES (?, ?)", (flow_id, json.dumps(check_positions(positions))))
 
 
 def load_layout(db_path: Path, flow_id: str) -> dict:
     with closing(sqlite3.connect(db_path)) as db, db:
         db.execute(LAYOUT_SCHEMA)
-        row = db.execute("SELECT positions FROM flow_layout WHERE id = ?", (flow_id,)).fetchone()
+        row = db.execute("SELECT positions FROM flow_positions WHERE id = ?", (flow_id,)).fetchone()
     return json.loads(row[0]) if row else {}
 
 

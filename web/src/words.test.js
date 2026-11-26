@@ -1,6 +1,19 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { blockedWords, doubtWords, effectWords, flowTitle, flowWords, freshTitle, lastRunWords, reasonWords, runNoteWords, runWords, stateWords, whenWords, whyWords } from './words.js'
+import { blockedWords, boxState, doubtWords, effectWords, flowTitle, flowWords, freshTitle, lastRunWords, reasonWords, runNoteWords, runWords, stateWords, whenWords, whyWords } from './words.js'
+
+test('a box says how far the run got with it, and nothing is left running after a run ends', () => {
+  const run = (status, nodes) => ({ status, nodes })
+
+  assert.equal(boxState(undefined, 'a'), undefined) // nothing ran
+  assert.equal(boxState(run('running', { a: 'running' }), 'a'), 'running')
+  assert.equal(boxState(run('running', { a: 'pending' }), 'a'), 'unreached')
+  assert.equal(boxState(run('finished', { a: 'skipped' }), 'a'), 'unreached') // the path not taken
+  assert.equal(boxState(run('emergency', { a: 'running' }), 'a'), 'blocked')
+  assert.equal(boxState(run('error', { a: 'paused' }), 'a'), 'blocked')
+  assert.equal(boxState(run('finished', { a: 'done' }), 'a'), 'done')
+  assert.equal(boxState(run('finished', { a: 'done' }), 'added-later'), undefined)
+})
 
 test('every reason a run can stop for is said in a sentence, never as a code', () => {
   const reasons = ['no_consent', 'control_not_found', 'unreadable', 'out_of_frame', 'rejected', 'to_revalidate',

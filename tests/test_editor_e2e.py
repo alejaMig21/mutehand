@@ -291,6 +291,7 @@ def test_system_nodes_and_steps_are_added_wired_deleted_saved_and_reopened(edito
     server, tmp_path = editor
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
+        page.get_by_text("Other boxes").click()
         page.get_by_test_id("system-manual-trigger").click()  # n1
         page.get_by_test_id("palette-open-menu").click()  # n2
         page.get_by_test_id("system-daily-trigger").click()  # n3, deleted again below
@@ -369,20 +370,23 @@ def test_a_flow_with_an_if_and_a_for_each_keeps_what_the_wires_mean_after_saving
 
 
 def test_nothing_in_the_editor_starts_a_lesson(editor):
-    import re
-
     from playwright.sync_api import sync_playwright
 
     server, _ = editor
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
-        page.get_by_test_id("palette-open-menu").wait_for()
+        sent = []
+        page.on("request", lambda request: sent.append(request.method))
         page.get_by_test_id("palette-open-menu").click()
         page.get_by_test_id("open-flows").click()
         page.locator(".react-flow__node").first.click()
-        words = page.locator("body").inner_text() + " ".join(
-            b.get_attribute("aria-label") or "" for b in page.get_by_role("button").all())
-        assert not re.search(r"lesson|teach|learn|study", words, re.IGNORECASE)
+        teaching = page.get_by_role("button", name=re.compile(r"lesson|teach|learn|study", re.IGNORECASE))
+        assert teaching.all_inner_texts() == ["It is not here: teach it"]
+        teaching.click()  # all it does is show the words to send in a chat
+
+        page.get_by_test_id("chat-text").wait_for()
+        page.wait_for_timeout(500)
+        assert set(sent) <= {"GET"} and server._runs == {}
         browser.close()
 
 

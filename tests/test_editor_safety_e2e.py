@@ -305,6 +305,8 @@ def test_a_flow_is_built_and_its_node_opened_with_the_keyboard_alone(app):
     for entry in ("palette-open-menu", "palette-save-file"):
         page.get_by_test_id(entry).press("Enter")
     page.locator('.react-flow__node[data-id="n1"]').press("Space")  # select it
+    page.get_by_role("button", name=re.compile("Remove the wire to save-file")).press("Enter")
+    page.locator(".react-flow__edge").wait_for(state="detached")
     page.get_by_test_id("connect-to").select_option("n2")
     page.locator(".react-flow__edge").wait_for(state="attached")
 
@@ -333,7 +335,8 @@ def test_at_double_zoom_the_main_actions_stay_on_screen_and_the_canvas_is_not_co
     page, _, _ = app
     page.set_viewport_size({"width": 683, "height": 384})
     page.reload()
-    page.get_by_test_id("open-panel").wait_for()  # in a narrow window the list of nodes starts closed
+    page.get_by_test_id("search").wait_for()
+    assert page.locator(".canvas").bounding_box()["height"] >= 220  # the boxes to add go under it, not over it
     for test_id in ("save", "run", "tab-checks", "quit"):
         box = page.get_by_test_id(test_id).bounding_box()
         assert box["x"] >= 0 and box["x"] + box["width"] <= 683, test_id
@@ -348,11 +351,10 @@ def test_in_a_narrow_window_no_notice_covers_the_panel_of_nodes(app, width):
     page.reload()
     open_flow(page, "morning")
     page.get_by_test_id("cannot-start").wait_for()
-    page.get_by_test_id("open-panel").click()
-    page.get_by_test_id("search").click(timeout=2_000)
-    page.get_by_label("Close the panel").click(timeout=2_000)
+    page.get_by_test_id("search").click(timeout=2_000)  # nothing lies over it
+    page.get_by_test_id("palette-open-menu").click(timeout=2_000)
 
-    page.get_by_test_id("open-panel").wait_for()
+    page.locator('.react-flow__node[data-id="n3"]').wait_for()
 
 
 def test_history_and_steps_speak_plain_words(app):
@@ -389,10 +391,21 @@ def test_a_wrong_link_says_so_instead_of_showing_an_empty_editor(tmp_path):
         server.stop()
 
 
+def remove_the_wires_of(page, node_id):
+    page.wait_for_timeout(400)  # the canvas re-fits after a box is added
+    page.locator(f'.react-flow__node[data-id="{node_id}"]').click()
+    wires = page.get_by_role("button", name=re.compile("^Remove the wire to"))
+    while wires.count():
+        wires.first.click()
+
+
 def test_nodes_nobody_wired_are_pointed_out_and_can_be_chained_in_one_press(app):
     page, folder, _ = app
     for entry in ("palette-open-menu", "palette-save-file", "palette-Close dialog"):
         page.get_by_test_id(entry).click()
+    assert page.get_by_test_id("unwired").count() == 0  # new boxes join by themselves
+    remove_the_wires_of(page, "n1")
+    remove_the_wires_of(page, "n2")
     notice = page.get_by_test_id("unwired")
     notice.filter(has_text="at the same time").wait_for()
     notice.get_by_role("button", name="Connect them in order").click()
@@ -430,12 +443,8 @@ def test_the_keyboard_focus_is_never_dropped_and_changes_are_announced(app):
     page.wait_for_function(on_page)
     page.locator('.react-flow__node[data-id="n2"]').press("Space")
     page.get_by_test_id("delete-node").press("Enter")
-    page.wait_for_function(on_page)
-    assert "Deleted save-file" in page.get_by_test_id("editor-announce").inner_text()
-    page.get_by_role("button", name="Close the panel").press("Enter")
-    page.wait_for_function("() => document.activeElement.dataset.testid === 'open-panel'")
-    page.keyboard.press("Enter")
     page.wait_for_function("() => document.activeElement.dataset.testid === 'search'")
+    assert "Deleted save-file" in page.get_by_test_id("editor-announce").inner_text()
     page.get_by_test_id("palette-open-menu").press("Enter")
     assert "Added open-menu" in page.get_by_test_id("editor-announce").inner_text()
 
@@ -507,6 +516,7 @@ def test_a_notice_appearing_does_not_move_what_is_under_the_pointer(app):
     before = entry.bounding_box()
     page.get_by_test_id("palette-open-menu").click()
     page.get_by_test_id("palette-save-file").click()
+    remove_the_wires_of(page, "n1")
     page.get_by_test_id("unwired").wait_for()
 
     assert entry.bounding_box() == before
@@ -552,12 +562,6 @@ def test_a_double_click_on_the_empty_canvas_moves_nothing(app):
     page.wait_for_timeout(600)
 
     assert page.evaluate(view) == before
-
-
-def test_escape_closes_the_list_of_nodes(app):
-    page, _, _ = app
-    page.get_by_test_id("search").press("Escape")
-    page.get_by_test_id("open-panel").wait_for()
 
 
 def test_the_closed_page_says_how_to_open_it_again(app):
