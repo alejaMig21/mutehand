@@ -2,7 +2,7 @@
 
 **What to build:** Open a node to see its inputs, settings and outputs; Test this node runs just that step after warning about mouse and keyboard; panes show the Data in and out of the last run, hidden by default and shown on request, secrets never.
 
-**Blocked by:** 09 06
+**Blocked by:** 09, 06
 
 **Status:** resolved
 

@@ -2,7 +2,9 @@
 
 **What to build:** A screen that says in plain words whether what the product needs is present (agent-desktop, Claude Code for teaching, the data folder, a second monitor if wanted) and how to fix each missing piece.
 
-**Blocked by:** 27
+**Blocked by:** None
+
+Ticket 27, which gated this one, was replaced by the node-editor tickets.
 
 **Status:** resolved
 

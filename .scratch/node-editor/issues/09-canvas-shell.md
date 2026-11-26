@@ -2,7 +2,7 @@
 
 **What to build:** Rebuild the editor shell in the chosen design: canvas, nodes added from the right search panel (system nodes and apps), wires, open and save. It lists only taught steps and never starts a lesson.
 
-**Blocked by:** 01 03 04 05
+**Blocked by:** 01, 03, 04, 05
 
 **Status:** resolved
 

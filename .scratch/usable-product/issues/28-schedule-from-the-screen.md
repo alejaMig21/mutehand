@@ -2,7 +2,9 @@
 
 **What to build:** The editor lists the schedules this product created and lets the person add a daily time or remove one, through the Windows Task Scheduler wrapper that already exists.
 
-**Blocked by:** 27
+**Blocked by:** None
+
+Ticket 27, which gated this one, was replaced by the node-editor tickets.
 
 **Status:** resolved
 

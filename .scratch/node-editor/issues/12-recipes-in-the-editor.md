@@ -2,7 +2,7 @@
 
 **What to build:** The search panel lists recipes; dropping one expands it into connected nodes with its holes filled for the chosen app, and a step adapted from another app shows an adapted-from mark.
 
-**Blocked by:** 08 09
+**Blocked by:** 08, 09
 
 **Status:** resolved
 
