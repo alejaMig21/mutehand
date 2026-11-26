@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from workflow_factory import schedule
+from workflow_factory.checks import mark_seen, run_checks, seen_before
 from workflow_factory.consent import consents, effective_sensitivity, is_permitted, revoke_consent
 from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.flow import clear_emergency_stop, emergency_stop, rejected_steps, run_flow
@@ -231,6 +232,12 @@ class ApiServer:
                 if method == "GET" and path == "/api/steps":
                     return self._send(200, [{**_step_view(step), **_safety(api.user_db, step)} for step in
                                             list_steps(api.user_db, api.factory_db)])
+                if method == "GET" and path == "/api/checks":
+                    data_dir = api.user_db.parent
+                    return self._send(200, {"first_run": not seen_before(data_dir), "checks": run_checks(data_dir)})
+                if method == "POST" and path == "/api/checks/seen":
+                    mark_seen(api.user_db.parent)
+                    return self._send(200, {"seen": True})
                 if path == "/api/schedules":
                     return self._schedules(method)
                 if method == "GET" and path == "/api/recipes":

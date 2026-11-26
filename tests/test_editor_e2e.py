@@ -17,6 +17,12 @@ from workflow_factory.api import ApiServer
 from fake_desktop import FakeDesktop, button, step
 
 pytestmark = pytest.mark.web
+
+
+@pytest.fixture(autouse=True)
+def not_the_first_run(monkeypatch):
+    """Every screen test starts as a later run, so the editor is what shows; the first-run test turns this off."""
+    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
 DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 HEADLESS_SHELL = glob.glob(os.path.expanduser(
     "~/AppData/Local/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell.exe"))
@@ -691,6 +697,34 @@ def test_a_schedule_is_added_listed_and_removed_from_the_screen_and_other_tasks_
             page.get_by_test_id("schedule-remove-morning daily 0745").click()
             page.get_by_test_id("no-schedules").wait_for()
             assert list(scheduler.tasks) == [FOREIGN]
+            browser.close()
+    finally:
+        server.stop()
+
+
+def test_the_first_run_opens_on_the_setup_check_and_it_can_be_reopened_later(tmp_path, monkeypatch):
+    from playwright.sync_api import sync_playwright
+
+    from workflow_factory.checks import seen_before
+
+    monkeypatch.setattr("workflow_factory.api.seen_before", seen_before)  # the real one: this is a first run
+    server = serve(tmp_path, FakeDesktop(controls=[]))
+    try:
+        with sync_playwright() as playwright:
+            browser, page = open_page(playwright, server)
+            summary = page.get_by_test_id("checks-summary")
+            summary.wait_for()
+            page.get_by_test_id("check-agent-desktop").wait_for()
+            text = page.get_by_test_id("check-data-folder").inner_text()
+            assert "Ready" in text or "Missing" in text  # always a word, never colour alone
+            assert page.get_by_test_id("palette-open-menu").count() == 0  # the editor is behind it on a first run
+
+            page.reload()  # it was shown once: the next visit opens the editor
+            page.get_by_test_id("tab-editor").wait_for()
+            page.wait_for_timeout(500)
+            assert page.get_by_test_id("checks-summary").count() == 0
+            page.get_by_test_id("tab-checks").click()
+            page.get_by_test_id("checks-summary").wait_for()
             browser.close()
     finally:
         server.stop()

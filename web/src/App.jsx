@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from './api.js'
+import Checks from './Checks.jsx'
 import Consents from './Consents.jsx'
 import Editor from './Editor.jsx'
 import History from './History.jsx'
@@ -14,11 +15,15 @@ const SCREENS = [
   ['history', 'Run history', History],
   ['schedules', 'Schedules', Schedules],
   ['consents', 'Consents', Consents],
+  ['checks', 'Setup check', Checks],
 ]
 
 export default function App() {
   const [screen, setScreen] = useState('editor')
   const [closed, setClosed] = useState(false)
+  useEffect(() => { // the first time, say what is ready before anything else
+    api('/api/checks').then((r) => r.first_run && setScreen('checks')).catch(() => {})
+  }, [])
   const Current = SCREENS.find(([id]) => id === screen)[2]
   async function quit() {
     if (!window.confirm('Close Workflow Factory? Flows that are running will be stopped.')) return
