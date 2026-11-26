@@ -16,11 +16,19 @@ test('an empty search shows everything, steps ordered by app then name', () => {
 })
 
 test('a search finds system nodes by name and steps by name and by app', () => {
-  assert.deepEqual(searchCatalog('wait', steps).system.map((n) => n.title), ['Wait', 'Join']) // by name, then by hint
+  assert.deepEqual(searchCatalog('wait', steps).system.map((n) => n.title), ['Wait a while', 'Join']) // by name, then by hint
   assert.deepEqual(searchCatalog('telegram', steps).apps.map((s) => s.name), ['Send', 'Write message'])
   assert.deepEqual(searchCatalog('READ', steps).apps.map((s) => s.name), ['Read page'])
   assert.equal(searchCatalog('READ', steps).system.some((n) => n.title === 'Read a field'), true)
   assert.deepEqual(searchCatalog('zzz', steps), { system: [], apps: [], recipes: [] })
+})
+
+test('a search takes plain words, in any order, whatever separates them in the name', () => {
+  const found = (query) => searchCatalog(query, [{ app: 'paint.exe', name: 'save_the-picture', origin: 'local' }]).apps.length
+
+  assert.equal(found('picture save'), 1)
+  assert.equal(found('save-the picture'), 1)
+  assert.equal(found('save report'), 0)
 })
 
 test('every system node can be stored as it is: a kind, and its operation when it is a data node', () => {

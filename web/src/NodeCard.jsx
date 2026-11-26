@@ -4,18 +4,15 @@ import { Icon } from './icons.jsx'
 
 // What a node is called and drawn as: a system node by its kind (and operation), a step by its app.
 function describe(node, meta) {
-  if (node.kind && node.kind !== 'step') {
-    const known = systemEntryFor(node)
-    return { title: titleOf(node), subtitle: known?.group ?? 'System node', icon: known?.icon ?? 'braces' }
-  }
+  if (node.kind && node.kind !== 'step') return { title: titleOf(node), icon: systemEntryFor(node)?.icon ?? 'braces' }
   const app = meta?.app
-  return { title: node.step, subtitle: app ? appLabel(app) : 'Step', chip: app ? chipFor(app) : null }
+  return { title: node.step, subtitle: app ? appLabel(app) : 'Not learned', chip: app ? chipFor(app) : null }
 }
 
 // Every mark is an icon and a word, never colour alone.
 const RUN_MARKS = {
-  running: ['spinner', 'Running', 'info'], done: ['checkcircle', 'Done', 'ok'], blocked: ['alert', 'Stopped', 'bad'],
-  skipped: ['skip', 'Skipped', 'muted'], continued: ['skip', 'Carried on', 'warn'], paused: ['pause', 'Paused for you', 'warn'],
+  running: ['spinner', 'Running', 'info'], done: ['check', 'Done', 'ok'], blocked: ['alert', 'Stopped here', 'bad'],
+  unreached: ['clock', 'Not reached', 'muted'], continued: ['skip', 'Carried on', 'warn'], paused: ['pause', 'Paused for you', 'warn'],
 }
 const TRUST_MARKS = {
   trusted: ['checkcircle', 'Trusted', 'ok'], suspect: ['half', 'On trial', 'warn'], rejected: ['xcircle', 'Rejected', 'bad'],
@@ -38,34 +35,39 @@ export function marksFor(node, meta, runStatus, doubts) {
 }
 
 export default function NodeCard({ id, data, selected }) {
-  const { node, meta, runStatus, doubts } = data
+  const { node, meta, number, runStatus, doubts } = data
   const { title, subtitle, icon, chip } = describe(node, meta)
+  const marks = marksFor(node, meta, runStatus, doubts)
   return (
     <div className={`card${selected ? ' selected' : ''}`} data-testid={`node-${id}`}>
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={Position.Top} />
       <div className="card-head">
         {chip
           ? <span className="chip" style={{ background: chip.colour }} aria-hidden="true">{chip.letter}</span>
           : <span className="chip system" aria-hidden="true"><Icon name={icon} /></span>}
         <div className="card-text">
-          <div className="card-title">{title}</div>
-          <div className="card-sub">{subtitle}</div>
+          <div className="card-title">{number ? `${number}. ${title}` : title}</div>
+          {subtitle && <div className="card-sub">{subtitle}</div>}
         </div>
       </div>
-      {marksFor(node, meta, runStatus, doubts).map(([glyph, word, tone]) => (glyph === 'help' && data.onDoubts
-        ? (
-          <button key={word} type="button" className={`card-mark nodrag tone-${tone}`} title="Open the Tutor queue" onClick={data.onDoubts}>
-            <Icon name={glyph} size={14} /> {word}
-          </button>
-        )
-        : (
-          <div key={word} className={`card-mark tone-${tone}`}
-            title={word === 'On trial' ? 'Trusted after it has worked a few times without failing' : undefined}>
-            <Icon name={glyph} size={14} /> {word}
-          </div>
-        )
-      ))}
-      <Handle type="source" position={Position.Right} />
+      {marks.length > 0 && (
+        <div className="card-marks">
+          {marks.map(([glyph, word, tone]) => (glyph === 'help' && data.onDoubts
+            ? (
+              <button key={word} type="button" className={`card-mark nodrag tone-${tone}`} title="Open the Tutor queue" onClick={data.onDoubts}>
+                <Icon name={glyph} size={14} /> {word}
+              </button>
+            )
+            : (
+              <div key={word} className={`card-mark tone-${tone}`}
+                title={word === 'On trial' ? 'Trusted after it has worked a few times without failing' : undefined}>
+                <Icon name={glyph} size={14} /> {word}
+              </div>
+            )
+          ))}
+        </div>
+      )}
+      <Handle type="source" position={Position.Bottom} />
     </div>
   )
 }

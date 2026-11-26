@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
+import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Panel, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
 import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
-import { chainLoose, fromFlowJson, layout, looseNodes, nextNodeId, toFlowJson, withBranch } from './flowjson.js'
-import AppSelect from './AppSelect.jsx'
+import { boxNumbers, chainLoose, fromFlowJson, joinBoxes, looseNodes, nextNodeId, toFlowJson, withBranch } from './flowjson.js'
 import { Icon } from './icons.jsx'
 import { refOptions } from './bindings.js'
 import { appKey, appLabel, SYSTEM_NODES, taughtApp, titleOf } from './catalog.js'
@@ -13,14 +12,15 @@ import RunLog from './RunLog.jsx'
 import SearchPanel, { DRAG_TYPE } from './SearchPanel.jsx'
 import { useRuns } from './useRuns.js'
 import { safetySummary, summaryMarks, whyNotRunnable } from './safety.js'
-import { flowTitle, freshTitle, reasonWords, runWords } from './words.js'
+import { boxState, flowTitle, freshTitle, reasonWords, runWords } from './words.js'
 
 const NODE_TYPES = { card: NodeCard }
+const EDGE_LOOK = { labelBgPadding: [10, 4], labelBgBorderRadius: 999 } // yes and no on a pill
 const metaOf = (step) => ({ app: step.app, sensitive: step.sensitive, origin: step.origin, action: step.action,
   state: step.state, private: step.private, consent: step.consent, adapted_from: step.adapted_from })
-// the search panel floats over the right edge, so the nodes are fitted into what is left; a narrow window needs it all
+// the whole flow in sight, clear of the zoom buttons; a narrow window has no room to spare
 const fit = () => ({ maxZoom: 1, padding: window.innerWidth > 860
-  ? { top: '60px', left: '60px', bottom: '60px', right: '440px' } : { top: '16px', left: '16px', bottom: '16px', right: '16px' } })
+  ? { top: '40px', left: '40px', bottom: '76px', right: '40px' } : { top: '16px', left: '16px', bottom: '68px', right: '16px' } })
 // after something is gone from the screen, the keyboard focus goes to what is left
 const focusSoon = (...testIds) => setTimeout(() => {
   testIds.map((id) => document.querySelector(`[data-testid=${id}]`)).find(Boolean)?.focus()
@@ -34,7 +34,7 @@ export default function Editor(props) {
 }
 
 function EditorScreen({ active, onOpen, onUnsaved }) {
-  const { fitView, screenToFlowPosition } = useReactFlow()
+  const { fitView, screenToFlowPosition, zoomIn, zoomOut } = useReactFlow()
   const [steps, setSteps] = useState([])
   const [recipes, setRecipes] = useState([])
   const [flows, setFlows] = useState([])
@@ -48,7 +48,6 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [selectedId, setSelectedId] = useState(null)
   const [error, setError] = useState('')
-  const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > 860) // in a narrow window it would hide the canvas
   const [menu, setMenu] = useState(null) // 'flows' | 'data': one popover at a time
   const [detailOpen, setDetailOpen] = useState(false)
   const [nodeData, setNodeData] = useState({})
@@ -141,14 +140,16 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   }, [steps, flows]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onConnect = useCallback((connection) => {
-    setEdges((current) => (current.some((e) => e.source === connection.source && e.target === connection.target)
-      ? current : [...current, withBranch(nodes, current, connection)]))
-  }, [nodes, setEdges])
+    if (edges.some((e) => e.source === connection.source && e.target === connection.target)) return
+    const wire = withBranch(nodes, edges, connection)
+    if (wire) setEdges([...edges, wire])
+    else setError('Those two cannot be joined: a decision has only two paths, yes and no, and a repeated box takes no lines of its own.')
+  }, [nodes, edges, setEdges])
 
   const changeNodes = useCallback((changes) => { // selecting with the keyboard is selecting too
     onNodesChange(changes)
     for (const change of changes) {
-      if (change.type === 'remove') { say('Node deleted'); focusSoon('search', 'open-panel') }
+      if (change.type === 'remove') { say('Node deleted'); focusSoon('search') }
       if (change.type !== 'select') continue
       if (change.selected) setSelectedId(change.id)
       else setSelectedId((current) => (current === change.id ? null : current))
@@ -156,20 +157,22 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   }, [onNodesChange])
 
   const refit = () => setTimeout(() => fitView({ ...fit(), duration: 200 }), 60) // once the new node is on the canvas
-  const unselected = (list) => list.map((n) => ({ ...n, selected: false }))
 
-  // Like n8n: a node added while another is selected goes to its right and is wired after it. A dropped node stays where
-  // it was dropped.
+  // New boxes join after the chosen box, or after the last one. With a box chosen the new one takes its place as the
+  // chosen one, so the next goes after it: the order is the order of the presses. A dropped box stays where it fell.
+  const join = (added, dropped) => {
+    const joined = joinBoxes(nodes, edges, added, { after: selectedId, at: dropped })
+    const chosen = nodes.some((n) => n.id === selectedId) ? added[added.length - 1].id : null
+    setNodes(joined.nodes.map((n) => ({ ...n, selected: n.id === chosen })))
+    setEdges(joined.edges)
+    setSelectedId(chosen)
+    if (!dropped) refit()
+  }
+
   const addNode = (node, dropped) => {
     const id = nextNodeId(nodes)
-    const after = dropped ? undefined : nodes.find((n) => n.id === selectedId)
-    const position = dropped ?? (after ? { x: after.position.x + 250, y: after.position.y } : layout(nodes.length))
-    const card = { id, type: 'card', position, data: { node: { ...node, id, inputs: [], exclusive_input: false } } }
-    setNodes((current) => [...unselected(current), card])
-    if (after) setEdges((current) => [...current, withBranch(nodes, current, { source: after.id, target: id })])
-    setSelectedId(null)
+    join([{ id, type: 'card', data: { node: { ...node, id, inputs: [], exclusive_input: false } } }], dropped)
     say(`Added ${titleOf(node)}`)
-    if (!dropped) refit()
   }
 
   const addStep = (step, dropped) => {
@@ -193,25 +196,15 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   // A hole nobody filled for this app gets the name its step will have, and the node says it is not filled.
   const addRecipe = (recipe) => {
     const bound = Object.entries(recipe.apps).find(([app]) => appKey(app) === appKey(appName))?.[1] ?? {}
-    const after = nodes.find((n) => n.id === selectedId)
-    const start = after ? { x: after.position.x + 250, y: after.position.y } : layout(nodes.length)
     let list = [...nodes]
-    const added = recipe.holes.map((hole, i) => {
+    const added = recipe.holes.map((hole) => {
       const id = nextNodeId(list)
       const node = { id, step: bound[hole.hole] ?? `${recipe.name}-${hole.hole}`, inputs: [], exclusive_input: false }
-      const card = { id, type: 'card', position: { x: start.x + i * 250, y: start.y }, data: { node, hole: { recipe: recipe.name, hole: hole.hole } } }
+      const card = { id, type: 'card', data: { node, hole: { recipe: recipe.name, hole: hole.hole } } }
       list = [...list, card]
       return card
     })
-    setNodes(unselected(list))
-    setEdges((current) => {
-      let wired = current
-      const links = [...(after ? [[after.id, added[0].id]] : []), ...added.slice(1).map((n, i) => [added[i].id, n.id])]
-      for (const [source, target] of links) wired = [...wired, withBranch(list, wired, { source, target })]
-      return wired
-    })
-    setSelectedId(null)
-    refit()
+    join(added)
   }
   const addSystem = (entry) => addNode(structuredClone(entry.node))
 
@@ -222,7 +215,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   function deleteSelected() {
     const gone = nodes.find((n) => n.id === selectedId)
     if (gone) say(`Deleted ${titleOf(gone.data.node)}`)
-    focusSoon('search', 'open-panel')
+    focusSoon('search')
     setNodes((current) => current.filter((n) => n.id !== selectedId))
     setEdges((current) => current.filter((e) => e.source !== selectedId && e.target !== selectedId))
     setSelectedId(null)
@@ -421,18 +414,26 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
     setTimeout(() => document.querySelector(`.react-flow__node[data-id="${id}"]`)?.focus(), 0)
   }
   const toggleValues = (on) => { setShowValues(on); loadData(on) }
+  const numbers = useMemo(() => boxNumbers(nodes, edges), [nodes, edges])
   const shownNodes = useMemo(
-    () => viewNodes.map((n) => ({
-      ...n, className: `status-${shownRun?.nodes[n.id] ?? 'pending'}`,
-      data: { ...n.data, runStatus: shownRun?.nodes[n.id], doubts: doubtCounts[n.id] ?? 0, onDoubts: () => onOpen('queue') },
-    })),
-    [viewNodes, shownRun, doubtCounts, onOpen],
+    () => viewNodes.map((n) => {
+      const state = boxState(shownRun, n.id)
+      return {
+        ...n, className: `status-${state ?? 'pending'}`,
+        data: { ...n.data, number: numbers[n.id], runStatus: state, doubts: doubtCounts[n.id] ?? 0, onDoubts: () => onOpen('queue') },
+      }
+    }),
+    [viewNodes, numbers, shownRun, doubtCounts, onOpen],
   )
   const safety = useMemo(() => safetySummary(viewNodes, doubtCounts), [viewNodes, doubtCounts])
   const blocked = whyNotRunnable(safety, appName ? appLabel(appName) : undefined)
   const paused = running && Object.values(shownRun.nodes).includes('paused')
   const loose = looseNodes(nodes, edges)
-  const shownEdges = edges.map((e) => ({ ...e, ariaLabel: `Wire from ${nameOf(e.source)} to ${nameOf(e.target)}` }))
+  // the lines the run went down: out of a box that got through, into a box it reached
+  const went = (e) => ['done', 'continued'].includes(boxState(shownRun, e.source))
+    && !['unreached', undefined].includes(boxState(shownRun, e.target))
+  const shownEdges = edges.map((e) => ({ ...e, ...EDGE_LOOK, className: went(e) ? 'on' : '',
+    ariaLabel: `Wire from ${nameOf(e.source)} to ${nameOf(e.target)}` }))
   const outcome = shownRun && !running && {
     waiting: 'This flow did not run: it still has an open question from an earlier run.',
     stopped: `Stopped at “${nameOf(shownRun.stopped)}”. ${flowDoubts.filter((d) => d.node_id === shownRun.stopped)
@@ -480,9 +481,6 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
 
         <div className="spacer" />
 
-        <label className="field-inline">App
-          <AppSelect aria-label="App to run on" data-testid="app-name" apps={apps} value={runsOn} onChange={setAppName} />
-        </label>
         <div className="menu-anchor">
           <button className="ghost" data-testid="run-data" aria-expanded={menu === 'data'} onClick={() => setMenu(menu === 'data' ? null : 'data')}>
             Run data
@@ -506,12 +504,14 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
           </button>
         )}
       </header>
-      <div className="canvas" onDrop={drop} onDragOver={(e) => e.preventDefault()} onKeyDownCapture={(e) => {
-        if (e.key !== 'Enter' || !e.target.classList.contains('react-flow__node')) return
-        e.preventDefault()
-        e.stopPropagation()
-        openDetail(e.target.dataset.id)
-      }}>
+      <div className="workspace">
+      <div className="canvas" role="region" aria-label="Boxes of this chore" onDrop={drop} onDragOver={(e) => e.preventDefault()}
+        onKeyDownCapture={(e) => {
+          if (e.key !== 'Enter' || !e.target.classList.contains('react-flow__node')) return
+          e.preventDefault()
+          e.stopPropagation()
+          openDetail(e.target.dataset.id)
+        }}>
         <div className="notices">
         {blocked && (
           <div className="notice" role="status">
@@ -534,7 +534,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
         ))}
         {loose.length > 0 && (
           <div className="notice" data-testid="unwired" role="status">
-            <span>{loose.length === 1 ? '1 node is' : `${loose.length} nodes are`} not connected: what is not connected runs at the same time, in no set order.</span>
+            <span>{loose.length === 1 ? '1 box is' : `${loose.length} boxes are`} not connected: what is not connected runs at the same time, in no set order.</span>
             <button className="small" onClick={() => setEdges(chainLoose(nodes, edges))}>Connect them in order</button>
           </div>
         )}
@@ -573,12 +573,16 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
           minZoom={0.3}
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="#26384C" />
-          <Controls showInteractive={false} position="bottom-center" orientation="horizontal" />
+          <Panel position="bottom-left" className="zoom">
+            <button aria-label="Zoom in" onClick={() => zoomIn()}><Icon name="plus" size={20} /></button>
+            <button aria-label="Zoom out" onClick={() => zoomOut()}><Icon name="minus" size={20} /></button>
+            <button onClick={() => fitView({ ...fit(), duration: 200 })}>Show everything</button>
+          </Panel>
         </ReactFlow>
 
         {nodes.length === 0 && (
           <div className="empty-canvas">
-            <p>Add your first node from the panel on the right.</p>
+            <p>Add your first box with “Add a box”.</p>
           </div>
         )}
 
@@ -613,15 +617,9 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
           />
         )}
 
-        {panelOpen
-          ? <SearchPanel steps={steps} recipes={recipes} onAddSystem={addSystem} onAddStep={addStep} onAddRecipe={addRecipe}
-              onClose={() => { setPanelOpen(false); focusSoon('open-panel') }} />
-          : (
-            <button className="open-panel" data-testid="open-panel" aria-label="Add a node"
-              onClick={() => { setPanelOpen(true); focusSoon('search') }}>
-              <Icon name="plus" size={20} />
-            </button>
-          )}
+      </div>
+        <SearchPanel steps={steps} recipes={recipes} apps={apps} app={runsOn} onApp={setAppName} onAddSystem={addSystem}
+          onAddStep={addStep} onAddRecipe={addRecipe} />
         {opening && <div className="opening" role="status">Opening…</div>}
       </div>
       {shownRun && !shownRun.logClosed && (

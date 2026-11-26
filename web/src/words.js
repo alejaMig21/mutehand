@@ -66,6 +66,15 @@ export function whyWords(why) {
     + (why.at ? ` (${whenWords(why.at)})` : '')
 }
 
+// How far the shown run got with one box: undefined when the run knows nothing of it; 'unreached' for what has not run
+// or was on the path not taken; and, once the run is over, what was still going is where it stopped.
+export function boxState(run, id) {
+  const state = run?.nodes[id]
+  if (state === 'pending' || state === 'skipped') return 'unreached'
+  if (run?.status !== 'running' && (state === 'running' || state === 'paused')) return 'blocked'
+  return state
+}
+
 // A name no stored flow has yet, whatever the capitals.
 export function freshTitle(flows, base = 'My flow') {
   const taken = flows.map((f) => f.title.toLowerCase())

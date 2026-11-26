@@ -62,7 +62,8 @@ def test_the_name_seen_in_a_run_is_what_the_screens_say_once_the_app_is_closed(t
     run_flow(Flow(id="morning", nodes=[Node("n1", "open-menu")]), desktop, db)
 
     page = browse()  # the app is closed now
-    page.get_by_test_id("palette-open-menu").filter(has_text="Quill Ledger").wait_for()
+    page.get_by_test_id("palette-open-menu").wait_for()  # the actions of the app chosen beside them
+    page.wait_for_function("() => document.querySelector('[data-testid=app-name]').selectedOptions[0].text === 'Quill Ledger'")
     page.get_by_test_id("tab-library").click()
     page.get_by_role("heading", name="Quill Ledger").wait_for()
     assert ".exe" not in page.locator("body").inner_text().lower()
@@ -263,6 +264,7 @@ def test_an_app_is_found_by_its_product_name(tmp_path, browse):
     observe(db, FakeDesktop(controls=[], app="zzqx.exe", product_name="Quill Ledger"))
 
     page = browse()
+    page.get_by_test_id("app-name").select_option(label="Quill Ledger")  # the app is chosen by that name
     page.get_by_test_id("search").fill("quill")
     page.get_by_test_id("palette-open-menu").wait_for()
     assert page.get_by_test_id("palette-stamp").count() == 0
