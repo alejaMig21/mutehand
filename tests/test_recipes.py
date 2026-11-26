@@ -76,6 +76,7 @@ def test_a_hole_that_fails_on_the_new_app_leaves_a_doubt_that_names_it_and_stops
     assert [h["status"] for h in result["holes"]] == ["saved", "control_not_found", "not_tried"]
     (doubt,) = list_doubts(db)
     assert doubt.node_id == "compose" and doubt.step == "send-message-compose" and doubt.flow_id == "recipe:send-message"
+    assert doubt.detail == "control_not_found"
     assert [c.name for c in desktop.clicks] == ["Open chat"]  # nothing after the failed hole was touched
 
 

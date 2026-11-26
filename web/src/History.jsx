@@ -3,7 +3,7 @@ import { api, encode } from './api.js'
 import { titleOf } from './catalog.js'
 import Screen from './Screen.jsx'
 import { useLoad } from './useLoad.js'
-import { effectWords, reasonWords, runWords, whenWords } from './words.js'
+import { effectWords, flowWords, reasonWords, runWords, whenWords } from './words.js'
 
 const TONES = { finished: 'ok', stopped: 'bad', error: 'bad', emergency: 'warn' }
 const NODE_WORDS = { done: 'done', blocked: 'stopped', skipped: 'skipped', continued: 'failed, carried on' }
@@ -37,7 +37,7 @@ export default function History() {
           <li key={run.id} data-testid={`run-${run.id}`}>
             <div className="card-body">
               <h2>
-                {run.flow_id.split('#')[0]}{run.flow_id.includes('#test:') ? ' (one node tested)' : ''}{' '}
+                {flowWords(run.flow_id)}{' '}
                 <span className={`badge tone-${TONES[run.status] ?? 'muted'}`} data-testid={`run-status-${run.id}`}>{runWords(run.status)}</span>
               </h2>
               <small>{whenWords(run.started_at)}{run.stopped_node ? ` · stopped at ${called(run, run.stopped_node)}` : ''}</small>

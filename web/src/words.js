@@ -14,6 +14,7 @@ const REASONS = {
   cell_requires_paste_text: 'A table cell cannot be written this way. The step has to be learned again as a paste.',
   effect_mismatch: 'The screen did not change the way it did when the step was learned.',
   step_missing: 'There is no step with this name for the app.',
+  secure_field_requires_type_secret: 'A password field can only be filled from a stored secret.',
   action_failed: 'The app refused the action.',
   wrong_window: 'Another window was in front of the app.',
   user_active: 'You kept using the mouse or keyboard.',
@@ -29,6 +30,8 @@ const ROLES = { textfield: 'text field', menubutton: 'menu button', menuitem: 'm
 
 const spaced = (code) => String(code).replaceAll('_', ' ')
 
+// A test of one node is kept apart from its flow, under "<flow>#test:<node>".
+export const flowWords = (id) => id.replace(/#test:.*$/, ' (one node tested)')
 export const reasonWords = (code) => REASONS[code] ?? `Stopped: ${spaced(code)}.`
 export const stateWords = (state) => STATES[state] ?? spaced(state)
 export const runWords = (status) => RUNS[status] ?? spaced(status)

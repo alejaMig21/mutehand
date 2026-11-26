@@ -169,4 +169,5 @@ def _doubt(user_db: Path, desktop: Desktop, recipe: str, hole: str, step: str, s
         capture = dict(Counter(c.role for c in desktop.snapshot()))  # roles and counts only
     except DesktopError:
         capture = {}
-    record_doubt(user_db, f"recipe:{recipe}", hole, step, _DOUBT_REASON.get(status, Reason.PRECONDITION_NOT_MET), capture)
+    record_doubt(user_db, f"recipe:{recipe}", hole, step, _DOUBT_REASON.get(status, Reason.PRECONDITION_NOT_MET), capture,
+                 status)

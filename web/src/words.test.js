@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { doubtWords, effectWords, nameProblem, freshName, reasonWords, runWords, stateWords, whenWords, whyWords } from './words.js'
+import { doubtWords, effectWords, flowWords, nameProblem, freshName, reasonWords, runWords, stateWords, whenWords, whyWords } from './words.js'
 
 test('every reason a run can stop for is said in a sentence, never as a code', () => {
   const reasons = ['no_consent', 'control_not_found', 'unreadable', 'out_of_frame', 'rejected', 'to_revalidate',
     'template_no_match', 'missing_input', 'bad_data', 'unsendable_text', 'effect_mismatch', 'step_missing', 'action_failed', 'cell_requires_paste_text',
-    'wrong_window', 'user_active', 'precondition_not_met']
+    'wrong_window', 'user_active', 'precondition_not_met', 'secure_field_requires_type_secret']
   for (const reason of reasons) {
-    assert.doesNotMatch(reasonWords(reason), /_/, reason)
+    assert.doesNotMatch(reasonWords(reason), /_|^Stopped:/, reason)
     assert.match(reasonWords(reason), /^[A-Z].*\.$/, reason)
   }
   assert.match(reasonWords('something_new'), /something new/) // an unknown one still reads as words
@@ -43,4 +43,9 @@ test('why a step is rejected is told as what happened', () => {
   assert.match(different, /When it was learned, something new appeared\. The last time it ran, nothing changed on screen/)
   assert.equal(whyWords({ kind: 'person' }), 'You rejected it.')
   assert.match(whyWords(null), /not recorded/)
+})
+
+test('a test of one node is named after its flow', () => {
+  assert.equal(flowWords('morning#test:n2'), 'morning (one node tested)')
+  assert.equal(flowWords('morning'), 'morning')
 })

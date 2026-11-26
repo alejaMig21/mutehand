@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from workflow_factory.desktop import FRAME_FIELDS, Frame
-from workflow_factory.legacy import migrate_names, readable_table
+from workflow_factory.legacy import add_text_column, migrate_names, readable_table
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS steps (
@@ -286,8 +286,8 @@ def _prepare(db: sqlite3.Connection, *schemas: str) -> None:
     migrate_names(db)
     for schema in schemas:
         db.execute(schema)
-    if STATE_SCHEMA in schemas and "why" not in {row[1] for row in db.execute("PRAGMA table_info(step_state)")}:
-        db.execute("ALTER TABLE step_state ADD COLUMN why TEXT")
+    if STATE_SCHEMA in schemas:
+        add_text_column(db, "step_state", "why")
 
 
 def save_step(db_path: Path, step: Step) -> None:

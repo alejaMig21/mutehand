@@ -20,6 +20,17 @@ def migrate_names(db: sqlite3.Connection) -> None:
             db.execute("ALTER TABLE doubts RENAME COLUMN lesson TO step")
 
 
+def add_text_column(db: sqlite3.Connection, table: str, column: str) -> None:
+    """Add a column an older database lacks. Another process may add it between the look and the change."""
+    if column in {row[1] for row in db.execute(f"PRAGMA table_info({table})")}:
+        return
+    try:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT")
+    except sqlite3.OperationalError as error:
+        if "duplicate column name" not in str(error):
+            raise
+
+
 def readable_table(db: sqlite3.Connection, new: str) -> str | None:
     """The table to read in a database we cannot change (the read-only factory file): the new name, else the old."""
     existing = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}

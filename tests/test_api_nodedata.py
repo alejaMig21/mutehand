@@ -104,6 +104,19 @@ def test_testing_a_step_acts_on_that_step_alone(server, tmp_path):
     assert view["status"] == "finished" and [c.name for c in server.desktop.clicks] == ["Alpha"]
 
 
+def test_a_node_test_that_stopped_does_not_block_the_next_test(server, tmp_path):
+    save_flow(tmp_path / "user.db", chain())
+    server.desktop.screen_changes()  # the button is gone: the first test stops with a doubt
+    _, started, _ = call(server, "/api/flows/f/nodes/p/test", "POST", {"app": "paint.exe"})
+    assert finish(server, started["run_id"])["status"] == "stopped"
+    server.desktop._controls = [button("Alpha")]
+
+    _, started, _ = call(server, "/api/flows/f/nodes/p/test", "POST", {"app": "paint.exe"})
+
+    assert finish(server, started["run_id"])["status"] == "finished"
+    assert call(server, "/api/doubts?status=open")[1] == []
+
+
 def test_a_node_that_needs_data_from_a_run_that_never_happened_says_so(server, tmp_path):
     save_flow(tmp_path / "user.db", chain())
 

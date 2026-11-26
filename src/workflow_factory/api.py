@@ -178,7 +178,10 @@ class ApiServer:
         with self._runs_lock:
             last = {n: sides["out"] for n, sides in self._node_data.get(flow_id, {}).items()}
         alone = single_node_flow(flow, node_id, last)
-        return self._launch(alone, f"{flow_id}#test:{node_id}", flow_id, app, context)
+        for doubt in list_doubts(self.user_db, "open"):
+            if doubt.flow_id == alone.key:  # a test leaves nothing to resume: the next one starts fresh
+                dismiss_doubt(self.user_db, doubt.id)
+        return self._launch(alone, alone.key, flow_id, app, context)
 
     def _flow_view(self, flow) -> dict:
         """A flow as the editor sees it: where its nodes sit, and a revision that changes when either does."""

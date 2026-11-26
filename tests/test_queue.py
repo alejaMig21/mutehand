@@ -33,7 +33,7 @@ def test_a_stop_writes_one_open_doubt_with_a_structural_capture(tmp_path):
     assert result.stopped == "n1"
     assert list_doubts(user_db) == [Doubt(
         id=1, flow_id="morning", node_id="n1", step="open-menu", reason="control_not_found",
-        capture={"button": 2, "textfield": 1}, status="open")]
+        capture={"button": 2, "textfield": 1}, status="open", detail="control_not_found")]
 
 
 def test_the_structural_capture_holds_no_text_content(tmp_path):

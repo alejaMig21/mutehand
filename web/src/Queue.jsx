@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from './api.js'
 import Screen from './Screen.jsx'
 import { useAction, useLoad } from './useLoad.js'
-import { doubtWords, reasonWords } from './words.js'
+import { doubtWords, flowWords, reasonWords } from './words.js'
 
 const MAX_NOTE = 500
 // what is half typed stays while the person looks at another screen
@@ -33,8 +33,8 @@ export default function Queue() {
         {load.data.map((doubt) => (
           <li key={doubt.id} data-testid={`doubt-${doubt.id}`}>
             <div className="card-body">
-              <div><b>{doubt.flow_id}</b> stopped at the step <b>{doubt.step}</b></div>
-              <div>{reasonWords(doubt.reason)}</div>
+              <div><b>{flowWords(doubt.flow_id)}</b> stopped at the step <b>{doubt.step}</b></div>
+              <div>{reasonWords(doubt.detail ?? doubt.reason)}</div>
               <small>On screen then: {doubtWords(doubt.capture)} (only kinds and counts are kept, never text)</small>
               {doubt.note ? <div>Your answer: {doubt.note}</div> : null}
             </div>

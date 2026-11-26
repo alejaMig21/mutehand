@@ -36,7 +36,8 @@ def build_report(user_db: Path, flow_id: str, app: str, result, context: dict, w
         "stopped_node": result.stopped,
         "nodes": run["nodes"] if run else [],
         # every open doubt of this flow, including ones from earlier runs
-        "open_doubts": [{"id": d.id, "node_id": d.node_id, "step": d.step, "reason": str(d.reason)}
+        "open_doubts": [{"id": d.id, "node_id": d.node_id, "step": d.step, "reason": str(d.reason),
+                         "detail": d.detail}
                         for d in list_doubts(user_db, "open") if d.flow_id == flow_id],
     }
     if with_values:

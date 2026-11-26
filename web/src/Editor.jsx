@@ -417,7 +417,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   const outcome = shownRun && !running && {
     waiting: 'This flow did not run: it still has an open question from an earlier run.',
     stopped: `Stopped at “${nameOf(shownRun.stopped)}”. ${flowDoubts.filter((d) => d.node_id === shownRun.stopped)
-      .map((d) => reasonWords(d.reason))[0] ?? ''}`,
+      .map((d) => reasonWords(d.detail ?? d.reason))[0] ?? ''}`,
     emergency: 'You stopped this run. Run it again to continue where it stopped.',
     error: `The run failed (${shownRun.error ?? 'unknown error'}).`,
     busy: 'This flow is already running somewhere else.',

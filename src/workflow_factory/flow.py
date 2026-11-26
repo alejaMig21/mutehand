@@ -193,6 +193,7 @@ class Flow:
     nodes: list[Node]
     id: str | None = None  # None: derived from the definition, so unrelated flows never share state
     edges: list[tuple[str, str]] | None = None  # None: the nodes run one after another
+    trial: str | None = None  # a test of part of a flow: the name its doubts, history and checkpoint go under
 
     def __post_init__(self):
         if self.id is not None and not re.fullmatch(r"[\w.-]+", self.id):
@@ -253,7 +254,7 @@ class Flow:
 
     @property
     def key(self) -> str:
-        return self.id or "flow-" + hashlib.sha1(self.definition.encode()).hexdigest()[:12]
+        return self.trial or self.id or "flow-" + hashlib.sha1(self.definition.encode()).hexdigest()[:12]
 
 
 @dataclass(frozen=True)
@@ -580,8 +581,10 @@ class _Run:
 
         `owner` is the node whose policy applies when `node` is only its body (for each)."""
         policy = owner or node
+        ran = reason == "effect_mismatch"  # the action happened: what it measured is real
+        spent = ran and self.statuses.get(node.id) == Status.REJECTED  # a retry could only be refused, hiding the cause
         with self.lock:
-            if policy.on_failure == "retry" and self.attempts.get(policy.id, 0) < policy.retries:
+            if policy.on_failure == "retry" and not spent and self.attempts.get(policy.id, 0) < policy.retries:
                 self.attempts[policy.id] = self.attempts.get(policy.id, 0) + 1
                 self.retrying.add(policy.id)
                 return "retry"
@@ -589,7 +592,8 @@ class _Run:
                 self.continued[policy.id] = reason
                 self.node_status[policy.id] = ("continued", reason)
                 if owner is None:
-                    self.state.outputs[node.id] = {}  # an empty result: whoever needs a field of it stops instead of guessing
+                    if not ran:  # an empty result: whoever needs a field of it stops instead of guessing
+                        self.state.outputs[node.id] = {}
                     self.state.done.add(node.id)
                     self.progress(node.id, "continued")
                     self.save()
@@ -602,7 +606,7 @@ class _Run:
             self.blocked[node.id] = reason
             self.node_status[node.id] = ("blocked", reason)
             self.progress(node.id, "blocked")
-            record_doubt(self.user_db, self.flow.key, node.id, node.step, DOUBT_REASON[reason], capture)
+            record_doubt(self.user_db, self.flow.key, node.id, node.step, DOUBT_REASON[reason], capture, reason)
             self.save()
         return "stop"
 
@@ -614,18 +618,22 @@ class _Run:
             self.save()
 
 
+def _record_effect(run: _Run, node_id: str, effect: Effect) -> None:
+    with run.lock:
+        run.state.effects[node_id] = str(effect)
+        run.state.outputs[node_id] = {**run.state.outputs.get(node_id, {}), "effect": str(effect)}
+
+
 def _run_step(run: _Run, node: Node) -> None:
     reason, effect, step = run.attempt(node)
     if reason:
         run.block(node, reason)
         return
-    with run.lock:
-        run.state.effects[node.id] = str(effect)
-        run.state.outputs[node.id] = {**run.state.outputs.get(node.id, {}), "effect": str(effect)}
+    _record_effect(run, node.id, effect)  # even on a mismatch: whoever goes on can read it
+    if _differs(step, effect):  # later steps would work on a wrong result
+        run.block(node, "effect_mismatch")
+        return
     run.finish(node)
-    if _differs(step, effect):  # it counted against the step: the history has to say so
-        with run.lock:
-            run.node_status[node.id] = ("done", "effect_mismatch")
 
 
 def _run_trigger(run: _Run, node: Node) -> None:
@@ -673,6 +681,10 @@ def _run_foreach(run: _Run, node: Node) -> None:
             run.state.outputs[node.id] = {"item": items[index], "index": index, "count": len(items)}
         run.progress(body.id, "running")
         reason, effect, step = run.attempt(body)  # consent, the input lock and the user pause apply to every item
+        if reason is None:
+            _record_effect(run, body.id, effect)
+            if _differs(step, effect):
+                reason = "effect_mismatch"
         if reason:
             verdict = run.block(body, reason, owner=node)  # a stop leaves the doubt on the body's step
             if verdict == "retry":
@@ -680,6 +692,8 @@ def _run_foreach(run: _Run, node: Node) -> None:
             if verdict == "continue":  # this item is given up, the next one goes on
                 with run.lock:
                     progress["iteration"] += 1
+                    if reason == "effect_mismatch":
+                        progress["mismatch"] = True  # gone on past it: the history still has to say so
                 run.attempts.pop(node.id, None)
                 run.save()
                 continue
@@ -690,10 +704,7 @@ def _run_foreach(run: _Run, node: Node) -> None:
             return
         with run.lock:
             progress["iteration"] += 1
-            progress["mismatch"] = progress.get("mismatch", False) or _differs(step, effect)
             run.attempts.pop(node.id, None)  # the retries are per item
-            run.state.effects[body.id] = str(effect)
-            run.state.outputs[body.id] = {"effect": str(effect)}
         run.save()  # a checkpoint per item
     with run.lock:
         run.state.outputs[node.id] = {"count": len(items)}
