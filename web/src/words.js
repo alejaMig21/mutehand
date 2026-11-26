@@ -26,7 +26,11 @@ const EFFECTS = {
   closed_dialog: 'a dialog closed', revealed: 'something new appeared', value_changed: 'a value changed',
   no_change: 'nothing changed on screen', pixels_changed: 'the picture changed',
 }
-const ROLES = { textfield: 'text field', menubutton: 'menu button', menuitem: 'menu item' }
+const ROLES = {
+  textfield: 'text field', menubutton: 'menu button', menuitem: 'menu item', combobox: 'drop-down list',
+  checkbox: 'check box', radiobutton: 'option button', listitem: 'list item', treeitem: 'list item',
+}
+export const roleWords = (role) => ROLES[role] ?? role
 
 const spaced = (code) => String(code).replaceAll('_', ' ')
 
