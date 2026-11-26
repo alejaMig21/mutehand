@@ -21,7 +21,7 @@ from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from workflow_factory import schedule
+from workflow_factory import daily, schedule
 from workflow_factory.checks import mark_seen, run_checks, seen_before
 from workflow_factory.consent import consents, covers, effective_sensitivity, revoke_consent
 from workflow_factory.desktop import Desktop, DesktopError
@@ -41,6 +41,7 @@ from workflow_factory.flows import (
     save_flow,
     save_layout,
     stored_info,
+    taught_app,
 )
 from workflow_factory.knowledge import duplicate_flow
 from workflow_factory.nodedata import present, single_node_flow, snapshot
@@ -71,6 +72,11 @@ CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript", 
                  ".svg": "image/svg+xml", ".json": "application/json", ".map": "application/json"}
 
 
+def _real_scheduler(*args, **kwargs):
+    """schtasks itself. Looked up when a server starts, so a test can put a stand-in here."""
+    return subprocess.run(*args, **kwargs)
+
+
 def _listen(host: str, port: int, handler) -> ThreadingHTTPServer:
     """Port 0 lets the system choose, and it may choose one no browser will open: those are held until it offers another."""
     refused = []
@@ -89,13 +95,13 @@ class ApiServer:
     def __init__(self, user_db: Path, factory_db: Path | None, desktop_for: Callable[[str], Desktop],
                  token: str | None = None, host: str = "127.0.0.1", port: int = 0,
                  web_dir: Path | None = None, max_active_runs: int = 4, max_kept_runs: int = 50,
-                 schedule_runner=subprocess.run):
+                 schedule_runner=None):
         if host not in LOOPBACK_HOSTS:
             raise ValueError("the editor API only binds to the loopback interface")
         self.user_db, self.factory_db, self.desktop_for = user_db, factory_db, desktop_for
         self.token = token or secrets.token_urlsafe(32)
         self.web_dir = web_dir
-        self.schedule_runner = schedule_runner  # how schtasks is called: tests give a stand-in
+        self.schedule_runner = schedule_runner or _real_scheduler  # how schtasks is called: tests give a stand-in
         self.max_active_runs, self.max_kept_runs = max_active_runs, max_kept_runs
         self._runs: dict[str, dict] = {}
         self._runs_lock = threading.Lock()
@@ -250,6 +256,84 @@ class ApiServer:
             save_layout(self.user_db, flow.id, positions)
         return self._flow_view(flow)
 
+    # --- daily time -----------------------------------------------------------------------------
+
+    def _local(self, flow_id: str) -> bool:
+        return any(e["id"] == flow_id and e["origin"] == "local" for e in list_flows(self.user_db, self.factory_db))
+
+    def _store(self, flow, positions: dict, before: dict) -> None:
+        save_flow(self.user_db, flow)
+        if positions != before:
+            save_layout(self.user_db, flow.id, positions)
+
+    def _daily_read(self, flow_id: str) -> tuple[int, dict]:
+        """The flow's daily time as Windows has it. A task made before the first box showed it brings the box in line."""
+        with self._save_lock:
+            flow = load_flow(self.user_db, self.factory_db, flow_id)
+            if flow is None:
+                return 404, {"error": "no such flow"}
+            tasks = daily.tasks_by_flow(self.user_db, self.schedule_runner).get(flow_id, [])
+            at = tasks[0]["at"] if tasks else None
+            if at and daily.trigger_time(flow) != at and self._local(flow_id):
+                before = load_layout(self.user_db, flow_id)
+                self._store(*daily.with_daily(flow, at, before), before)
+                flow = load_flow(self.user_db, self.factory_db, flow_id)
+            return 200, {"at": at, "node_at": daily.trigger_time(flow)}
+
+    def _daily_change(self, flow_id: str, at: str | None) -> tuple[int, dict]:
+        """Set the flow's daily time, or with None stop it: the task and the first box change together, or neither does."""
+        with self._save_lock:
+            flow = load_flow(self.user_db, self.factory_db, flow_id)
+            if flow is None:
+                return 404, {"error": "no such flow"}
+            if not self._local(flow_id):
+                raise ValueError("This is a template. Make a copy of it to give it a daily time.")
+            if at is not None and not (isinstance(at, str) and schedule.CLOCK.fullmatch(at)):
+                raise ValueError("The time must be a time of day such as 07:30.")
+            runner, before = self.schedule_runner, load_layout(self.user_db, flow_id)
+            old = daily.tasks_by_flow(self.user_db, runner).get(flow_id, [])
+            if at is None:
+                try:
+                    for task in old:
+                        schedule.delete_schedule(task["name"], runner=runner)
+                except RuntimeError as error:
+                    return 502, {"error": f"The daily run could not be stopped, so it still runs every day. {error}"}
+                self._store(*daily.with_daily(flow, None, before), before)
+                return 200, {"at": None}
+            steps = list_steps(self.user_db, self.factory_db)
+            info = stored_info(self.user_db, self.factory_db).get(flow_id, {})
+            app = taught_app(describe_flow(flow_id, info, lambda: flow, lambda: steps)["app"], steps) \
+                or next((t["app"] for t in old if t["app"]), "")
+            if not app:
+                raise ValueError("Choose which app this chore runs on first: the daily run needs to know it.")
+            new_flow, places = daily.with_daily(flow, at, before)
+            name = f"{flow_id} daily {at.replace(':', '')}"
+            full, kept = schedule.full_name(name), {schedule.full_name(t["name"]) for t in old}
+            listed = schedule.list_schedules(runner=runner)
+            if len(listed) >= MAX_SCHEDULES and full not in listed:
+                return 409, {"error": f"There are already {MAX_SCHEDULES} daily runs in Windows. Stop one first."}
+            extra = ["--user-db", str(self.user_db)] if self.user_db != default_user_db() else []
+            try:
+                schedule.create_schedule(name, flow_id, app, at, extra, runner=runner)
+            except (ValueError, RuntimeError) as error:  # the words are Windows' own or ours: no screen content
+                return (502 if isinstance(error, RuntimeError) else 400), {
+                    "error": f"The daily run was not set, nothing was changed. {error}"}
+            try:
+                for task in old:
+                    if schedule.full_name(task["name"]) != full:
+                        schedule.delete_schedule(task["name"], runner=runner)
+                self._store(new_flow, places, before)
+            except Exception as error:  # noqa: BLE001 - whatever failed, the task made a moment ago must not stay alone
+                if full not in kept:
+                    try:
+                        schedule.delete_schedule(name, runner=runner)
+                    except RuntimeError:
+                        pass
+                if isinstance(error, RuntimeError):
+                    return 502, {"error": f"The daily time was not changed. {error}"}
+                raise
+            return 200, {"at": at}
+
     def _run_view(self, run_id: str) -> dict | None:
         with self._runs_lock:
             record = self._runs.get(run_id)
@@ -346,13 +430,21 @@ class ApiServer:
                 if method == "POST" and path == "/api/flows":
                     return self._send(*api._create(self._body()))
                 if method == "GET" and path == "/api/flow-overview":
-                    return self._send(200, flow_overview(api.user_db, api.factory_db))
+                    times = daily.tasks_by_flow(api.user_db, api.schedule_runner)
+                    return self._send(200, [{**flow, "daily": times[flow["id"]][0]["at"] if flow["id"] in times else None}
+                                            for flow in flow_overview(api.user_db, api.factory_db)])
                 flow_match = re.fullmatch(r"/api/flows/([^/]+)", path)
                 if flow_match and method == "GET":
                     flow = load_flow(api.user_db, api.factory_db, flow_match[1])
                     return self._send(200, api._flow_view(flow)) if flow else self._send(404, {"error": "no such flow"})
                 if flow_match and method == "PUT":
                     return self._send(*api._save(flow_match[1], self._body()))
+                daily_match = re.fullmatch(r"/api/flows/([^/]+)/daily", path)
+                if daily_match and method == "GET":
+                    return self._send(*api._daily_read(daily_match[1]))
+                if daily_match and method in ("PUT", "DELETE"):
+                    at = str(self._body()["at"]) if method == "PUT" else None  # "None" fails the clock check
+                    return self._send(*api._daily_change(daily_match[1], at))
                 copy_match = re.fullmatch(r"/api/flows/([\w.-]+)/duplicate", path)
                 if copy_match and method == "POST":
                     body = self._body()
@@ -462,7 +554,10 @@ class ApiServer:
                         return self._send(404, {"error": "no such schedule"})
                     if name not in schedule.list_schedules(runner=runner):  # only what this product made can be removed
                         return self._send(404, {"error": "no such schedule"})
-                    schedule.delete_schedule(name, runner=runner)
+                    try:
+                        schedule.delete_schedule(name, runner=runner)
+                    except RuntimeError as error:
+                        return self._send(502, {"error": str(error)})
                     return self._send(200, {"removed": body["name"]})
                 return self._send(405, {"error": "method"})
 
