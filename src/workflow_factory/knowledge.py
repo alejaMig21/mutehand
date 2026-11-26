@@ -17,7 +17,17 @@ from dataclasses import replace
 from pathlib import Path
 
 from workflow_factory.flows import SCHEMA as FLOW_SCHEMA
-from workflow_factory.flows import flow_from_dict, flow_to_dict, list_flows, load_flow, save_flow
+from workflow_factory.flows import (
+    check_app,
+    check_title,
+    flow_from_dict,
+    flow_to_dict,
+    list_flows,
+    load_flow,
+    new_flow_id,
+    save_flow,
+    stored_info,
+)
 from workflow_factory.legacy import upgrade_knowledge
 from workflow_factory.paths import default_user_db
 from workflow_factory.steps import (
@@ -48,7 +58,9 @@ def export_knowledge(user_db: Path) -> dict:
         if step_report(user_db, step)["state"] == "rejected":
             data["status"] = "rejected"  # a person's rejection travels with the step
         steps.append(data)
-    return {"version": FORMAT_VERSION, "steps": steps, "flows": [flow_to_dict(flow) for flow in flows]}
+    info = stored_info(user_db, None)
+    return {"version": FORMAT_VERSION, "steps": steps,
+            "flows": [{**flow_to_dict(flow), **info.get(flow.id, {})} for flow in flows]}
 
 
 def _parse(data: dict, origin: Origin):
@@ -64,7 +76,8 @@ def _parse(data: dict, origin: Origin):
         for item in data["flows"]:
             if not FLOW_ID.fullmatch(str(item["id"])):
                 raise ValueError(f"flow id {item['id']!r} may only use letters, digits, '_', '.' and '-'")
-            flows.append(flow_from_dict(item["id"], item))
+            words = {key: check(item[key]) for key, check in (("title", check_title), ("app", check_app)) if key in item}
+            flows.append((flow_from_dict(item["id"], item), words))
     except (KeyError, TypeError, AttributeError) as error:
         raise ValueError(f"the file is not valid knowledge: {error}") from None
     if origin == Origin.LOCAL:  # a file from elsewhere cannot vouch for itself
@@ -85,14 +98,14 @@ def import_knowledge(user_db: Path, data: dict, overwrite: bool = False) -> None
     """
     steps, flows = _parse(data, Origin.LOCAL)
     clashes = [f"step {step.name!r}" for step in steps if find_step(user_db, None, step.app, step.name)]
-    clashes += [f"flow {flow.id!r}" for flow in flows if load_flow(user_db, None, flow.id)]
+    clashes += [f"flow {flow.id!r}" for flow, _ in flows if load_flow(user_db, None, flow.id)]
     if clashes and not overwrite:
         raise ValueError("already exists: " + ", ".join(clashes) + " (use overwrite to replace)")
     for step in steps:
         forget_state(user_db, step.app, step.name)  # old counters mean nothing for new knowledge
         save_step(user_db, step)
-    for flow in flows:
-        save_flow(user_db, flow)
+    for flow, words in flows:
+        save_flow(user_db, flow, **words)
 
 
 def build_factory(out_path: Path, data: dict) -> None:
@@ -105,22 +118,28 @@ def build_factory(out_path: Path, data: dict) -> None:
             db.execute(FLOW_SCHEMA)
         for step in steps:
             save_step(temporary, step)
-        for flow in flows:
-            save_flow(temporary, flow)
+        for flow, words in flows:
+            save_flow(temporary, flow, **words)
         os.replace(temporary, out_path)
 
 
-def duplicate_flow(user_db: Path, factory_db: Path | None, flow_id: str, new_id: str):
-    """Copy a flow (typically a factory template) into the user layer, where it can be edited."""
-    if not FLOW_ID.fullmatch(new_id):
+def duplicate_flow(user_db: Path, factory_db: Path | None, flow_id: str, new_id: str | None = None,
+                   title: str | None = None):
+    """Copy a flow (typically a factory template) into the user layer, where it can be edited. The copy keeps the
+    title and app unless a title is given; without a new_id its identifier is made from the title."""
+    if new_id is not None and not FLOW_ID.fullmatch(new_id):
         raise ValueError("a flow id may only use letters, digits, '_', '.' and '-'")
     original = load_flow(user_db, factory_db, flow_id)
     if original is None:
         raise ValueError(f"no flow named {flow_id!r}")
-    if load_flow(user_db, None, new_id) is not None:
+    info = stored_info(user_db, factory_db).get(flow_id, {})
+    title = info.get("title") if title is None else check_title(title)
+    if new_id is None:
+        new_id = new_flow_id(title or flow_id, [entry["id"] for entry in list_flows(user_db, factory_db)])
+    elif new_id.casefold() in (entry["id"].casefold() for entry in list_flows(user_db, None)):
         raise ValueError(f"a flow named {new_id!r} already exists")
     copy = replace(original, id=new_id)
-    save_flow(user_db, copy)
+    save_flow(user_db, copy, title, info.get("app"))
     return copy
 
 

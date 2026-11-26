@@ -28,13 +28,18 @@ from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.flow import clear_emergency_stop, emergency_stop, rejected_steps, run_flow
 from workflow_factory.flows import (
     check_positions,
+    check_title,
+    describe_flow,
     flow_from_dict,
+    flow_summaries,
     flow_to_dict,
     list_flows,
     load_flow,
     load_layout,
+    new_flow_id,
     save_flow,
     save_layout,
+    stored_info,
 )
 from workflow_factory.knowledge import duplicate_flow
 from workflow_factory.nodedata import present, single_node_flow, snapshot
@@ -184,33 +189,47 @@ class ApiServer:
         return self._launch(alone, alone.key, flow_id, app, context)
 
     def _flow_view(self, flow) -> dict:
-        """A flow as the editor sees it: where its nodes sit, and a revision that changes when either does."""
+        """A flow as the editor sees it: where its nodes sit, what it is called, the app it runs on, and a revision
+        that changes when any of what is stored does."""
         view = {**flow_to_dict(flow), "positions": load_layout(self.user_db, flow.id)}
-        digest = hashlib.sha256(json.dumps(view, sort_keys=True).encode()).hexdigest()[:16]
-        return {**view, "revision": digest}
+        info = stored_info(self.user_db, self.factory_db).get(flow.id, {})
+        digest = hashlib.sha256(json.dumps({**view, **info}, sort_keys=True).encode()).hexdigest()[:16]
+        words = describe_flow(flow.id, info, lambda: flow, lambda: list_steps(self.user_db, self.factory_db))
+        return {**view, **words, "revision": digest}
 
     def _save(self, flow_id: str, body: dict) -> tuple[int, dict]:
         """Save a flow. A body with "base" only replaces what the editor has seen: the revision it loaded, or
         None for "this is a new flow". A body without it replaces whatever is there."""
         if not schedule.SAFE_NAME.fullmatch(flow_id) or not flow_id.strip("."):
-            raise ValueError("a flow name may only use letters, digits, '_', '.' and '-'")
+            raise ValueError("a flow identifier may only use letters, digits, '_', '.' and '-'")
         if len(flow_id) > MAX_FLOW_NAME_CHARS:
-            raise ValueError(f"a flow name can have at most {MAX_FLOW_NAME_CHARS} characters")
-        try:
-            flow = flow_from_dict(flow_id, body)
-        except (TypeError, KeyError):  # their words would show how the engine is built
-            raise ValueError("that is not a valid flow") from None
-        positions = check_positions(body["positions"]) if "positions" in body else None
+            raise ValueError(f"a flow identifier can have at most {MAX_FLOW_NAME_CHARS} characters")
+        parsed = _parse_flow(flow_id, body)
         with self._save_lock:
-            if "base" in body:
-                stored = load_flow(self.user_db, self.factory_db, flow_id)
-                if stored is not None and body["base"] != self._flow_view(stored)["revision"]:
-                    return 409, {"error": f"A flow called '{flow_id}' already exists" if body["base"] is None else
-                                 f"'{flow_id}' was changed somewhere else since you opened it"}
-            save_flow(self.user_db, flow)
-            if positions is not None:
-                save_layout(self.user_db, flow_id, positions)
-            return 200, self._flow_view(flow)
+            stored = load_flow(self.user_db, self.factory_db, flow_id)
+            if stored is None and flow_id.casefold() in (known.casefold() for known in self._flow_ids()):
+                return 409, {"error": f"A flow identified as '{flow_id}' already exists, with other capital letters"}
+            if "base" in body and stored is not None and body["base"] != (seen := self._flow_view(stored))["revision"]:
+                return 409, {"error": f"A flow called '{seen['title']}' already exists" if body["base"] is None else
+                             f"'{seen['title']}' was changed somewhere else since you opened it"}
+            return 200, self._write(*parsed, body)
+
+    def _create(self, body: dict) -> tuple[int, dict]:
+        """Save a new flow under an identifier made from its title, so it can never replace another."""
+        title = check_title(body["title"])
+        with self._save_lock:
+            parsed = _parse_flow(new_flow_id(title, self._flow_ids()), body)
+            return 201, self._write(*parsed, body)
+
+    def _flow_ids(self) -> list[str]:
+        return [entry["id"] for entry in list_flows(self.user_db, self.factory_db)]
+
+    def _write(self, flow, positions: dict | None, body: dict) -> dict:
+        """Call with the save lock held."""
+        save_flow(self.user_db, flow, body.get("title"), body.get("app"))
+        if positions is not None:
+            save_layout(self.user_db, flow.id, positions)
+        return self._flow_view(flow)
 
     def _run_view(self, run_id: str) -> dict | None:
         with self._runs_lock:
@@ -302,7 +321,9 @@ class ApiServer:
                 if method == "GET" and path == "/api/recipes":
                     return self._send(200, recipes_overview(api.user_db))
                 if method == "GET" and path == "/api/flows":
-                    return self._send(200, list_flows(api.user_db, api.factory_db))
+                    return self._send(200, flow_summaries(api.user_db, api.factory_db))
+                if method == "POST" and path == "/api/flows":
+                    return self._send(*api._create(self._body()))
                 flow_match = re.fullmatch(r"/api/flows/([^/]+)", path)
                 if flow_match and method == "GET":
                     flow = load_flow(api.user_db, api.factory_db, flow_match[1])
@@ -311,8 +332,10 @@ class ApiServer:
                     return self._send(*api._save(flow_match[1], self._body()))
                 copy_match = re.fullmatch(r"/api/flows/([\w.-]+)/duplicate", path)
                 if copy_match and method == "POST":
-                    copy = duplicate_flow(api.user_db, api.factory_db, copy_match[1], self._body()["new_id"])
-                    save_layout(api.user_db, copy.id, load_layout(api.user_db, copy_match[1]))
+                    body = self._body()
+                    with api._save_lock:  # choosing a free identifier and taking it happen as one
+                        copy = duplicate_flow(api.user_db, api.factory_db, copy_match[1], body.get("new_id"), body.get("title"))
+                        save_layout(api.user_db, copy.id, load_layout(api.user_db, copy_match[1]))
                     return self._send(201, api._flow_view(copy))
                 data_match = re.fullmatch(r"/api/flows/([\w.-]+)/data", path)
                 if data_match and method == "GET":
@@ -443,6 +466,15 @@ class ApiServer:
                 self._dispatch("DELETE")
 
         return Handler
+
+
+def _parse_flow(flow_id: str, body: dict) -> tuple:
+    """(flow, positions or None) from a request body; ValueError when it is not a flow."""
+    try:
+        flow = flow_from_dict(flow_id, body)
+    except (TypeError, KeyError):  # their words would show how the engine is built
+        raise ValueError("that is not a valid flow") from None
+    return flow, check_positions(body["positions"]) if "positions" in body else None
 
 
 class _Body(dict):
