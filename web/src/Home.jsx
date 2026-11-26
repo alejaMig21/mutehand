@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
 import { appLabel, chipFor } from './catalog.js'
 import { Icon } from './icons.jsx'
+import More, { useDeleted } from './More.jsx'
 import Screen from './Screen.jsx'
 import { useLoad } from './useLoad.js'
 import { blockedWords, flowTitle, lastRunWords, runNoteWords } from './words.js'
@@ -13,6 +14,7 @@ export default function Home({ following, left, onOpen, onNew }) {
   const load = useLoad('/api/flow-overview', { keep: true })
   const { reload } = load
   const flows = load.data
+  const undo = useDeleted(reload, flows)
 
   // the button that led back is gone with the flow screen: the focus goes to the flow's row
   useEffect(() => {
@@ -39,15 +41,16 @@ export default function Home({ following, left, onOpen, onNew }) {
         <ul className="chores">
           {flows.map((flow) => (
             <Chore key={flow.id} flow={flow} title={flowTitle(flow.id, flows)} following={following} reload={reload}
-              onOpen={() => onOpen(flow.id)} />
+              onDeleted={undo.onDeleted} onOpen={() => onOpen(flow.id)} />
           ))}
         </ul>
       </Screen>
+      {undo.notice}
     </div>
   )
 }
 
-function Chore({ flow, title, following: { runs, follow, attach, forget }, reload, onOpen }) {
+function Chore({ flow, title, following: { runs, follow, attach, forget }, reload, onOpen, onDeleted }) {
   const { id, app } = flow
   const run = runs[id]
   const running = run?.status === 'running'
@@ -105,6 +108,7 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
         aria-disabled={unavailable || undefined} aria-describedby={why ? `why-${id}` : undefined} aria-label={`${label}: ${title}`}>
         <Icon name={running ? 'stop' : 'play'} size={20} /> {label}
       </button>
+      <More flow={flow} title={title} reload={reload} onDeleted={onDeleted} />
     </li>
   )
 }

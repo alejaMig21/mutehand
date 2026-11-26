@@ -853,6 +853,11 @@ def rejected_steps(flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path
     return tuple(found)
 
 
+def _named(node: Node) -> dict:
+    """What the history keeps to say which box this was: node ids are reused when a flow is rebuilt."""
+    return {"step": node.step or None, "kind": node.kind, "op": node.op}
+
+
 def run_flow(
     flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path | None = None,
     context: dict | None = None, progress=None, fired: str = "manual",
@@ -919,7 +924,7 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="ma
     except Exception:
         # a bug or a failure we do not handle: the run still leaves a trace, then the error goes on
         record_run(user_db, flow.key, started_at, desktop.now(), "error", None, [
-            {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1]}
+            {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1], **_named(node)}
             for node in flow.nodes if node.id in run.node_status])
         raise
     effects = {node_id: Effect(effect) for node_id, effect in run.effects.items()}
@@ -933,6 +938,6 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="ma
         result = RunResult(effects, {}, run.statuses, halted_by=run.halted, outputs=run.state.outputs, continued=run.continued)
     run_id = record_run(user_db, flow.key, started_at, desktop.now(), result.status, result.stopped, [
         {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1],
-         "effect": str(effects[node.id]) if node.id in effects else None, "step": node.step or None}
+         "effect": str(effects[node.id]) if node.id in effects else None, **_named(node)}
         for node in flow.nodes if node.id in run.node_status])
     return replace(result, run_id=run_id)

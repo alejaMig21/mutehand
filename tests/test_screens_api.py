@@ -151,7 +151,8 @@ def test_the_engine_records_one_history_row_per_executed_run(tmp_path):
     (run,) = list_runs(tmp_path / "user.db")
 
     assert run["status"] == "finished" and run["started_at"] <= run["finished_at"]
-    assert run["nodes"] == [{"node_id": "a", "status": "done", "reason": None, "effect": "no_change", "step": "open-menu"}]
+    assert run["nodes"] == [{"node_id": "a", "status": "done", "reason": None, "effect": "no_change",
+                              "step": "open-menu", "kind": "step", "op": None}]
 
 
 def test_rejecting_an_unknown_step_is_a_404(tmp_path):

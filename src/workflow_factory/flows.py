@@ -24,6 +24,10 @@ SCHEMA = "CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, definition TEXT
 LAYOUT_SCHEMA = "CREATE TABLE IF NOT EXISTS flow_positions (id TEXT PRIMARY KEY, positions TEXT NOT NULL)"
 # what the person calls a flow and the app it runs on: kept apart too, so a rename never drops a checkpoint
 INFO_SCHEMA = "CREATE TABLE IF NOT EXISTS flow_info (id TEXT PRIMARY KEY, title TEXT, app TEXT)"
+# a deleted flow waits here until it is undone: its words, places and daily runs, so that undo gives back all of them.
+# ponytail: kept for good, and its identifier stays taken so a new flow never inherits the old history; purge by age if it grows.
+TRASH_SCHEMA = ("CREATE TABLE IF NOT EXISTS flow_trash (id TEXT PRIMARY KEY, definition TEXT NOT NULL, positions TEXT, "
+                "title TEXT, app TEXT, schedules TEXT NOT NULL)")
 MAX_TITLE_CHARS = 100
 MAX_APP_CHARS = 100
 MAX_NEW_ID_CHARS = 50  # an identifier goes into the command of a Windows task, which has little room
@@ -89,6 +93,59 @@ def save_flow(db_path: Path, flow: Flow, title: str | None = None, app: str | No
         db.execute("INSERT OR REPLACE INTO flows VALUES (?, ?)", (flow.id, _dump(flow)))
         db.execute("INSERT INTO flow_info (id, title, app) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET "
                    "title = COALESCE(excluded.title, title), app = COALESCE(excluded.app, app)", (flow.id, title, app))
+
+
+def set_title(user_db: Path, flow_id: str, title: str) -> None:
+    """Rename: the title alone, so nothing a checkpoint or the history belongs to moves."""
+    title = check_title(title)
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute(INFO_SCHEMA)
+        db.execute("INSERT INTO flow_info (id, title) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET title = excluded.title",
+                   (flow_id, title))
+
+
+def _trash_tables(db: sqlite3.Connection) -> None:
+    for schema in (SCHEMA, LAYOUT_SCHEMA, INFO_SCHEMA, TRASH_SCHEMA):
+        db.execute(schema)
+
+
+def trash_flow(user_db: Path, flow_id: str, schedules: list[dict]) -> bool:
+    """Take the user's copy of a flow out of use, keeping all of it (and `schedules`, its daily runs) for `restore_flow`.
+    False when the user has no such flow. A factory flow it shadowed shows again."""
+    with closing(sqlite3.connect(user_db)) as db, db:
+        _trash_tables(db)
+        row = db.execute("SELECT definition FROM flows WHERE id = ?", (flow_id,)).fetchone()
+        if row is None:
+            return False
+        positions = db.execute("SELECT positions FROM flow_positions WHERE id = ?", (flow_id,)).fetchone()
+        info = db.execute("SELECT title, app FROM flow_info WHERE id = ?", (flow_id,)).fetchone() or (None, None)
+        db.execute("INSERT OR REPLACE INTO flow_trash VALUES (?, ?, ?, ?, ?, ?)",
+                   (flow_id, row[0], positions and positions[0], *info, json.dumps(schedules)))
+        for table in ("flows", "flow_positions", "flow_info"):
+            db.execute(f"DELETE FROM {table} WHERE id = ?", (flow_id,))
+    return True
+
+
+def restore_flow(user_db: Path, flow_id: str) -> list[dict] | None:
+    """Undo `trash_flow`; the daily runs it kept, or None when nothing was deleted under that identifier."""
+    with closing(sqlite3.connect(user_db)) as db, db:
+        _trash_tables(db)
+        row = db.execute("SELECT definition, positions, title, app, schedules FROM flow_trash WHERE id = ?",
+                         (flow_id,)).fetchone()
+        if row is None:
+            return None
+        definition, positions, title, app, schedules = row
+        db.execute("INSERT OR REPLACE INTO flows VALUES (?, ?)", (flow_id, definition))
+        if positions is not None:
+            db.execute("INSERT OR REPLACE INTO flow_positions VALUES (?, ?)", (flow_id, positions))
+        db.execute("INSERT OR REPLACE INTO flow_info VALUES (?, ?, ?)", (flow_id, title, app))
+        db.execute("DELETE FROM flow_trash WHERE id = ?", (flow_id,))
+    return json.loads(schedules)
+
+
+def trashed_ids(user_db: Path) -> list[str]:
+    with closing(sqlite3.connect(user_db)) as db:
+        return [row[0] for row in db.execute("SELECT id FROM flow_trash")] if _has_table(db, "flow_trash") else []
 
 
 def _has_table(db: sqlite3.Connection, name: str) -> bool:
