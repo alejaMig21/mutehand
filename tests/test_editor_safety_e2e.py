@@ -575,7 +575,7 @@ def test_the_closed_page_says_how_to_open_it_again(app):
 def test_a_test_of_one_node_shows_the_servers_words_untouched_and_says_when_it_cannot_reach_it(app):
     page, _, _ = app
     open_flow(page, "morning")
-    page.locator('.react-flow__node[data-id="n1"]').dblclick()
+    page.locator('.react-flow__node[data-id="n1"]').click()
     page.route("**/nodes/n1/test", lambda route: route.fulfill(
         status=400, content_type="application/json", body='{"error": "no step named open_menu"}'))
     page.get_by_test_id("test-node").click()

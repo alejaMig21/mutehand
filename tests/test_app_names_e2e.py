@@ -103,11 +103,10 @@ def test_no_screen_shows_a_file_name_and_each_calls_the_app_the_same(tmp_path, b
     assert page.get_by_test_id("node-n1").inner_text().count(shown) == 1
     assert f"for {shown} yet" in page.get_by_test_id("cannot-start").inner_text()
     page.locator('.react-flow__node[data-id="n1"]').click()
-    page.get_by_test_id("open-detail").click()
     page.get_by_test_id("test-node").click()
     assert f"on {shown}" in page.get_by_test_id("test-warning").inner_text()
+    assert shown in page.get_by_test_id("strip-says").inner_text()
     assert_no_file_names(page)
-    page.get_by_test_id("close-detail").click()
 
     page.get_by_test_id("tab-library").click()
     page.get_by_role("heading", name=shown).wait_for()
@@ -208,10 +207,10 @@ def test_the_app_is_chosen_by_keyboard_and_a_long_name_fits_a_narrow_window(tmp_
     page.get_by_test_id("tab-editor").click()
     assert page.evaluate(NOTHING_OVERFLOWS, ".search-panel .entry")
     page.get_by_test_id("app-name").select_option("vvrt.exe")
-    page.locator('.react-flow__node[data-id="n1"]').press("Enter")
+    page.locator('.react-flow__node[data-id="n1"]').press("Space")
     page.get_by_test_id("test-node").click()
     page.get_by_test_id("test-warning").wait_for()
-    assert page.evaluate(NOTHING_OVERFLOWS, ".detail, .detail *")
+    assert page.evaluate(NOTHING_OVERFLOWS, ".strip, .strip *")
 
 
 def test_the_steps_screen_orders_the_apps_by_the_names_it_shows(tmp_path, browse):

@@ -8,6 +8,7 @@ from test_api import call, wait_until_finished
 from workflow_factory import Flow, Node, Sensitivity, grant_consent, reject_step, save_flow, save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.flow import EMERGENCY_STOP
+from workflow_factory.steps import find_step, record_outcome
 
 from fake_desktop import FakeDesktop, button, step
 
@@ -101,6 +102,24 @@ def test_a_step_says_how_far_it_is_trusted_whether_its_app_is_private_and_whethe
     assert by_name["gone"]["state"] == "rejected"
     assert (by_name["send"]["private"], by_name["send"]["consent"]) == (True, "missing")
     assert after["send"]["consent"] == "given"
+
+
+def test_a_step_says_how_often_it_has_worked_and_whether_that_is_counted_at_all(tmp_path):
+    db = tmp_path / "user.db"
+    save_step(db, step("press", "Alpha", effect="revealed", factory_successes=2))
+    save_step(db, step("write", "Beta", action="type_value"))  # nothing taught to compare with: never counted
+    press = find_step(db, None, "paint.exe", "press")
+    for success in (True, True, False):
+        record_outcome(db, press, success, got="no_change")
+    server = ApiServer(db, None, lambda app: None, token="secret-token")
+    server.start()
+    try:
+        by_name = {s["name"]: s for s in call(server, "/api/steps")[1]}
+    finally:
+        server.stop()
+
+    counts = {name: (s["successes"], s["failures"], s["counted"]) for name, s in by_name.items()}
+    assert counts == {"press": (4, 1, True), "write": (0, 0, False)}
 
 
 def test_open_doubts_are_listed_by_flow_and_node_so_the_editor_can_count_them(tmp_path):

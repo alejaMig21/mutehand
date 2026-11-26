@@ -17,10 +17,8 @@ const RUN_MARKS = {
   running: ['spinner', 'Running', 'info'], done: ['check', 'Done', 'ok'], blocked: ['alert', 'Stopped here', 'bad'],
   unreached: ['clock', 'Not reached', 'muted'], continued: ['skip', 'Carried on', 'warn'], paused: ['pause', 'Paused for you', 'warn'],
 }
-const TRUST_MARKS = {
-  trusted: ['checkcircle', 'Trusted', 'ok'], suspect: ['half', 'On trial', 'warn'], rejected: ['xcircle', 'Rejected', 'bad'],
-  to_revalidate: ['half', 'Needs a re-check', 'warn'],
-}
+// A rejected action blocks the flow, so it is said on its box; how far an action is trusted is not.
+const REJECTED = ['xcircle', 'Rejected', 'bad']
 
 export function marksFor(node, meta, runStatus, doubts) {
   const marks = []
@@ -28,7 +26,7 @@ export function marksFor(node, meta, runStatus, doubts) {
   if (!node.kind || node.kind === 'step') {
     if (meta?.missing) marks.push(['alert', meta.hole ? `Hole not filled: ${meta.hole.hole}` : 'Not taught for this app', 'bad'])
     if (meta?.adapted_from) marks.push(['arrow', `Adapted from ${appLabel(meta.adapted_from)}`, 'info'])
-    if (TRUST_MARKS[meta?.state]) marks.push(TRUST_MARKS[meta.state])
+    if (meta?.state === 'rejected') marks.push(REJECTED)
     if (meta?.consent === 'given') marks.push(['lock', 'Consent given', 'muted'])
     if (meta?.consent === 'missing') marks.push(['lock', 'Needs consent', 'warn'])
     if (meta?.private) marks.push(['eyeoff', 'Private app', 'muted'])
@@ -64,8 +62,7 @@ export default function NodeCard({ id, data, selected }) {
               </button>
             )
             : (
-              <div key={word} className={`card-mark tone-${tone}`}
-                title={word === 'On trial' ? 'Trusted after it has worked a few times without failing' : undefined}>
+              <div key={word} className={`card-mark tone-${tone}`}>
                 <Icon name={glyph} size={14} /> {word}
               </div>
             )

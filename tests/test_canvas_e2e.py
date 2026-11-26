@@ -518,7 +518,7 @@ def test_in_a_narrow_window_what_can_be_done_with_the_chosen_box_covers_no_box(t
     with editor(tmp_path, size=(390, 740)) as page:
         open_flow(page, "row", "c")
         choose(page, "a")
-        chosen = page.get_by_role("region", name="Selected node").bounding_box()
+        chosen = page.get_by_role("region", name="About the chosen box").bounding_box()
         canvas = page.get_by_role("region", name="Boxes of this chore").bounding_box()
 
         assert chosen["y"] >= canvas["y"] + canvas["height"] - 1
