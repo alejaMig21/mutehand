@@ -6,7 +6,7 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 
 **Blocked by:** 07
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] The sentence is built from the node's kind, action, control and app, never from a typed value or secret
 - [ ] Every node kind and action has a sentence; no rule depends on one app
@@ -16,3 +16,8 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 - [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop and scheduler, red before green
 - [ ] Everything added works from the keyboard and fits a 683 px and a 390 px wide window; button text stays readable
 - [ ] Existing tests pass; no screen content of a private app appears in any message
+
+## Answer
+
+The chosen box is explained under the canvas in one strip: a sentence of what it does, how often it has worked, Test this box, Settings and Remove box; it replaces the old node panel.
+Commits: a3356e4, 74672c6, 19de41a.
