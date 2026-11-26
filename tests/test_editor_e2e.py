@@ -602,3 +602,65 @@ def test_cards_say_how_far_a_step_is_trusted_and_doubts_are_counted_but_cannot_b
             browser.close()
     finally:
         server.stop()
+
+
+HOLES = [{"hole": "open", "role": "button", "control_name": "Alpha"}, {"hole": "compose", "role": "button", "control_name": "Beta"},
+         {"hole": "send", "role": "button", "control_name": "Gamma"}]
+
+
+def taught_recipe(tmp_path, second_has_compose=True):
+    from workflow_factory.recipes import apply_recipe, save_recipe
+
+    save_recipe(tmp_path / "user.db", "send-message", HOLES)
+    apply_recipe(tmp_path / "user.db", FakeDesktop(controls=[button("Alpha"), button("Beta"), button("Gamma")], app="a.exe"),
+                 "send-message")
+    names = ["Alpha", "Gamma"] + (["Delta"] if second_has_compose else [])
+    fills = {"compose": {"role": "button", "control_name": "Delta"}} if second_has_compose else {}
+    apply_recipe(tmp_path / "user.db", FakeDesktop(controls=[button(n) for n in names], app="b.exe"), "send-message", fills)
+
+
+def test_dropping_a_recipe_adds_its_connected_nodes_and_adapted_steps_say_where_they_came_from(tmp_path):
+    from playwright.sync_api import sync_playwright
+
+    taught_recipe(tmp_path)
+    server = serve(tmp_path, FakeDesktop(controls=[]))
+    try:
+        with sync_playwright() as playwright:
+            browser, page = open_page(playwright, server)
+            entry = page.get_by_test_id("recipe-send-message")
+            entry.wait_for()
+            assert "3 steps" in entry.inner_text() and "A" in entry.inner_text()
+            page.get_by_test_id("app-name").fill("b.exe")
+            entry.click()
+            page.locator('.react-flow__node[data-id="n3"]').wait_for()
+            assert page.locator(".react-flow__node").count() == 3 and page.locator(".react-flow__edge").count() == 2
+            assert "Adapted from A" in page.get_by_test_id("node-n2").inner_text()  # compose was taught for b on its own
+            assert page.get_by_test_id("cannot-start").count() == 0 and not page.get_by_test_id("run").is_disabled()
+
+            page.get_by_test_id("app-name").fill("a.exe")  # the original app: nothing is adapted
+            assert "Adapted" not in page.get_by_test_id("node-n2").inner_text()
+            browser.close()
+    finally:
+        server.stop()
+
+
+def test_a_recipe_with_an_unfilled_hole_cannot_run_and_says_which(tmp_path):
+    from playwright.sync_api import sync_playwright
+
+    taught_recipe(tmp_path, second_has_compose=False)  # on b the compose control was never found: a hole stays open
+    server = serve(tmp_path, FakeDesktop(controls=[]))
+    try:
+        with sync_playwright() as playwright:
+            browser, page = open_page(playwright, server)
+            page.get_by_test_id("app-name").fill("b.exe")
+            page.get_by_test_id("recipe-send-message").click()
+            page.locator('.react-flow__node[data-id="n3"]').wait_for()
+            note = page.get_by_test_id("cannot-start")
+            note.wait_for()
+            assert "the hole 'compose' of the recipe 'send-message'" in note.inner_text()
+            assert "the hole 'send'" in note.inner_text()
+            assert "Hole not filled: compose" in page.get_by_test_id("node-n2").inner_text()
+            assert page.get_by_test_id("run").is_disabled()
+            browser.close()
+    finally:
+        server.stop()

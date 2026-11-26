@@ -41,16 +41,20 @@ export const appLabel = (app) => {
   return base.charAt(0).toUpperCase() + base.slice(1)
 }
 
+// 'Telegram', 'TELEGRAM.EXE' and 'telegram.exe' are one app
+export const appKey = (app) => String(app).toLowerCase().replace(/\.exe$/, '')
+
 const has = (text, query) => String(text).toLowerCase().includes(query)
 
 // What the panel shows for a search: system nodes by name, hint or group; steps by name, app or origin.
-export function searchCatalog(query, steps, systemNodes = SYSTEM_NODES) {
+export function searchCatalog(query, steps, systemNodes = SYSTEM_NODES, recipes = []) {
   const q = query.trim().toLowerCase()
   const system = systemNodes.filter((n) => !q || [n.title, n.hint, n.group].some((t) => has(t, q)))
   const apps = steps
     .filter((s) => !q || [s.name, s.app, appLabel(s.app), s.origin].some((t) => has(t, q)))
     .sort((a, b) => a.app.localeCompare(b.app) || a.name.localeCompare(b.name))
-  return { system, apps }
+  const found = recipes.filter((r) => !q || [r.name, ...r.holes.map((h) => h.hole), ...Object.keys(r.apps).map(appLabel)].some((t) => has(t, q)))
+  return { system, apps, recipes: found }
 }
 
 // Letter chip colours: white text on each is at least 4.5:1 (checked by the tests).
@@ -70,3 +74,14 @@ export const systemEntryFor = (node) => SYSTEM_NODES.find((s) => s.node.kind ===
 
 // What a node is called on screen.
 export const titleOf = (node) => (node.kind && node.kind !== 'step' ? systemEntryFor(node)?.title ?? node.kind : node.step)
+
+// A stored flow does not say which app it runs on: it is the app that has the most of its steps (the first on a tie).
+export function guessApp(stepNames, steps) {
+  const counts = new Map()
+  for (const name of stepNames) {
+    for (const step of steps) if (step.name === name) counts.set(step.app, (counts.get(step.app) ?? 0) + 1)
+  }
+  let best = null
+  for (const [app, count] of counts) if (best === null || count > counts.get(best)) best = app
+  return best
+}

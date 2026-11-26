@@ -114,3 +114,35 @@ def test_open_doubts_are_listed_by_flow_and_node_so_the_editor_can_count_them(tm
         server.stop()
 
     assert [(d["flow_id"], d["node_id"]) for d in doubts] == [("f", "b")]
+
+
+def test_the_recipes_are_listed_with_the_apps_they_were_taught_on_and_their_adapted_steps_say_so(tmp_path):
+    from workflow_factory.recipes import apply_recipe, save_recipe
+
+    holes = [{"hole": "open", "role": "button", "control_name": "Alpha"}, {"hole": "go", "role": "button", "control_name": "Beta"}]
+    save_recipe(tmp_path / "user.db", "launch", holes)
+    apply_recipe(tmp_path / "user.db", FakeDesktop(controls=[button("Alpha"), button("Beta")], app="a.exe"), "launch")
+    apply_recipe(tmp_path / "user.db", FakeDesktop(controls=[button("Alpha"), button("Gamma")], app="b.exe"), "launch",
+                 {"go": {"role": "button", "control_name": "Gamma"}})
+    server = ApiServer(tmp_path / "user.db", None, lambda app: None, token="secret-token")
+    server.start()
+    try:
+        (recipe,) = call(server, "/api/recipes")[1]
+        steps = {(s["app"], s["name"]): s for s in call(server, "/api/steps")[1]}
+    finally:
+        server.stop()
+
+    assert recipe["name"] == "launch" and recipe["origin"] == "a.exe" and set(recipe["apps"]) == {"a.exe", "b.exe"}
+    assert steps[("b.exe", "launch-go")]["adapted_from"] == "a.exe"
+    assert steps[("a.exe", "launch-go")]["adapted_from"] is None
+
+
+def test_a_flow_that_names_a_step_not_taught_for_the_app_is_refused_with_the_step_named(tmp_path):
+    server, desktop = make(tmp_path, [Node("a", "open-menu"), Node("b", "launch-go")])
+    try:
+        code, body, _ = call(server, "/api/flows/f/run", "POST", {"app": "paint.exe"})
+    finally:
+        server.stop()
+
+    assert code == 400 and "'launch-go'" in body["error"] and "not been taught" in body["error"]
+    assert desktop.clicks == []

@@ -150,3 +150,24 @@ def test_applying_an_unknown_recipe_or_filling_an_unknown_hole_is_refused(db):
         apply_recipe(db, telegram(), "ghost")
     with pytest.raises(ValueError, match="no hole"):
         apply_recipe(db, telegram(), "send-message", {"nowhere": {"role": "button", "control_name": "X"}})
+
+
+def test_the_first_app_a_recipe_is_taught_on_is_where_it_came_from(db):
+    from workflow_factory.recipes import adapted_from, recipes_overview
+    teach_telegram(db)
+    apply_recipe(db, whatsapp(), "send-message", {"compose": {"role": "button", "control_name": "Type a message"}})
+
+    (overview,) = recipes_overview(db)
+
+    assert overview["name"] == "send-message" and overview["origin"] == "telegram.exe"
+    assert overview["apps"]["telegram.exe"]["compose"] == "send-message-compose"
+    assert set(overview["apps"]) == {"telegram.exe", "whatsapp.exe"}
+    assert adapted_from(db, "whatsapp.exe", "send-message-compose") == "telegram.exe"
+    assert adapted_from(db, "telegram.exe", "send-message-compose") is None  # the original is not adapted from anything
+    assert adapted_from(db, "whatsapp.exe", "unrelated-step") is None
+
+
+def test_a_recipe_never_applied_has_no_origin_and_no_apps_yet(db):
+    from workflow_factory.recipes import recipes_overview
+
+    assert recipes_overview(db) == [{**list_recipes(db)[0], "origin": None, "apps": {}}]

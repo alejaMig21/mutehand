@@ -26,6 +26,8 @@ export function marksFor(node, meta, runStatus, doubts) {
   const marks = []
   if (RUN_MARKS[runStatus]) marks.push(RUN_MARKS[runStatus])
   if (!node.kind || node.kind === 'step') {
+    if (meta?.missing) marks.push(['alert', meta.hole ? `Hole not filled: ${meta.hole.hole}` : 'Not taught for this app', 'bad'])
+    if (meta?.adapted_from) marks.push(['arrow', `Adapted from ${appLabel(meta.adapted_from)}`, 'info'])
     if (TRUST_MARKS[meta?.state]) marks.push(TRUST_MARKS[meta.state])
     if (meta?.consent === 'given') marks.push(['lock', 'Consent given', 'muted'])
     if (meta?.consent === 'missing') marks.push(['lock', 'Needs consent', 'warn'])

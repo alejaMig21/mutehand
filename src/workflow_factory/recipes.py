@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS recipe_bindings (  -- which step fills which hole, pe
     recipe TEXT NOT NULL, app TEXT NOT NULL, hole TEXT NOT NULL, step TEXT NOT NULL,
     PRIMARY KEY (recipe, app, hole)
 );
+CREATE TABLE IF NOT EXISTS recipe_origin (recipe TEXT PRIMARY KEY, app TEXT NOT NULL);  -- the first app it was applied to
 """
 
 # what teach_step reports -> the fixed doubt vocabulary
@@ -87,6 +88,30 @@ def _bind(user_db: Path, recipe: str, app: str, hole: str, step: str) -> None:
         db.execute("INSERT OR REPLACE INTO recipe_bindings VALUES (?, ?, ?, ?)", (recipe, app, hole, step))
 
 
+def recipes_overview(user_db: Path) -> list[dict]:
+    """Each recipe with where it came from and, per app, the step that fills each hole: what the editor expands."""
+    with closing(_connect(user_db)) as db:
+        origins = dict(db.execute("SELECT recipe, app FROM recipe_origin"))
+        rows = db.execute("SELECT recipe, app, hole, step FROM recipe_bindings ORDER BY rowid").fetchall()
+    result = []
+    for recipe in list_recipes(user_db):
+        apps: dict[str, dict] = {}
+        for name, app, hole, step in rows:
+            if name == recipe["name"]:
+                apps.setdefault(app, {})[hole] = step
+        result.append({**recipe, "origin": origins.get(recipe["name"]), "apps": apps})
+    return result
+
+
+def adapted_from(user_db: Path, app: str, step_name: str) -> str | None:
+    """The app a step was adapted from: set when it fills a recipe's hole on an app other than the recipe's first."""
+    with closing(_connect(user_db)) as db:
+        row = db.execute(
+            "SELECT o.app FROM recipe_bindings b JOIN recipe_origin o ON o.recipe = b.recipe"
+            " WHERE b.app = ? AND b.step = ? AND o.app != b.app LIMIT 1", (app, step_name)).fetchone()
+    return row[0] if row else None
+
+
 def mark_step_known(user_db: Path, app: str, recipe: str, hole: str, step: str) -> None:
     """The app already has a step for this hole: bind it without acting on the app."""
     if hole not in {h["hole"] for h in _recipe(user_db, recipe)["holes"]}:
@@ -107,6 +132,8 @@ def apply_recipe(user_db: Path, desktop: Desktop, recipe_name: str, fills: dict 
     if unknown:
         raise ValueError(f"recipe {recipe_name!r} has no hole {sorted(unknown)[0]!r}")
     app = desktop.app_key().process
+    with closing(_connect(user_db)) as db, db:
+        db.execute("INSERT OR IGNORE INTO recipe_origin VALUES (?, ?)", (recipe_name, app))
     bound = recipe_bindings(user_db, recipe_name, app)
     results: list[dict] = []
     for hole in recipe["holes"]:

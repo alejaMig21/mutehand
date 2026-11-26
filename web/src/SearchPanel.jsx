@@ -6,10 +6,10 @@ const SYSTEM_PREVIEW = 4 // like n8n: a few first, the rest on request or by sea
 
 // The floating card on the right of the canvas: search, then system nodes and the steps already taught.
 // It only adds what exists. Nothing in it starts a lesson: lessons happen in an agent chat.
-export default function SearchPanel({ steps, onAddSystem, onAddStep, onClose }) {
+export default function SearchPanel({ steps, recipes, onAddSystem, onAddStep, onAddRecipe, onClose }) {
   const [query, setQuery] = useState('')
   const [all, setAll] = useState(false)
-  const { system, apps } = useMemo(() => searchCatalog(query, steps), [query, steps])
+  const { system, apps, recipes: foundRecipes } = useMemo(() => searchCatalog(query, steps, undefined, recipes), [query, steps, recipes])
   const shown = query || all ? system : system.slice(0, SYSTEM_PREVIEW)
   const rest = system.length - shown.length
 
@@ -54,7 +54,21 @@ export default function SearchPanel({ steps, onAddSystem, onAddStep, onClose }) 
             )
           })}
         </section>
-        {query && system.length === 0 && apps.length === 0 && <p className="empty" role="status">Nothing matches “{query}”.</p>}
+        {foundRecipes.length > 0 && (
+          <section aria-label="Recipes">
+            <h2>Recipes <span>{foundRecipes.length}</span></h2>
+            {foundRecipes.map((recipe) => (
+              <button key={recipe.name} className="entry" data-testid={`recipe-${recipe.name}`} onClick={() => onAddRecipe(recipe)}>
+                <span className="chip system" aria-hidden="true"><Icon name="layers" /></span>
+                <span className="entry-text">
+                  <b>{recipe.name}</b>
+                  <small>{recipe.holes.length} steps · {Object.keys(recipe.apps).map(appLabel).join(', ') || 'not applied yet'}</small>
+                </span>
+              </button>
+            ))}
+          </section>
+        )}
+        {query && system.length === 0 && apps.length === 0 && foundRecipes.length === 0 && <p className="empty" role="status">Nothing matches “{query}”.</p>}
       </div>
     </aside>
   )

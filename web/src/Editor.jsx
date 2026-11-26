@@ -4,7 +4,7 @@ import { api } from './api.js'
 import { fromFlowJson, layout, nextNodeId, toFlowJson } from './flowjson.js'
 import { Icon } from './icons.jsx'
 import { refOptions } from './bindings.js'
-import { titleOf } from './catalog.js'
+import { appKey, guessApp, titleOf } from './catalog.js'
 import NodeCard from './NodeCard.jsx'
 import NodeDetail from './NodeDetail.jsx'
 import RunLog from './RunLog.jsx'
@@ -13,7 +13,7 @@ import { safetySummary, summaryMarks, whyNotRunnable } from './safety.js'
 
 const NODE_TYPES = { card: NodeCard }
 const metaOf = (step) => ({ app: step.app, sensitive: step.sensitive, origin: step.origin, action: step.action,
-  state: step.state, private: step.private, consent: step.consent })
+  state: step.state, private: step.private, consent: step.consent, adapted_from: step.adapted_from })
 // the search panel floats over the right edge, so the nodes are fitted into what is left
 const FIT = { maxZoom: 1, padding: { top: '60px', left: '60px', bottom: '60px', right: '440px' } }
 
@@ -24,6 +24,7 @@ export default function Editor() {
 function EditorScreen() {
   const { fitView } = useReactFlow()
   const [steps, setSteps] = useState([])
+  const [recipes, setRecipes] = useState([])
   const [flows, setFlows] = useState([])
   const [flowId, setFlowId] = useState('my-flow')
   const [appName, setAppName] = useState('mspaint.exe')
@@ -51,6 +52,7 @@ function EditorScreen() {
 
   useEffect(() => {
     api('/api/steps').then(setSteps).catch((e) => setError(e.message))
+    api('/api/recipes').then(setRecipes).catch((e) => setError(e.message))
     refreshFlows()
   }, [refreshFlows])
 
@@ -79,19 +81,44 @@ function EditorScreen() {
   const onConnect = useCallback((connection) => setEdges((current) => addEdge(connection, current)), [setEdges])
 
   // Like n8n: a node added while another is selected goes to its right and is wired after it.
-  const addNode = (node, meta = {}) => {
+  const addNode = (node, extra = {}) => {
     const id = nextNodeId(nodes)
     const after = nodes.find((n) => n.id === selectedId)
     const position = after ? { x: after.position.x + 250, y: after.position.y } : layout(nodes.length)
     setNodes((current) => [...current, {
-      id, type: 'card', position, data: { node: { ...node, id, inputs: [], exclusive_input: false }, meta },
+      id, type: 'card', position, data: { node: { ...node, id, inputs: [], exclusive_input: false }, ...extra },
     }])
     if (after) setEdges((current) => addEdge({ source: after.id, target: id }, current))
     setSelectedId(null)
     setTimeout(() => fitView({ ...FIT, duration: 200 }), 60) // once the new node is on the canvas
   }
 
-  const addStep = (step) => addNode({ step: step.name }, metaOf(step))
+  const addStep = (step) => {
+    if (nodes.length === 0) setAppName(step.app) // a flow runs on one app: the first step says which
+    addNode({ step: step.name })
+  }
+
+  // Drop a recipe: one connected node per hole, each on the step that fills the hole for the app to run on.
+  // A hole nobody filled for this app gets the name its step will have, and the node says it is not filled.
+  const addRecipe = (recipe) => {
+    const bound = Object.entries(recipe.apps).find(([app]) => appKey(app) === appKey(appName))?.[1] ?? {}
+    const after = nodes.find((n) => n.id === selectedId)
+    const start = after ? { x: after.position.x + 250, y: after.position.y } : layout(nodes.length)
+    let list = [...nodes]
+    const added = recipe.holes.map((hole, i) => {
+      const id = nextNodeId(list)
+      const node = { id, step: bound[hole.hole] ?? `${recipe.name}-${hole.hole}`, inputs: [], exclusive_input: false }
+      const card = { id, type: 'card', position: { x: start.x + i * 250, y: start.y }, data: { node, hole: { recipe: recipe.name, hole: hole.hole } } }
+      list = [...list, card]
+      return card
+    })
+    setNodes(list)
+    const chain = added.slice(1).map((n, i) => ({ id: `${added[i].id}-${n.id}`, source: added[i].id, target: n.id }))
+    const joinIn = after ? [{ id: `${after.id}-${added[0].id}`, source: after.id, target: added[0].id }] : []
+    setEdges((current) => [...current, ...joinIn, ...chain])
+    setSelectedId(null)
+    setTimeout(() => fitView({ ...FIT, duration: 200 }), 60)
+  }
   const addSystem = (entry) => addNode(structuredClone(entry.node))
 
   function updateSelected(patch) {
@@ -105,18 +132,15 @@ function EditorScreen() {
     setSelectedId(null)
   }
 
-  const lookup = (name) => {
-    const step = steps.find((s) => s.name === name)
-    return step ? metaOf(step) : {}
-  }
-
   async function openFlow(id) {
     setError('')
     try {
-      const loaded = fromFlowJson(await api(`/api/flows/${id}`), lookup)
+      const loaded = fromFlowJson(await api(`/api/flows/${id}`))
       setNodes(loaded.nodes)
       setEdges(loaded.edges)
       setFlowId(id)
+      const app = guessApp(loaded.nodes.map((n) => n.data.node.step).filter(Boolean), steps)
+      if (app && !loaded.nodes.some((n) => steps.some((s) => s.name === n.data.node.step && appKey(s.app) === appKey(appName)))) setAppName(app)
       setSelectedId(null)
       setStatuses({})
       setStatus('saved') // what is stored is what is shown
@@ -202,7 +226,16 @@ function EditorScreen() {
     }
   }
 
-  const selected = nodes.find((n) => n.id === selectedId)
+  // What is known about each step, for the app the flow runs on: how far it is trusted, where it was adapted from, or
+  // that nobody taught it for this app (a recipe hole left open).
+  const viewNodes = useMemo(() => nodes.map((n) => {
+    const node = n.data.node
+    if (node.kind && node.kind !== 'step') return n
+    const step = steps.find((s) => s.name === node.step && appKey(s.app) === appKey(appName))
+    return { ...n, data: { ...n.data, meta: step ? { ...metaOf(step), hole: n.data.hole } : { missing: true, hole: n.data.hole } } }
+  }), [nodes, steps, appName])
+
+  const selected = viewNodes.find((n) => n.id === selectedId)
   const selectedNode = selected?.data.node
   const runKeys = useMemo(() => {
     try { return Object.keys(JSON.parse(context || '{}')) } catch { return [] }
@@ -214,13 +247,13 @@ function EditorScreen() {
     refreshFlows()
   }
   const shownNodes = useMemo(
-    () => nodes.map((n) => ({
+    () => viewNodes.map((n) => ({
       ...n, className: `status-${statuses[n.id] ?? 'pending'}`,
       data: { ...n.data, runStatus: statuses[n.id], doubts: doubts[n.id] ?? 0 },
     })),
-    [nodes, statuses, doubts],
+    [viewNodes, statuses, doubts],
   )
-  const safety = useMemo(() => safetySummary(nodes, doubts), [nodes, doubts])
+  const safety = useMemo(() => safetySummary(viewNodes, doubts), [viewNodes, doubts])
   const paused = Object.values(statuses).includes('paused')
 
   return (
@@ -280,13 +313,13 @@ function EditorScreen() {
         {running ? (
           <button className="danger" data-testid="stop" onClick={stop}><Icon name="stop" size={16} /> Stop</button>
         ) : (
-          <button className="primary" data-testid="run" onClick={run} disabled={Boolean(whyNotRunnable(safety))}
-            title={whyNotRunnable(safety)}>
+          <button className="primary" data-testid="run" onClick={run} disabled={Boolean(whyNotRunnable(safety, appName))}
+            title={whyNotRunnable(safety, appName)}>
             <Icon name="play" size={16} /> Run flow
           </button>
         )}
       </header>
-      {whyNotRunnable(safety) && <div className="notice" data-testid="cannot-start" role="status">{whyNotRunnable(safety)}</div>}
+      {whyNotRunnable(safety, appName) && <div className="notice" data-testid="cannot-start" role="status">{whyNotRunnable(safety, appName)}</div>}
       {paused && (
         <div className="notice" data-testid="paused" role="status">
           <Icon name="pause" size={15} /> Paused: you moved the mouse. It resumes when you stop using the PC.
@@ -337,7 +370,7 @@ function EditorScreen() {
             key={selected.id}
             node={selectedNode}
             meta={selected.data.meta}
-            refs={refOptions(nodes, selected.id, runKeys, (n) => titleOf(n.data.node))}
+            refs={refOptions(viewNodes, selected.id, runKeys, (n) => titleOf(n.data.node))}
             data={nodeData[selected.id]}
             showValues={showValues}
             onShowValues={toggleValues}
@@ -353,14 +386,14 @@ function EditorScreen() {
         )}
 
         {panelOpen
-          ? <SearchPanel steps={steps} onAddSystem={addSystem} onAddStep={addStep} onClose={() => setPanelOpen(false)} />
+          ? <SearchPanel steps={steps} recipes={recipes} onAddSystem={addSystem} onAddStep={addStep} onAddRecipe={addRecipe} onClose={() => setPanelOpen(false)} />
           : (
             <button className="open-panel" data-testid="open-panel" aria-label="Add a node" onClick={() => setPanelOpen(true)}>
               <Icon name="plus" size={20} />
             </button>
           )}
       </div>
-      {logOpen && <RunLog log={runLog} nodes={nodes} running={running} onClose={() => setLogOpen(false)} />}
+      {logOpen && <RunLog log={runLog} nodes={viewNodes} running={running} onClose={() => setLogOpen(false)} />}
     </div>
   )
 }

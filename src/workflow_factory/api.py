@@ -25,6 +25,7 @@ from workflow_factory.flows import flow_from_dict, flow_to_dict, list_flows, loa
 from workflow_factory.knowledge import duplicate_flow
 from workflow_factory.nodedata import present, single_node_flow, snapshot
 from workflow_factory.queue import answer_doubt, dismiss_doubt, list_doubts, list_runs
+from workflow_factory.recipes import adapted_from, recipes_overview
 from workflow_factory.steps import (
     find_step,
     list_steps,
@@ -91,9 +92,17 @@ class ApiServer:
         if flow is None:
             return 404, None
         try:
-            refused = rejected_steps(flow, self.desktop_for(app), self.user_db, self.factory_db)
+            desktop = self.desktop_for(app)
+            refused = rejected_steps(flow, desktop, self.user_db, self.factory_db)
+            process = desktop.app_key().process
+            untaught = [n.step for n in flow.nodes if n.kind in ("step", "loop")
+                        and find_step(self.user_db, self.factory_db, process, n.step) is None]
         except DesktopError:
-            refused = ()  # the app is not there: the run itself will say so
+            refused, untaught = (), []  # the app is not there: the run itself will say so
+        if untaught:  # a recipe's hole nobody filled is just a step that was never taught
+            names = ", ".join(f"'{step}'" for step in untaught)
+            raise ValueError(f"This flow will not start: {names} {'has' if len(untaught) == 1 else 'have'} not been taught "
+                             "for this app yet. An agent teaches it in a chat.")
         if refused:  # a rejected step is never run: name them all before anything starts
             names = ", ".join(f"'{step}'" for _, step in refused)
             raise ValueError(f"This flow will not start: {names} {'is' if len(refused) == 1 else 'are'} rejected. "
@@ -217,6 +226,8 @@ class ApiServer:
                 if method == "GET" and path == "/api/steps":
                     return self._send(200, [{**_step_view(step), **_safety(api.user_db, step)} for step in
                                             list_steps(api.user_db, api.factory_db)])
+                if method == "GET" and path == "/api/recipes":
+                    return self._send(200, recipes_overview(api.user_db))
                 if method == "GET" and path == "/api/flows":
                     return self._send(200, list_flows(api.user_db, api.factory_db))
                 flow_match = re.fullmatch(r"/api/flows/([\w.-]+)", path)
@@ -329,6 +340,7 @@ def _safety(user_db: Path, step) -> dict:
     """What the editor marks on a step: how far it is trusted, whether its app is private, whether consent is given."""
     sensitive = effective_sensitivity(step) is not None
     return {"state": step_report(user_db, step)["state"], "private": _is_private(user_db, step.app),
+            "adapted_from": adapted_from(user_db, step.app, step.name),
             "consent": ("given" if is_permitted(user_db, step) else "missing") if sensitive else "none"}
 
 

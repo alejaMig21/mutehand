@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { appLabel, CHIP_COLOURS, chipFor, searchCatalog, SYSTEM_NODES } from './catalog.js'
+import { appLabel, CHIP_COLOURS, chipFor, guessApp, searchCatalog, SYSTEM_NODES } from './catalog.js'
 
 const steps = [
   { app: 'telegram.exe', name: 'Send', origin: 'local' },
@@ -20,7 +20,7 @@ test('a search finds system nodes by name and steps by name and by app', () => {
   assert.deepEqual(searchCatalog('telegram', steps).apps.map((s) => s.name), ['Send', 'Write message'])
   assert.deepEqual(searchCatalog('READ', steps).apps.map((s) => s.name), ['Read page'])
   assert.equal(searchCatalog('READ', steps).system.some((n) => n.title === 'Read a field'), true)
-  assert.deepEqual(searchCatalog('zzz', steps), { system: [], apps: [] })
+  assert.deepEqual(searchCatalog('zzz', steps), { system: [], apps: [], recipes: [] })
 })
 
 test('every system node can be stored as it is: a kind, and its operation when it is a data node', () => {
@@ -49,4 +49,13 @@ test('app names read like names and every chip has readable text', () => {
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
   }
   for (const colour of CHIP_COLOURS) assert.ok(1.05 / (luminance(colour) + 0.05) >= 4.5, colour)
+})
+
+test('a flow runs on the app that has most of its steps', () => {
+  const all = [{ app: 'telegram.exe', name: 'Send' }, { app: 'telegram.exe', name: 'Write' }, { app: 'whatsapp.exe', name: 'Write' }]
+
+  assert.equal(guessApp(['Send', 'Write'], all), 'telegram.exe')
+  assert.equal(guessApp(['Write'], all), 'telegram.exe') // a tie: the first
+  assert.equal(guessApp(['Nothing'], all), null)
+  assert.equal(guessApp([], all), null)
 })
