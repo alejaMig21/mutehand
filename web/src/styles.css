@@ -247,9 +247,10 @@ input[type="number"] { width: 70px; }
 .run-log li { padding: 5px 0; border-bottom: 1px solid var(--line); }
 .run-log time { color: var(--muted); margin-right: 6px; }
 .muted { color: var(--muted); }
-.status-running .card-mark.tone-info svg { animation: spin 1s linear infinite; }
+.status-running .card-mark.tone-info svg, .chore-line.tone-info svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .status-running .card-mark.tone-info svg { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .status-running .card-mark.tone-info svg, .chore-line.tone-info svg { animation: none; } }
+@media (max-width: 560px) { .home .chore-run { flex: 1 1 100%; } }
 
 /* the schedules screen */
 .schedule-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }

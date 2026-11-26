@@ -33,6 +33,7 @@ export function useRuns() {
         await sleep(250)
       } catch (e) {
         if (e.status) { // the server answered: it does not know this run any more
+          setOffline(false)
           patch(name, { status: 'error', error: e.message })
           break
         }

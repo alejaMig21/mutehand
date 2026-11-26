@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
 import { appLabel, chipFor } from './catalog.js'
 import { Icon } from './icons.jsx'
@@ -10,7 +10,7 @@ import { blockedWords, flowTitle, lastRunWords, runNoteWords } from './words.js'
 // flow screen, `onNew` an empty one; `left` holds the flow the person has just come back from, if any.
 export default function Home({ following, left, onOpen, onNew }) {
   const { offline, attach, settled } = following
-  const load = useLoad('/api/flow-summaries')
+  const load = useLoad('/api/flow-overview', { keep: true })
   const { reload } = load
   const flows = load.data
 
@@ -34,7 +34,7 @@ export default function Home({ following, left, onOpen, onNew }) {
     <div className="home">
       <Screen title="Your chores" load={load} isEmpty={flows.length === 0} emptyId="no-chores"
         empty="No chores yet. Press “New chore” to make your first one."
-        above={offline && <p className="home-notice" role="status">{UNREACHABLE} Trying again…</p>}
+        above={offline && <p role="status">{UNREACHABLE} Trying again…</p>}
         tools={<button data-testid="new-chore" onClick={onNew}><Icon name="plus" size={20} /> New chore</button>}>
         <ul className="chores">
           {flows.map((flow) => (
@@ -53,7 +53,6 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
   const running = run?.status === 'running'
   const [starting, setStarting] = useState(false)
   const [problem, setProblem] = useState('')
-  const asked = useRef(false) // two presses ask the server once
   useEffect(() => { if (running) setProblem('') }, [running]) // it runs after all: what went wrong asking no longer matters
 
   const appName = app ? appLabel(app) : 'No app chosen'
@@ -76,9 +75,7 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
         await api(`/api/runs/${run.runId}/stop`, { method: 'POST' })
         return
       }
-      if (asked.current) return
-      asked.current = true
-      setStarting(true)
+      setStarting(true) // drawn before a second press arrives, so the server is asked once
       forget(id)
       const { run_id } = await api(`/api/flows/${encode(id)}/run`, { method: 'POST', body: { app, context: {} } })
       follow(id, run_id)
@@ -88,7 +85,6 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
       // the answer may be all that was lost, or it runs already: show it, with its Stop button, or what is true by now
       attach().then(reload)
     } finally {
-      asked.current = false
       setStarting(false)
     }
   }

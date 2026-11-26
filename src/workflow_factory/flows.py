@@ -214,18 +214,20 @@ def _why_not(flow: Flow, app: str, learned: dict, seen: dict, waiting: bool) -> 
     known = {name: learned[app, name] for name in used if (app, name) in learned}
     # A step taught again since the last run is newer than what was seen: only the mark a run left on it, or (for factory
     # knowledge, which holds no mark) an older version, means it has to be learned again.
+    missing = [name for name in used if name not in known]
+    rejected = [name for name, (_, state) in known.items() if state == Status.REJECTED]
     stale = [name for name, (step, state) in known.items() if state == Status.TO_REVALIDATE and (
         step.status == Status.TO_REVALIDATE or (step.origin == Origin.FACTORY and _older(step.version, seen[app])))]
-    found = (
+    reasons = (  # (code, whether it holds, the steps it is about)
         ("empty", not flow.nodes, []),
         ("expression", any(expressions(node.fields) for node in flow.nodes), []),
-        ("not_learned", len(known) < len(used), [name for name in used if name not in known]),
-        ("rejected", None, [name for name, (_, state) in known.items() if state == Status.REJECTED]),
-        ("to_revalidate", None, stale),
+        ("not_learned", missing, missing),
+        ("rejected", rejected, rejected),
+        ("to_revalidate", stale, stale),
         ("no_app", not app, []),
         ("question", waiting, []),
     )
-    return next(({"why": why, "steps": names} for why, true, names in found if (names if true is None else true)), None)
+    return next(({"why": why, "steps": names} for why, holds, names in reasons if holds), None)
 
 
 def flow_overview(user_db: Path, factory_db: Path | None) -> list[dict]:

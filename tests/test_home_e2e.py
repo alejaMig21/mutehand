@@ -3,6 +3,7 @@
 import json
 import re
 import sqlite3
+import time
 from contextlib import closing, contextmanager
 
 import pytest
@@ -156,7 +157,7 @@ def test_a_run_that_waits_for_the_person_says_why(tmp_path):
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
     desktop.click_seconds = 0.5
     desktop.on_action = [desktop.user_acts]
-    desktop.on_sleep = [lambda: __import__("time").sleep(0.3)]  # the fake clock's wait takes real time, so it is seen
+    desktop.on_sleep = [lambda: time.sleep(0.3)]  # the fake clock's wait takes real time, so it is seen
     with home(tmp_path, desktop) as (page, _):
         run_button(page, "morning").click()
         says(page, "morning", "Paused: you moved the mouse")
@@ -263,7 +264,8 @@ def test_a_chore_that_cannot_run_says_so_on_its_button_and_why(tmp_path, trouble
         button_.click(force=True)
         page.wait_for_timeout(300)
         assert pressed == [] and desktop.clicks == []
-        assert run_button(page, "morning").is_enabled() or trouble in (rejected, app_updated)  # one chore's trouble is its own
+        # one chore's trouble is its own, unless it is about an action the other chore uses too
+        assert run_button(page, "morning").is_disabled() == (trouble in (rejected, app_updated))
 
 
 def test_a_run_that_stops_leaves_the_chore_waiting_and_saying_why(tmp_path):
@@ -480,7 +482,8 @@ def test_a_run_started_on_the_flow_screen_or_in_another_window_shows_on_home(tmp
         says(page, "weekly", "Worked")
 
 
-def test_home_says_when_it_cannot_reach_the_program_and_goes_on_following(tmp_path):
+@pytest.mark.parametrize("answer", ["the run goes on", "the run is not known any more"])
+def test_home_says_when_it_cannot_reach_the_program_until_it_answers(tmp_path, answer):
     chores(tmp_path)
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
     desktop.click_seconds = 1.0
@@ -488,10 +491,44 @@ def test_home_says_when_it_cannot_reach_the_program_and_goes_on_following(tmp_pa
         questions = re.compile(r"/api/runs/\w+$")
         page.route(questions, lambda asked: asked.abort())
         run_button(page, "morning").click()
-        page.get_by_role("status").filter(has_text="Cannot reach Workflow Factory").wait_for()
+        unreachable = page.get_by_role("status").filter(has_text="Cannot reach Workflow Factory")
+        unreachable.wait_for()
         page.unroute(questions)
+        if answer == "the run goes on":
+            says(page, "morning", "Worked")
+        else:
+            page.route(questions, lambda asked: asked.fulfill(status=404, content_type="application/json", body='{"error": "no such run"}'))
+            says(page, "morning", r"The run was lost \(no such run\)")
+        unreachable.wait_for(state="detached")
+
+
+def test_a_lost_reading_of_the_list_takes_neither_the_chores_nor_stop_away(tmp_path):
+    chores(tmp_path)
+    desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
+    desktop.click_seconds = 1.5
+    with home(tmp_path, desktop) as (page, _):
+        run_button(page, "morning").click()
+        run_button(page, "morning").filter(has_text="Stop").wait_for()
+        lost = []
+        page.route("**/api/flow-overview", lambda asked: (lost.append(1), asked.abort()))
+        page.evaluate("() => window.dispatchEvent(new Event('focus'))")
+        page.wait_for_timeout(300)
+        assert lost and run_button(page, "morning").inner_text().strip() == "Stop"
+        page.unroute("**/api/flow-overview")
         says(page, "morning", "Worked")
-        assert page.get_by_role("status").filter(has_text="Cannot reach").count() == 0
+
+
+def test_a_list_that_never_arrived_says_so_and_can_be_asked_again(tmp_path):
+    chores(tmp_path)
+    with home(tmp_path) as (page, _):
+        at_home(page)
+        page.route("**/api/flow-overview", lambda asked: asked.abort())
+        page.reload()
+        page.get_by_test_id("load-error").wait_for()
+        assert page.get_by_test_id("no-chores").count() == 0
+        page.unroute("**/api/flow-overview")
+        page.get_by_test_id("retry").click()
+        says(page, "morning", "Never run")
 
 
 def test_no_screen_content_of_a_private_app_reaches_home(tmp_path):
@@ -506,7 +543,9 @@ def test_no_screen_content_of_a_private_app_reaches_home(tmp_path):
         run_button(page, "greet").click()
         says(page, "greet", "left a question")
         page.wait_for_timeout(300)
-        shown = page.content() + "".join(r.text() for r in said if "/api/flow-summaries" in r.url or "/api/runs" in r.url)
+        sent = [r.text() for r in said if "/api/flow-overview" in r.url or "/api/runs" in r.url]
+        assert any("greet" in text for text in sent)
+        shown = page.content() + "".join(sent)
         assert "Ana Ruiz" not in shown and "4471" not in shown
 
 

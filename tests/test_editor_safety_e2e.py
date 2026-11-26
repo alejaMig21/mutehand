@@ -24,7 +24,7 @@ from fake_desktop import FakeDesktop, button, step
 
 pytestmark = pytest.mark.web
 
-SCREENS = ("library", "queue", "history", "schedules", "consents", "checks", "editor")
+SCREENS = ("library", "queue", "history", "schedules", "consents", "checks", "editor", "home")
 
 
 @pytest.fixture(autouse=True)
