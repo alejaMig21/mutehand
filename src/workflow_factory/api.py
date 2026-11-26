@@ -512,12 +512,14 @@ def _finite(text: str) -> float:
 
 
 def _safety(user_db: Path, steps: list) -> list[dict]:
-    """What the editor marks on each step: how far it is trusted, whether its app is private, whether consent is given."""
+    """What the editor says about each step: whether it may run, how often it has worked (counted only where an effect was
+    taught to compare with), whether its app is private, whether consent is given."""
     private, adapted, granted = private_apps(user_db), adaptations(user_db), consents(user_db)
     marks = []
     for step, report in zip(steps, step_reports(user_db, steps), strict=True):
         sensitive = effective_sensitivity(step) is not None
         marks.append({"state": report["state"], "private": is_private(user_db, step.app, private),
+                      "successes": report["successes"], "failures": report["failures"], "counted": bool(step.effect),
                       "adapted_from": adapted.get((step.app, step.name)),
                       "consent": ("given" if covers(granted, step) else "missing") if sensitive else "none"})
     return marks
