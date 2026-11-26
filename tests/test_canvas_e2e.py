@@ -494,6 +494,25 @@ def test_every_box_stays_in_sight_while_the_flow_runs_and_where_it_stopped(tmp_p
             assert box["y"] + box["height"] <= canvas["y"] + canvas["height"], "no box is under the run log"
 
 
+def test_a_run_that_ends_while_another_screen_is_open_leaves_every_box_in_sight(tmp_path):
+    three_in_a_row(tmp_path)
+    desktop = FakeDesktop(controls=[button("Alpha"), button("Beta"), button("Gamma")])
+    desktop.click_seconds = 0.5
+    with editor(tmp_path, desktop) as page:
+        open_flow(page, "row", "c")
+        page.get_by_test_id("run").click()
+        page.get_by_test_id("tab-library").click()
+        page.wait_for_timeout(2_500)  # the run ends while the canvas is not on screen
+        page.get_by_test_id("tab-editor").click()
+        page.get_by_test_id("run-status").filter(has_text="Finished").wait_for()
+        page.wait_for_timeout(800)
+
+        canvas = page.get_by_role("region", name="Boxes of this chore").bounding_box()
+        for box in (n.bounding_box() for n in page.locator(".react-flow__node").all()):
+            assert box["width"] > 150 and canvas["x"] <= box["x"] and box["x"] + box["width"] <= canvas["x"] + canvas["width"]
+            assert canvas["y"] <= box["y"] and box["y"] + box["height"] <= canvas["y"] + canvas["height"]
+
+
 def test_in_a_narrow_window_what_can_be_done_with_the_chosen_box_covers_no_box(tmp_path):
     three_in_a_row(tmp_path)
     with editor(tmp_path, size=(390, 740)) as page:

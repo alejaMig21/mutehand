@@ -387,7 +387,8 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   const status = running ? 'running' : dirty ? 'unsaved' : lastRun ?? (isStored ? 'saved' : 'draft')
   const statusWords = { unsaved: 'Unsaved changes', saved: 'Saved', draft: 'Draft' }[status] ?? runWords(status)
   // a run puts a notice over the canvas and a log under it: the whole flow comes back into sight as it goes and ends
-  useEffect(() => { if (shownRun) refit() }, [shownRun?.runId, shownRun?.status]) // eslint-disable-line react-hooks/exhaustive-deps
+  // (a canvas that is not on screen has no size to fit into: that waits until it is shown again)
+  useEffect(() => { if (active && shownRun) refit() }, [active, shownRun?.runId, shownRun?.status]) // eslint-disable-line react-hooks/exhaustive-deps
   const flowDoubts = useMemo(() => doubts.filter((d) => isStored && d.flow_id === flowId), [doubts, flowId, isStored])
   const doubtCounts = useMemo(() => {
     const counts = {}

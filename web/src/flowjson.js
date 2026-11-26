@@ -73,10 +73,11 @@ export function withBranch(nodes, edges, connection) {
   return kind === 'if' ? null : marked(edge, 'next')
 }
 
-// Nodes with no wire at all, when there is more than one node: they would all run at the same time.
+// Nodes with no wire at all, when there is more than one node and something to run: they would all run at the same time.
 export function looseNodes(nodes, edges) {
   const wired = new Set(edges.flatMap((e) => [e.source, e.target]))
-  return nodes.length > 1 ? nodes.filter((n) => !wired.has(n.id)) : []
+  const some = nodes.length > 1 && nodes.some((n) => kindOf(n) !== 'trigger') // start boxes alone have nothing to join
+  return some ? nodes.filter((n) => !wired.has(n.id)) : []
 }
 
 // Wire each loose node after the nearest one added before it that can take a wire. A start box counts as added first:

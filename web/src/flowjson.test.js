@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { autoLayout, boxNumbers, chainLoose, fromFlowJson, joinBoxes, nextNodeId, toFlowJson, withBranch } from './flowjson.js'
+import { autoLayout, boxNumbers, chainLoose, fromFlowJson, joinBoxes, looseNodes, nextNodeId, toFlowJson, withBranch } from './flowjson.js'
 
 test('a flow survives the trip from API JSON to the canvas and back', () => {
   const flow = {
@@ -207,6 +207,11 @@ test('the first box after two start boxes is led to by both, so nothing is left 
   const canvas = built(['manual', 'trigger'], ['daily', 'trigger'], ['a'])
 
   assert.deepEqual(joined(canvas), [['daily', 'a', null], ['manual', 'a', null]])
+})
+
+test('start boxes with nothing to lead to are not called unconnected', () => {
+  assert.deepEqual(looseNodes([bare('t', 'trigger'), bare('u', 'trigger')], []), [])
+  assert.deepEqual(looseNodes([bare('t', 'trigger'), bare('a')], []).map((n) => n.id), ['t', 'a'])
 })
 
 test('connecting in order leads from a loose start box, never into it', () => {
