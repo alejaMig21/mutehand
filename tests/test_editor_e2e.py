@@ -467,8 +467,10 @@ def test_a_field_is_edited_as_a_fixed_value_or_as_a_reference_and_the_node_is_te
         detail.get_by_test_id("mode-b").select_option("value")
         detail.get_by_test_id("value-b").fill("5")
 
-        detail.get_by_test_id("test-node").click()  # a data node touches no control: no warning first
-        detail.get_by_test_id("test-result").filter(has_text="Test finished").wait_for(timeout=10_000)
+        detail.get_by_test_id("close-detail").click()
+        page.get_by_test_id("test-node").click()  # a data node touches no control: no warning first
+        page.get_by_test_id("test-result").filter(has_text="Test finished").wait_for(timeout=10_000)
+        page.get_by_test_id("open-detail").click()
         detail.get_by_test_id("show-values").check()
         detail.get_by_text("15").first.wait_for()
 
@@ -490,15 +492,14 @@ def test_testing_a_step_warns_about_the_mouse_and_keyboard_first_then_runs_only_
         browser, page = open_page(playwright, server)
         open_seeded_flow(page)
         page.get_by_test_id("app-name").select_option("paint.exe")
-        page.locator('.react-flow__node[data-id="p"]').dblclick()
-        detail = page.get_by_test_id("detail")
-        detail.get_by_test_id("test-node").click()
+        page.locator('.react-flow__node[data-id="p"]').click()
+        page.get_by_test_id("test-node").click()
         warning = page.get_by_test_id("test-warning")
         warning.wait_for()
         assert "mouse and keyboard" in warning.inner_text()
         assert page.locator(".react-flow__node.status-done").count() == 0  # nothing ran yet
         page.get_by_test_id("confirm-test").click()
-        detail.get_by_test_id("test-result").filter(has_text="Test finished").wait_for(timeout=10_000)
+        page.get_by_test_id("test-result").filter(has_text="Test finished").wait_for(timeout=10_000)
         browser.close()
 
 
@@ -603,7 +604,7 @@ def test_cards_say_how_far_a_step_is_trusted_and_doubts_are_counted_but_cannot_b
             page.get_by_test_id("flow-chat").click()
             page.locator('.react-flow__node[data-id="b"]').wait_for()
             b = page.get_by_test_id("node-b").inner_text()
-            assert "On trial" in b and "Consent given" in b and "Private app" in b
+            assert "Consent given" in b and "Private app" in b and "On trial" not in b and "Trusted" not in b
 
             page.get_by_test_id("app-name").select_option("telegram.exe")
             page.get_by_test_id("run").click()

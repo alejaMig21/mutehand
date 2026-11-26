@@ -7,7 +7,7 @@ import { refOptions } from './bindings.js'
 import { appKey, appLabel, SYSTEM_NODES, taughtApp, titleOf } from './catalog.js'
 import NodeCard from './NodeCard.jsx'
 import NodeDetail from './NodeDetail.jsx'
-import NodePanel from './NodePanel.jsx'
+import ExplanationStrip from './ExplanationStrip.jsx'
 import RunLog from './RunLog.jsx'
 import SearchPanel, { DRAG_TYPE } from './SearchPanel.jsx'
 import { useRuns } from './useRuns.js'
@@ -16,8 +16,9 @@ import { boxState, flowTitle, freshTitle, reasonWords, runWords } from './words.
 
 const NODE_TYPES = { card: NodeCard }
 const EDGE_LOOK = { labelBgPadding: [10, 4], labelBgBorderRadius: 999 } // yes and no on a pill
-const metaOf = (step) => ({ app: step.app, sensitive: step.sensitive, origin: step.origin, action: step.action,
-  state: step.state, private: step.private, consent: step.consent, adapted_from: step.adapted_from })
+const metaOf = (step) => ({ app: step.app, sensitive: step.sensitive, origin: step.origin, action: step.action, locator: step.locator,
+  state: step.state, private: step.private, consent: step.consent, adapted_from: step.adapted_from,
+  successes: step.successes, failures: step.failures, counted: step.counted })
 // the whole flow in sight, clear of the notices over the top of the canvas and of the zoom buttons at its foot; a narrow
 // window has no room to spare
 const fit = () => {
@@ -512,6 +513,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
         )}
       </header>
       <div className="workspace">
+      <div className="stage">
       <div className="canvas" role="region" aria-label="Boxes of this chore" onDrop={drop} onDragOver={(e) => e.preventDefault()}
         onKeyDownCapture={(e) => {
           if (e.key !== 'Enter' || !e.target.classList.contains('react-flow__node')) return
@@ -606,25 +608,20 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
             onShowValues={toggleValues}
             onChange={updateSelected}
             onClose={closeDetail}
-            onDelete={() => { deleteSelected(); setDetailOpen(false) }}
-            appName={runsOn}
-            context={context}
+          />
+        )}
+
+      </div>
+          <ExplanationStrip node={selected} meta={selected?.data.meta} nodes={viewNodes} edges={edges}
+            appName={runsOn} context={context} onConnect={onConnect} onSettings={() => openDetail(selected.id)} onRemove={deleteSelected}
+            onDisconnect={(edge) => setEdges((current) => current.filter((e) => e.id !== edge.id))}
             ensureSaved={async () => {
               const id = await ensureStored()
               if (!id) throw new Error('the flow was not saved, so nothing was tested')
               return id
             }}
-            onTested={() => setSettled((n) => n + 1)}
-          />
-        )}
-
+            onTested={() => setSettled((n) => n + 1)} />
       </div>
-        {/* over the foot of the canvas; between it and the panel in a narrow window */}
-        {selected && !detailOpen && (
-          <NodePanel node={selected} nodes={viewNodes} edges={edges} onConnect={onConnect}
-            onDisconnect={(edge) => setEdges((current) => current.filter((e) => e.id !== edge.id))}
-            onOpen={() => openDetail(selected.id)} onDelete={deleteSelected} />
-        )}
         <SearchPanel steps={steps} recipes={recipes} apps={apps} app={runsOn} onApp={setAppName} onAddSystem={addSystem}
           onAddStep={addStep} onAddRecipe={addRecipe} />
         {opening && <div className="opening" role="status">Opening…</div>}

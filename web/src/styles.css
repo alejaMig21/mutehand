@@ -148,13 +148,20 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .chip.system { background: var(--sunk); color: var(--ink); border: 1px solid var(--line); }
 .empty-canvas { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; pointer-events: none; color: var(--muted); }
 
-.settings { position: absolute; left: 14px; bottom: 72px; z-index: 8; width: 260px; max-height: calc(100% - 86px); overflow: auto;
-  display: flex; flex-direction: column; gap: 8px; padding: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
-.settings > * { flex: none; }
-.settings h2 { font-size: 16px; }
+.stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.stage .canvas { flex: 1; min-height: 0; }
+/* under the canvas: what the chosen box does, and what can be done with it */
+.strip { min-height: 150px; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--line); }
+.strip h2 { font-size: 16px; }
+.strip-says { margin: 0; font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; }
+.strip-says strong { color: var(--ink); }
+.strip-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.strip-actions button { min-height: 44px; }
+.strip .warning { margin: 0; }
+.strip-wires { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.strip-wires select { min-height: 36px; max-width: 100%; }
 .wires { list-style: none; margin: 0; padding: 0; font-size: 12px; }
 .wires li { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.settings h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .check { display: flex; align-items: center; gap: 8px; }
 .row { display: flex; gap: 6px; }
 .row input, .row select { flex: 1; min-width: 0; }
@@ -270,10 +277,9 @@ input[type="number"] { width: 70px; }
   /* the panel goes under the canvas, and the screen scrolls as one page */
   .editor { height: auto; min-height: 100%; }
   .workspace { display: flex; flex-direction: column; flex: none; }
-  .canvas { height: min(520px, 70vh); min-height: 220px; }
+  .stage .canvas { flex: none; height: min(520px, 70vh); min-height: 220px; }
   .search-panel { overflow: visible; border-left: 0; border-top: 1.5px solid var(--line); padding: 16px; }
   .run-log { max-height: 240px; }
-  .settings { position: static; width: auto; max-height: none; border-radius: 0; border-width: 1px 0 0; }
   .detail { max-height: 96vh; overflow: auto; }
   .detail > * { flex: none; } /* the whole window scrolls; nothing shrinks under its neighbour */
   .panes { overflow: visible; }

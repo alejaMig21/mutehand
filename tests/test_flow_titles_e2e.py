@@ -203,7 +203,7 @@ def test_a_box_of_a_flow_never_saved_can_be_tested(tmp_path):
     with editor(tmp_path) as (page, apps):
         page.get_by_test_id("palette-open-menu").first.click()
         page.get_by_test_id("app-name").select_option("paint.exe")
-        page.locator('.react-flow__node[data-id="n1"]').dblclick()
+        page.locator('.react-flow__node[data-id="n1"]').click()
         page.get_by_test_id("test-node").click()
         page.get_by_test_id("confirm-test").click()
         page.get_by_test_id("test-result").filter(has_text=re.compile("worked|passed|finished", re.IGNORECASE)).wait_for()
