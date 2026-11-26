@@ -83,7 +83,8 @@ def test_a_flow_takes_any_words_as_its_name_and_keeps_its_app_after_a_reload_and
         assert page.get_by_test_id("flow-title").input_value() == "Morning report: ¿ventas? 50% / week #1"
         assert page.get_by_test_id("app-name").input_value() == "word.exe"
         page.get_by_test_id("open-flows").click()
-        assert "Morning report: ¿ventas? 50% / week #1" in page.get_by_test_id("flow-morning-report-ventas-50-week-1").inner_text()
+        entry = page.get_by_test_id("flow-morning-report-ventas-50-week-1")
+        entry.filter(has_text="Morning report: ¿ventas? 50% / week #1").wait_for()
         page.keyboard.press("Escape")
 
         apps.clear()
@@ -128,12 +129,14 @@ def test_two_flows_with_the_same_name_stay_two_flows_and_can_be_told_apart(tmp_p
         assert asked == []
         page.get_by_test_id("open-flows").click()
         for flow_id in ("morning", "morning-2"):
-            assert f"Morning ({flow_id})" in page.get_by_test_id(f"flow-{flow_id}").inner_text()
+            page.get_by_test_id(f"flow-{flow_id}").filter(has_text=f"Morning ({flow_id})").wait_for()
         page.get_by_test_id("new-flow").click()
         page.get_by_test_id("flow-title").fill("My flow")
         page.get_by_test_id("palette-save-file").click()
         save(page)
-        new_flow(page)
+        page.get_by_test_id("open-flows").click()
+        page.get_by_test_id("flow-my-flow").wait_for()  # the list is read again after a save
+        page.get_by_test_id("new-flow").click()
         assert page.get_by_test_id("flow-title").input_value() == "My flow 2"  # a new flow starts with a free name
 
 
