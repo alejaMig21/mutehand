@@ -37,7 +37,7 @@ from workflow_factory.steps import (
     restore_step,
     step_report,
 )
-from workflow_factory.tutor import _is_private
+from workflow_factory.tutor import is_private
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")  # the only names this server can be bound to
 MAX_BODY_BYTES = 1_000_000
@@ -382,7 +382,7 @@ class ApiServer:
 def _safety(user_db: Path, step) -> dict:
     """What the editor marks on a step: how far it is trusted, whether its app is private, whether consent is given."""
     sensitive = effective_sensitivity(step) is not None
-    return {"state": step_report(user_db, step)["state"], "private": _is_private(user_db, step.app),
+    return {"state": step_report(user_db, step)["state"], "private": is_private(user_db, step.app),
             "adapted_from": adapted_from(user_db, step.app, step.name),
             "consent": ("given" if is_permitted(user_db, step) else "missing") if sensitive else "none"}
 

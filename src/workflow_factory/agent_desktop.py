@@ -231,9 +231,8 @@ class AgentDesktop:
         self, app: str, runner: Runner = _run_cli, settle_seconds: float = 0.5,
         version_of=version_of_pid, system_frame_fields=system_frame_fields,
         read_secret=read_secret, move_cursor=None, cursor_position=None,
-        glide_pause=time.sleep, rng=random, clipboard_backend=None,
+        glide_pause=time.sleep, rng=random,
     ):
-        self._board = clipboard_backend  # None: the real Windows clipboard, opened when a paste needs it
         self._app = app
         self._version_of = version_of
         self._system_frame_fields = system_frame_fields
@@ -339,29 +338,21 @@ class AgentDesktop:
     def press_key(self, key: str) -> None:
         self._call(["--headed", "press", key])  # real input: it goes to whichever window is in the foreground
 
-    def _clipboard(self):
+    @staticmethod
+    def _clip(action, *args):
         try:
-            return self._board or WindowsClipboard()
-        except (AttributeError, OSError) as error:  # not Windows, or no access to the clipboard
+            return action(WindowsClipboard(), *args)
+        except (AttributeError, OSError) as error:  # not Windows, or the clipboard is held by another program
             raise AgentDesktopError("CLIPBOARD_UNAVAILABLE", str(error)) from error
 
     def clipboard_backup(self):
-        try:
-            return clipboard.backup(self._clipboard())
-        except OSError as error:
-            raise AgentDesktopError("CLIPBOARD_UNAVAILABLE", str(error)) from error
+        return self._clip(clipboard.backup)
 
     def clipboard_set(self, text: str) -> None:
-        try:
-            clipboard.set_text(self._clipboard(), text)
-        except OSError as error:
-            raise AgentDesktopError("CLIPBOARD_UNAVAILABLE", str(error)) from error
+        self._clip(clipboard.set_text, text)
 
     def clipboard_restore(self, saved) -> tuple[str, ...]:
-        try:
-            return clipboard.restore(self._clipboard(), saved)
-        except OSError as error:
-            raise AgentDesktopError("CLIPBOARD_UNAVAILABLE", str(error)) from error
+        return self._clip(clipboard.restore, saved)
 
     def read_text(self, control: Control) -> str:
         return self._call(["get", control.ref, "--property", "value"]).get("value") or ""  # no focus, no input

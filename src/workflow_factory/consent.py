@@ -41,9 +41,9 @@ def effective_sensitivity(step: Step) -> Sensitivity | None:
 
 def _reads_private_app(user_db: Path, step: Step) -> bool:
     """Reading what a private app shows needs consent like any sensitive action."""
-    from workflow_factory.tutor import _is_private  # tutor imports this module
+    from workflow_factory.tutor import is_private  # tutor imports this module
 
-    return step.action == "read_value" and _is_private(user_db, step.app)
+    return step.action == "read_value" and is_private(user_db, step.app)
 
 
 def scope_of(step: Step) -> Consent:

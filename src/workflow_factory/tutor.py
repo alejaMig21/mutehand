@@ -66,7 +66,7 @@ def mark_private(user_db: Path, app: str) -> None:
         db.execute("INSERT OR IGNORE INTO private_apps VALUES (?)", (_app_name(app),))
 
 
-def _is_private(user_db: Path, app: str) -> bool:
+def is_private(user_db: Path, app: str) -> bool:
     if _app_name(app) in DEFAULT_PRIVATE_APPS:
         return True
     with closing(_connect(user_db)) as db:
@@ -80,7 +80,7 @@ def observe(user_db: Path, desktop: Desktop) -> dict:
     controls = desktop.snapshot()
     summary = {
         "app": app,
-        "private": _is_private(user_db, app),
+        "private": is_private(user_db, app),
         "roles": dict(Counter(control.role for control in controls)),
     }
     if not summary["private"]:
