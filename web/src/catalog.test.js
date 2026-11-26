@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { appLabel, CHIP_COLOURS, chipFor, guessApp, searchCatalog, SYSTEM_NODES } from './catalog.js'
+import { appLabel, CHIP_COLOURS, chipFor, searchCatalog, taughtApp, SYSTEM_NODES } from './catalog.js'
 
 const steps = [
   { app: 'telegram.exe', name: 'Send', origin: 'local' },
@@ -51,11 +51,11 @@ test('app names read like names and every chip has readable text', () => {
   for (const colour of CHIP_COLOURS) assert.ok(1.05 / (luminance(colour) + 0.05) >= 4.5, colour)
 })
 
-test('a flow runs on the app that has most of its steps', () => {
-  const all = [{ app: 'telegram.exe', name: 'Send' }, { app: 'telegram.exe', name: 'Write' }, { app: 'whatsapp.exe', name: 'Write' }]
+test('an app typed in any spelling is the one the steps were taught on', () => {
+  const apps = ['Telegram.exe', 'paint']
 
-  assert.equal(guessApp(['Send', 'Write'], all), 'telegram.exe')
-  assert.equal(guessApp(['Write'], all), 'telegram.exe') // a tie: the first
-  assert.equal(guessApp(['Nothing'], all), null)
-  assert.equal(guessApp([], all), null)
+  assert.equal(taughtApp(' telegram ', apps), 'Telegram.exe')
+  assert.equal(taughtApp('PAINT.EXE', apps), 'paint')
+  assert.equal(taughtApp(' unknown.exe ', apps), 'unknown.exe')
+  assert.equal(taughtApp('', apps), '')
 })

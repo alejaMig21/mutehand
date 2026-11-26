@@ -1,5 +1,8 @@
 """A flow has a title (free text, shown on screen) apart from its identifier, and remembers the app it runs on."""
 
+import sqlite3
+from contextlib import closing
+
 import pytest
 from test_api import call, make_server
 
@@ -50,6 +53,16 @@ def test_a_flow_saved_before_titles_takes_its_identifier_and_the_app_of_most_of_
     assert (loaded["title"], loaded["app"]) == ("mostly-whatsapp", "whatsapp.exe")
 
 
+def test_a_flow_that_cannot_be_read_does_not_hide_the_others_from_the_list(tmp_path, server):
+    call(server, "/api/flows/good", "PUT", {**ONE, "title": "Good"})
+    with closing(sqlite3.connect(tmp_path / "user.db")) as db, db:
+        db.execute("INSERT INTO flows VALUES ('broken', '{\"nodes\": [{\"bogus\": 1}]}')")
+
+    status, listed, _ = call(server, "/api/flows")
+
+    assert status == 200 and [(f["id"], f["title"], f["app"]) for f in listed] == [("broken", "broken", ""), ("good", "Good", "")]
+
+
 @pytest.mark.parametrize("extra", [
     {"title": ""}, {"title": "   "}, {"title": "x" * 101}, {"title": 7}, {"title": "a\x00b"}, {"title": "\ud800"},
     {"app": 7}, {"app": "a" * 101}, {"app": "a\x07"},
@@ -60,7 +73,7 @@ def test_a_title_or_app_that_cannot_be_kept_is_refused_in_words_and_changes_noth
 
     status, answer, _ = call(server, "/api/flows/report", "PUT", {"nodes": [], "edges": [], **extra})
 
-    assert status == 400 and ("title" in answer["error"] or "app name" in answer["error"])
+    assert status == 400 and ("flow name" in answer["error"] or "app name" in answer["error"])
     assert call(server, "/api/flows/report")[1] == before
 
 
@@ -114,6 +127,6 @@ def test_a_copy_and_an_export_carry_the_title_and_the_app(tmp_path):
     assert (plain[1]["title"], plain[1]["app"]) == ("The template", "paint.exe") and clash[0] == 400
     assert {f["id"]: (f["title"], f["app"]) for f in flow_summaries(tmp_path / "other.db", None)} == {
         "my-own-copy": ("My own copy", "paint.exe"), "plain": ("The template", "paint.exe")}
-    with pytest.raises(ValueError, match="title"):
+    with pytest.raises(ValueError, match="flow name"):
         import_knowledge(tmp_path / "third.db", {"version": 1, "steps": [], "flows": [{"id": "bad", "title": 7, **ONE}]})
     assert not flow_summaries(tmp_path / "third.db", None)

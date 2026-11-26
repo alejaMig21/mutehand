@@ -52,7 +52,7 @@ def check_title(title) -> str:
     """Any words the person likes, on one line; ValueError for anything that cannot be shown."""
     words = " ".join(title.split()) if isinstance(title, str) else ""
     if not words or len(words) > MAX_TITLE_CHARS or _unprintable(words):
-        raise ValueError(f"A flow title needs 1 to {MAX_TITLE_CHARS} characters of text.")
+        raise ValueError(f"A flow name needs 1 to {MAX_TITLE_CHARS} characters of text.")
     return words
 
 
@@ -175,7 +175,13 @@ def guess_app(flow: Flow, steps: list[Step]) -> str:
 
 def describe_flow(flow_id: str, info: dict, flow: Callable[[], Flow], steps: Callable[[], list[Step]]) -> dict:
     """What the screen calls a flow. One stored before titles takes its identifier and the app of its steps."""
-    return {"title": info.get("title") or flow_id, "app": info.get("app") or guess_app(flow(), steps())}
+    app = info.get("app")
+    if not app:
+        try:
+            app = guess_app(flow(), steps())
+        except (ValueError, TypeError, KeyError):  # a definition that cannot be read must not hide the other flows
+            app = ""
+    return {"title": info.get("title") or flow_id, "app": app}
 
 
 def flow_summaries(user_db: Path, factory_db: Path | None) -> list[dict]:

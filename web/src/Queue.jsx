@@ -12,6 +12,7 @@ const EMPTY = { open: 'No open questions. Nothing is waiting for you.', answered
 export default function Queue() {
   const [status, setStatus] = useState('open')
   const load = useLoad(`/api/doubts?status=${status}`)
+  const { data: flows } = useLoad('/api/flows')
   const { act, busy, said } = useAction(load.reload, load.setError)
   const [notes, setNotes] = useState(kept)
   useEffect(() => { sessionStorage.setItem('wf-notes', JSON.stringify(notes)) }, [notes])
@@ -33,7 +34,7 @@ export default function Queue() {
         {load.data.map((doubt) => (
           <li key={doubt.id} data-testid={`doubt-${doubt.id}`}>
             <div className="card-body">
-              <div><b>{flowWords(doubt.flow_id)}</b> stopped at the step <b>{doubt.step}</b></div>
+              <div><b>{flowWords(doubt.flow_id, flows)}</b> stopped at the step <b>{doubt.step}</b></div>
               <div>{reasonWords(doubt.detail ?? doubt.reason)}</div>
               <small>On screen then: {doubtWords(doubt.capture)} (only kinds and counts are kept, never text)</small>
               {doubt.note ? <div>Your answer: {doubt.note}</div> : null}

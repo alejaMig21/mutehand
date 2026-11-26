@@ -100,6 +100,10 @@ _Avoid_: Job, batch
 A graph of nodes, with triggers, branching, conditions, joins and capped loops, that describes a workday.
 _Avoid_: Workflow, pipeline, script
 
+**Title**:
+The free text a person calls a flow, shown on screen. The flow's identifier, made from its first title, never changes and is what checkpoints, history and Windows tasks use.
+_Avoid_: Showing the identifier as the name
+
 **Node**:
 One piece of a flow: a step or a system node.
 _Avoid_: Task, block

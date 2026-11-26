@@ -26,6 +26,7 @@ function useNames(runs) {
 export default function History() {
   const load = useLoad('/api/history')
   const nameOf = useNames(load.data)
+  const { data: flows } = useLoad('/api/flows')
   // a node is called by the step it ran; the flow only names what ran no step
   const called = (run, id) => run.nodes.find((n) => n.node_id === id)?.step || nameOf(run.flow_id, id)
 
@@ -37,7 +38,7 @@ export default function History() {
           <li key={run.id} data-testid={`run-${run.id}`}>
             <div className="card-body">
               <h2>
-                {flowWords(run.flow_id)}{' '}
+                {flowWords(run.flow_id, flows)}{' '}
                 <span className={`badge tone-${TONES[run.status] ?? 'muted'}`} data-testid={`run-status-${run.id}`}>{runWords(run.status)}</span>
               </h2>
               <small>{whenWords(run.started_at)}{run.stopped_node ? ` · stopped at ${called(run, run.stopped_node)}` : ''}</small>

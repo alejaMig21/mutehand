@@ -79,7 +79,7 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
         page.get_by_test_id("open-detail").click()
         page.get_by_test_id("add-input").click()
         page.get_by_test_id("close-detail").click()
-        page.get_by_test_id("flow-id").fill("e2e-flow")
+        page.get_by_test_id("flow-title").fill("e2e-flow")
         page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
 
@@ -258,7 +258,7 @@ def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editab
             page.get_by_test_id("open-flows").click()
             page.get_by_test_id("duplicate-morning-template").click()
             page.locator('.react-flow__node[data-id="n1"]').wait_for()
-            assert page.get_by_test_id("flow-id").input_value() == "morning-template-copy"
+            assert page.get_by_test_id("flow-title").input_value() == "morning-template copy"
             page.get_by_test_id("open-flows").click()
             assert "local" in page.get_by_test_id("flow-morning-template-copy").inner_text()
             assert page.get_by_test_id("duplicate-morning-template-copy").count() == 0  # a copy is not a template
@@ -309,7 +309,7 @@ def test_system_nodes_and_steps_are_added_wired_deleted_saved_and_reopened(edito
         page.locator('.react-flow__node[data-id="n3"]').click()
         page.get_by_test_id("delete-node").click()
         assert page.locator('.react-flow__node[data-id="n3"]').count() == 0
-        page.get_by_test_id("flow-id").fill("built")
+        page.get_by_test_id("flow-title").fill("built")
         page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
 
@@ -365,7 +365,7 @@ def test_a_flow_with_an_if_and_a_for_each_keeps_what_the_wires_mean_after_saving
         for a, b in (("n1", "n2"), ("n1", "n3")):
             drag_between(page, page.locator(f'.react-flow__node[data-id="{a}"] .react-flow__handle.source'),
                          page.locator(f'.react-flow__node[data-id="{b}"] .react-flow__handle.target'))
-        page.get_by_test_id("flow-id").fill("looped")
+        page.get_by_test_id("flow-title").fill("looped")
         page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
 

@@ -10,7 +10,7 @@ const INPUT_TYPES = ['str', 'int', 'float', 'bool']
 const POLICIES = [['stop', 'Stop and ask the tutor'], ['retry', 'Retry'], ['continue', 'Carry on without it']]
 
 // The window over the dimmed canvas: what went in (Data in), the settings, what came out (Data out).
-export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, showValues, onShowValues, onChange, onClose, onDelete, flowId, appName, context, ensureSaved, onTested }) {
+export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, showValues, onShowValues, onChange, onClose, onDelete, appName, context, ensureSaved, onTested }) {
   const system = node.kind && node.kind !== 'step'
   const entry = system && systemEntryFor(node)
   const chip = !system && meta?.app ? chipFor(meta.app) : null
@@ -43,7 +43,7 @@ export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, sh
     setTest({ state: 'running' })
     try {
       const values = JSON.parse(context || '{}')
-      await ensureSaved()
+      const flowId = await ensureSaved() // a flow never saved before gets its identifier here
       const { run_id } = await api(`/api/flows/${encode(flowId)}/nodes/${node.id}/test`, { method: 'POST', body: { app: appName, context: values } })
       for (;;) {
         const view = await api(`/api/runs/${run_id}`).catch((e) => {
