@@ -4,6 +4,9 @@ import { Icon } from './icons.jsx'
 
 // What a node is called and drawn as: a system node by its kind (and operation), a step by its app.
 function describe(node, meta) {
+  if (node.kind === 'trigger' && node.fields?.mode?.value === 'daily') {
+    return { title: `Start: every day at ${node.fields.at?.value ?? '?'}`, icon: 'clock' } // the first box says when the chore runs
+  }
   if (node.kind && node.kind !== 'step') return { title: titleOf(node), icon: systemEntryFor(node)?.icon ?? 'braces' }
   const app = meta?.app
   return { title: node.step, subtitle: app ? appLabel(app) : '', chip: app ? chipFor(app) : null }
@@ -38,6 +41,8 @@ export default function NodeCard({ id, data, selected }) {
   const { node, meta, number, runStatus, doubts } = data
   const { title, subtitle, icon, chip } = describe(node, meta)
   const marks = marksFor(node, meta, runStatus, doubts)
+  const daily = node.kind === 'trigger' && node.fields?.mode?.value === 'daily'
+  if (daily && !data.scheduled) marks.push(['alert', 'Not set up in Windows yet', 'warn'])
   return (
     <div className={`card${selected ? ' selected' : ''}`} data-testid={`node-${id}`}>
       <Handle type="target" position={Position.Top} />
@@ -66,6 +71,11 @@ export default function NodeCard({ id, data, selected }) {
             )
           ))}
         </div>
+      )}
+      {daily && (
+        <button type="button" className="daily-button nodrag" data-testid="daily-change" onClick={data.onDaily}>
+          {data.scheduled ? 'Change the time' : 'Set up the daily run'}
+        </button>
       )}
       <Handle type="source" position={Position.Bottom} />
     </div>

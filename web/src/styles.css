@@ -303,3 +303,19 @@ input[type="number"] { width: 70px; }
   .detail > * { flex: none; } /* the whole window scrolls; nothing shrinks under its neighbour */
   .panes { overflow: visible; }
 }
+
+/* the daily time: a button on each chore's row and on the first box, and the form it opens */
+.chore-daily { position: relative; z-index: 1; min-width: 150px; text-align: left; }
+.chore-daily span { display: flex; flex-direction: column; }
+.chore-daily small { color: var(--muted); font-weight: 400; }
+.daily-form { position: relative; z-index: 1; flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
+.daily-form label { display: flex; align-items: center; gap: 8px; }
+.daily-form input { min-height: 44px; box-sizing: border-box; padding: 8px 12px; border-radius: 12px; font-size: 16px; }
+.daily-form button { min-height: 44px; border-radius: 12px; font-weight: 600; }
+.daily-problem { flex: 1 1 100%; margin: 0; padding: 8px 12px; border-left: 4px solid var(--bad); background: rgba(255, 122, 122, .14); overflow-wrap: anywhere; }
+@media (max-width: 560px) { .home .chore-daily { flex: 1 1 100%; } }
+.daily-button { min-height: 44px; border-radius: 12px; font-weight: 600; }
+.notice .daily-form { flex: 1 1 100%; }
+.start-strip { padding: 6px 16px; background: var(--sunk); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.start-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.start-line span { overflow-wrap: anywhere; }
