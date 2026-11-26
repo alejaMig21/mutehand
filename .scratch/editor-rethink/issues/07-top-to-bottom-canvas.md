@@ -6,7 +6,7 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Boxes lay out top to bottom with connection points above and below; positions the person sets are kept
 - [ ] Positions stored by the left-to-right canvas are ignored once; no flow loses nodes or wires
@@ -17,3 +17,8 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 - [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop and scheduler, red before green
 - [ ] Everything added works from the keyboard and fits a 683 px and a 390 px wide window; button text stays readable
 - [ ] Existing tests pass; no screen content of a private app appears in any message
+
+## Answer
+
+Top-to-bottom canvas, docked add panel, plain names for decision, repeat and wait, run states with mark and word, reusable chat message.
+Commits: 18e9d59, 5516750, 897b4c6.
