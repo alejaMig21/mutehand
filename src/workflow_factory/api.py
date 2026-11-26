@@ -31,6 +31,7 @@ from workflow_factory.flows import (
     check_title,
     describe_flow,
     flow_from_dict,
+    flow_overview,
     flow_summaries,
     flow_to_dict,
     list_flows,
@@ -344,6 +345,8 @@ class ApiServer:
                     return self._send(200, flow_summaries(api.user_db, api.factory_db))
                 if method == "POST" and path == "/api/flows":
                     return self._send(*api._create(self._body()))
+                if method == "GET" and path == "/api/flow-overview":
+                    return self._send(200, flow_overview(api.user_db, api.factory_db))
                 flow_match = re.fullmatch(r"/api/flows/([^/]+)", path)
                 if flow_match and method == "GET":
                     flow = load_flow(api.user_db, api.factory_db, flow_match[1])

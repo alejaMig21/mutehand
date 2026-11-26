@@ -59,10 +59,7 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
 
     server, tmp_path = editor
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
-        page = browser.new_page()
-        page.goto(f"{server.url}/#token=e2e-token")
+        browser, page = open_page(playwright, server)
 
         # palette: steps from the user and factory layers
         for name in ("open-menu", "save-file", "factory-only"):
@@ -122,10 +119,7 @@ def test_a_loaded_flow_keeps_unique_node_ids_and_drops_the_previous_run_colours(
     save_flow(tmp_path / "user.db", Flow(id="gappy", nodes=[Node("n1", "open-menu"), Node("n3", "save-file")],
                                          edges=[]))
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
-        page = browser.new_page()
-        page.goto(f"{server.url}/#token=e2e-token")
+        browser, page = open_page(playwright, server)
         page.get_by_test_id("palette-open-menu").click()  # n1 on a fresh canvas
         page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
@@ -166,10 +160,7 @@ def test_a_sensitive_step_is_marked_in_words_in_the_palette_not_only_by_colour(e
     server, folder = editor
     save_step(folder / "user.db", step("send-message", "Send", sensitive=Sensitivity.OUTWARD_ACTION))
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
-        page = browser.new_page()
-        page.goto(f"{server.url}/#token=e2e-token")
+        browser, page = open_page(playwright, server)
         marked = page.get_by_test_id("palette-send-message")
         marked.wait_for()
         assert "needs consent" in marked.inner_text().lower()
@@ -177,11 +168,14 @@ def test_a_sensitive_step_is_marked_in_words_in_the_palette_not_only_by_colour(e
         browser.close()
 
 
-def open_page(playwright, server):
+def open_page(playwright, server, screen="editor"):
+    """A new headless page on `screen`; None leaves it where a person first lands (Home)."""
     browser = playwright.chromium.launch(
         headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
     page = browser.new_page()
     page.goto(f"{server.url}/#token=e2e-token")
+    if screen:
+        page.get_by_test_id(f"tab-{screen}").click()
     return browser, page
 
 
@@ -716,25 +710,27 @@ def test_a_schedule_is_added_listed_and_removed_from_the_screen_and_other_tasks_
         server.stop()
 
 
-def test_the_first_run_opens_on_the_setup_check_and_it_can_be_reopened_later(tmp_path, monkeypatch):
+def test_a_first_run_with_something_missing_opens_on_the_setup_check_and_it_can_be_reopened_later(tmp_path, monkeypatch):
     from playwright.sync_api import sync_playwright
 
-    from workflow_factory.checks import seen_before
+    from workflow_factory.checks import run_checks, seen_before
 
     monkeypatch.setattr("workflow_factory.api.seen_before", seen_before)  # the real one: this is a first run
+    monkeypatch.setattr("workflow_factory.api.run_checks",
+                        lambda data_dir: run_checks(data_dir, which=lambda program: None))  # nothing installed
     server = serve(tmp_path, FakeDesktop(controls=[]))
     try:
         with sync_playwright() as playwright:
-            browser, page = open_page(playwright, server)
+            browser, page = open_page(playwright, server, screen=None)
             summary = page.get_by_test_id("checks-summary")
             summary.wait_for()
             page.get_by_test_id("check-agent-desktop").wait_for()
             text = page.get_by_test_id("check-data-folder").inner_text()
             assert "Ready" in text or "Missing" in text  # always a word, never colour alone
-            assert page.get_by_test_id("palette-open-menu").count() == 0  # the editor is behind it on a first run
+            assert page.get_by_test_id("new-chore").count() == 0  # Home is not under it
 
-            page.reload()  # it was shown once: the next visit opens the editor
-            page.get_by_test_id("tab-editor").wait_for()
+            page.reload()  # it was shown once: the next visit opens Home
+            page.get_by_test_id("new-chore").wait_for()
             page.wait_for_timeout(500)
             assert page.get_by_test_id("checks-summary").count() == 0
             page.get_by_test_id("tab-checks").click()

@@ -62,6 +62,60 @@ export function whenWords(iso) {
     ? when.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : iso
 }
 
+const LAST_RUNS = {
+  finished: ['Worked', 'ok', 'check'], stopped: ['Stopped', 'bad', 'alert'], emergency: ['You stopped it', 'warn', 'stop'],
+  error: ['Failed', 'bad', 'alert'],
+}
+
+// "today at 07:00", "yesterday at 09:00", "on 3 Nov at 23:05": the day is the person's own, not the clock's in UTC.
+function sinceWords(iso, now) {
+  const when = new Date(iso)
+  if (Number.isNaN(when.getTime())) return iso
+  const days = (date) => Math.round(new Date(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000)
+  const ago = days(now) - days(when)
+  const year = when.getFullYear() === now.getFullYear() ? undefined : 'numeric'
+  const day = ago === 0 ? 'today' : ago === 1 ? 'yesterday'
+    : `on ${when.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year })}`
+  return `${day} at ${when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+}
+
+// How a flow's last run went: {words, tone, icon}. `run` is {status, at}, or null when none is recorded.
+export function lastRunWords(run, now = new Date()) {
+  if (!run) return { words: 'Never run', tone: 'muted', icon: 'help' }
+  const [said, tone, icon] = LAST_RUNS[run.status] ?? [runWords(run.status), 'muted', 'help']
+  return { words: `${said} ${sinceWords(run.at, now)}`, tone, icon }
+}
+
+const NO_RECORD = {
+  waiting: 'It did not run: it still has an open question from an earlier run.', busy: 'It is already running somewhere else.',
+}
+
+// What to say about a followed run that the history does not tell, or ''. An error is a code from the server: it is
+// not repeated to the person.
+export function runNoteWords(run, app) {
+  if (run?.status !== 'error') return NO_RECORD[run?.status] ?? ''
+  if (run.error === 'INTERNAL') return 'It failed to run because of a problem inside Workflow Factory.'
+  return /^[A-Z_]+$/.test(run.error) ? `It failed to run. Check that ${app} is open, then try again.` : `The run was lost (${run.error}).`
+}
+
+const BLOCKED = {
+  empty: 'It has no boxes yet. Open it to add some.', no_app: 'No app is chosen for it. Open it, choose one and press Save.',
+  expression: 'It uses an expression, which cannot run yet.', unreadable: 'It cannot be read.',
+  question: 'It stopped earlier and left a question. Answer it in Tutor queue.',
+}
+
+// Why the server says a flow cannot run, {why, steps}, or '' when it can.
+export function blockedWords(blocked, app) {
+  if (!blocked) return ''
+  const { why, steps } = blocked
+  const names = steps.map((step) => `“${step}”`).join(', ')
+  const one = steps.length === 1
+  if (why === 'not_learned') return `${names} ${one ? 'is' : 'are'} not learned ${app ? `for ${app} ` : ''}yet.`
+  if (why === 'rejected') return `${names} ${one ? 'is' : 'are'} rejected. To run this chore, restore ${one ? 'it' : 'them'} in Steps.`
+  if (why === 'to_revalidate') return `${app} was updated: ${names} ${one ? 'has' : 'have'} to be learned again.`
+  return BLOCKED[why] ?? `It cannot run: ${spaced(why)}.`
+}
+
 // What rejected a step: {kind: 'person'} or {kind: 'different_effect', expected, got, at}.
 export function whyWords(why) {
   if (why?.kind === 'person') return 'You rejected it.'

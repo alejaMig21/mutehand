@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Panel, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
 import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
 import { boxNumbers, chainLoose, fromFlowJson, joinBoxes, looseNodes, nextNodeId, toFlowJson, withBranch } from './flowjson.js'
@@ -10,7 +10,6 @@ import NodeDetail from './NodeDetail.jsx'
 import ExplanationStrip from './ExplanationStrip.jsx'
 import RunLog from './RunLog.jsx'
 import SearchPanel, { DRAG_TYPE } from './SearchPanel.jsx'
-import { useRuns } from './useRuns.js'
 import { safetySummary, summaryMarks, whyNotRunnable } from './safety.js'
 import { boxState, flowTitle, freshTitle, reasonWords, runWords } from './words.js'
 
@@ -38,7 +37,7 @@ export default function Editor(props) {
   return <ReactFlowProvider><EditorScreen {...props} /></ReactFlowProvider>
 }
 
-function EditorScreen({ active, onOpen, onUnsaved }) {
+function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   const { fitView, screenToFlowPosition, zoomIn, zoomOut } = useReactFlow()
   const [steps, setSteps] = useState([])
   const [recipes, setRecipes] = useState([])
@@ -61,11 +60,11 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   const [view, setView] = useState(0) // bumped when another flow is shown, so the canvas fits it
   const [starting, setStarting] = useState(false)
   const [opening, setOpening] = useState(false)
-  const [settled, setSettled] = useState(0)
+  const [tested, setTested] = useState(0)
   const [said, say] = useState('') // for people who cannot see the canvas change
   const [framed, setFramed] = useState(false) // a stored flow is fitted to the window; a drawn one stays where it is put
   const busy = useRef({ saving: false, starting: false, ticket: 0, named: false })
-  const { runs, offline, follow, attach, forget, patch } = useRuns(() => setSettled((n) => n + 1))
+  const { runs, offline, settled, follow, attach, forget, patch } = following
 
   const body = useMemo(() => toFlowJson(nodes, edges), [nodes, edges])
   const invalid = useMemo(() => nodes.flatMap((n) => Object.values(n.data.drafts ?? {}).filter(Boolean)
@@ -102,7 +101,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
     refresh()
     window.addEventListener('focus', refresh)
     return () => window.removeEventListener('focus', refresh)
-  }, [active, settled, refresh])
+  }, [active, settled, tested, refresh])
 
   useEffect(() => { onUnsaved(dirty) }, [dirty, onUnsaved])
   useEffect(() => {
@@ -134,7 +133,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
       setNodeData({})
     }
   }, [flowId])
-  useEffect(() => { if (settled) loadData(showValues) }, [settled]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (settled || tested) loadData(showValues) }, [settled, tested]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // after a reload, the flow the person had open comes back
   useEffect(() => {
@@ -161,7 +160,10 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
     }
   }, [onNodesChange])
 
-  const refit = () => setTimeout(() => fitView({ ...fit(), duration: 200 }), 60) // once the new node is on the canvas
+  // once the new node is on the canvas; one that has left the screen by then has no size to fit into
+  const refit = () => setTimeout(() => {
+    if (document.querySelector('.canvas')?.offsetWidth) fitView({ ...fit(), duration: 200 })
+  }, 60)
 
   // New boxes join after the chosen box, or after the last one. With a box chosen the new one takes its place as the
   // chosen one, so the next goes after it: the order is the order of the presses. A dropped box stays where it fell.
@@ -256,17 +258,21 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
     }
   }
 
-  async function openFlow(id) {
-    setMenu(null)
-    if (!mayLeave()) return
+  async function load(id) {
     setError('')
     await show(id).catch((e) => setError(e.message))
     focusSoon('open-flows')
   }
 
+  function openFlow(id) {
+    setMenu(null)
+    if (mayLeave()) load(id)
+  }
+
+  // false: the person keeps the changes on screen
   function newFlow() {
     setMenu(null)
-    if (!mayLeave()) return
+    if (!mayLeave()) return false
     busy.current.ticket += 1
     setOpening(false)
     setError('')
@@ -284,7 +290,27 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
     setFramed(false)
     setView((v) => v + 1)
     focusSoon('open-flows')
+    return true
   }
+
+  // What Home asks of this screen. Each answers whether to show it. A flow asked for replaces the one the person had open
+  // before a reload.
+  useImperativeHandle(ref, () => ({
+    create() {
+      const shown = newFlow()
+      busy.current.restored ||= shown
+      return shown
+    },
+    open(id) {
+      if (id !== flowId || !dirty) { // the flow on screen with unsaved changes is shown as it was left
+        if (!mayLeave()) return false
+        load(id)
+      }
+      busy.current.restored = true
+      setMenu(null)
+      return true
+    },
+  }))
 
   // A factory template is read-only: a copy in the user layer is what the person edits.
   async function duplicate(id) {
@@ -366,7 +392,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
       follow(id, run_id)
     } catch (e) {
       setError(e.message)
-      if (e.status === 409) attach() // it is running already: show it, with its Stop button
+      attach() // the answer may be all that was lost, or it runs already: show it, with its Stop button
     } finally {
       busy.current.starting = false
       setStarting(false)
@@ -454,6 +480,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   return (
     <div className="editor">
       <header className="topbar">
+        <button className="ghost" data-testid="back-home" onClick={() => onBack(flowId)}><Icon name="back" size={16} /> Home</button>
         <input className="flow-name" aria-label="Flow name" data-testid="flow-title" value={title} maxLength={100}
           onChange={(e) => setTitle(e.target.value)} />
         <span className={`pill pill-${status}`} data-testid="run-status" role="status">{statusWords}</span>
@@ -620,7 +647,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
               if (!id) throw new Error('the flow was not saved, so nothing was tested')
               return id
             }}
-            onTested={() => setSettled((n) => n + 1)} />
+            onTested={() => setTested((n) => n + 1)} />
       </div>
         <SearchPanel steps={steps} recipes={recipes} apps={apps} app={runsOn} onApp={setAppName} onAddSystem={addSystem}
           onAddStep={addStep} onAddRecipe={addRecipe} />
