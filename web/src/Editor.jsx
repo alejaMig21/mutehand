@@ -550,6 +550,13 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
           )}
         </div>
 
+        {!nodes.some(isDaily) && ( // a chore with no start box starts when Run is pressed: this gives it a time
+          <button className="ghost daily-button" data-testid="daily-add" aria-expanded={settingDaily}
+            title="This chore starts when you press Run now" onClick={() => setSettingDaily((open) => !open)}>
+            <Icon name="clock" size={16} /> Run every day
+          </button>
+        )}
+
         <div className="spacer" />
 
         <div className="menu-anchor">
@@ -575,16 +582,9 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
           </button>
         )}
       </header>
-      {(settingDaily || !nodes.some(isDaily)) && ( // above the canvas, not over it: nothing on the canvas is covered
+      {settingDaily && ( // above the canvas, not over it: nothing on the canvas is covered
         <div className="start-strip">
-          {!nodes.some(isDaily) && (
-            <div className="start-line" data-testid="start-line" role="status">
-              <Icon name="clock" size={16} /> <span>This chore starts when you press Run now.</span>
-              <button className="daily-button" data-testid="daily-add" aria-expanded={settingDaily}
-                onClick={() => setSettingDaily((open) => !open)}>Run every day</button>
-            </div>
-          )}
-          {settingDaily && <DailyForm at={daily?.at} initial={daily?.node_at} submit={submitDaily} onDone={closeDaily} />}
+          <DailyForm at={daily?.at} initial={daily?.node_at} submit={submitDaily} onDone={closeDaily} />
         </div>
       )}
       <div className="workspace">

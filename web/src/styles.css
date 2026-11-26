@@ -323,5 +323,3 @@ input[type="number"] { width: 70px; }
 .daily-button { min-height: 44px; border-radius: 12px; font-weight: 600; }
 .notice .daily-form { flex: 1 1 100%; }
 .start-strip { padding: 6px 16px; background: var(--sunk); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
-.start-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.start-line span { overflow-wrap: anywhere; }

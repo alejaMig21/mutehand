@@ -116,7 +116,7 @@ def test_a_time_set_on_the_first_box_shows_on_home_and_can_be_changed_and_stoppe
         at_home(page)
         page.get_by_test_id("open-chore-morning").click()
         on_the_flow_screen(page, "Morning report", 2)
-        page.get_by_test_id("start-line").filter(has_text="when you press Run now").wait_for()
+        page.get_by_test_id("daily-add").wait_for()
 
         page.get_by_test_id("daily-add").click()
         page.get_by_test_id("daily-time").fill("06:45")
@@ -138,7 +138,7 @@ def test_a_time_set_on_the_first_box_shows_on_home_and_can_be_changed_and_stoppe
         page.get_by_test_id("daily-change").click()
         page.get_by_test_id("daily-stop").click()
         on_the_flow_screen(page, "Morning report", 2)
-        page.get_by_test_id("start-line").filter(has_text="when you press Run now").wait_for()
+        page.get_by_test_id("daily-add").wait_for()
         assert mine(scheduler) == []
 
 
