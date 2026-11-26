@@ -30,8 +30,19 @@ const ROLES = { textfield: 'text field', menubutton: 'menu button', menuitem: 'm
 
 const spaced = (code) => String(code).replaceAll('_', ' ')
 
+// What a flow is called on screen; two flows with one name are told apart by their identifiers.
+export function flowTitle(id, flows) {
+  const flow = flows.find((f) => f.id === id)
+  if (!flow) return id
+  return flows.some((f) => f !== flow && f.title === flow.title) ? `${flow.title} (${id})` : flow.title
+}
+
 // A test of one node is kept apart from its flow, under "<flow>#test:<node>".
-export const flowWords = (id) => id.replace(/#test:.*$/, ' (one node tested)')
+export function flowWords(id, flows) {
+  const flow = id.replace(/#test:.*$/, '')
+  return flow === id ? flowTitle(id, flows) : `${flowTitle(flow, flows)} (one node tested)`
+}
+
 export const reasonWords = (code) => REASONS[code] ?? `Stopped: ${spaced(code)}.`
 export const stateWords = (state) => STATES[state] ?? spaced(state)
 export const runWords = (status) => RUNS[status] ?? spaced(status)
@@ -55,15 +66,10 @@ export function whyWords(why) {
     + (why.at ? ` (${whenWords(why.at)})` : '')
 }
 
-// Mirrors the server (schedule.SAFE_NAME): a name goes into a web address and into a Windows task.
-export function nameProblem(name) {
-  if (name.length > 100) return 'A flow name can have at most 100 characters.'
-  return /^[\p{L}\p{N}_.-]+$/u.test(name) && /[^.]/.test(name) ? ''
-    : 'A flow name may only use letters, digits, "_", "." and "-" (no spaces).'
-}
-
-export function freshName(taken, base = 'my-flow') {
-  let name = base
-  for (let n = 2; taken.includes(name); n++) name = `${base}-${n}`
-  return name
+// A name no stored flow has yet, whatever the capitals.
+export function freshTitle(flows, base = 'My flow') {
+  const taken = flows.map((f) => f.title.toLowerCase())
+  let title = base
+  for (let n = 2; taken.includes(title.toLowerCase()); n++) title = `${base} ${n}`
+  return title
 }

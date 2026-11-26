@@ -118,7 +118,7 @@ def test_a_flow_built_in_the_editor_is_saved_to_sqlite_and_listed(server, tmp_pa
     _, listing, _ = call(server, "/api/flows")
 
     assert status == 200 and [n["id"] for n in flow["nodes"]] == ["a", "b"] and flow["edges"] == [["a", "b"]]
-    assert {"id": "morning", "origin": "local"} in listing
+    assert {"id": "morning", "origin": "local", "title": "morning", "app": ""} in listing
 
 
 def test_an_invalid_flow_is_refused_with_a_message(server):
@@ -274,7 +274,7 @@ def test_a_factory_template_can_be_duplicated_into_the_user_layer_through_the_ap
 
     assert created[0] == 201 and created[1]["id"] == "mine"
     assert again[0] == 400 and "already exists" in again[1]["error"]
-    assert listing == [{"id": "mine", "origin": "local"}, {"id": "morning-template", "origin": "factory"}]
+    assert [(f["id"], f["origin"]) for f in listing] == [("mine", "local"), ("morning-template", "factory")]
 
 
 def test_quit_needs_the_token_and_then_flags_the_server_to_stop(server):

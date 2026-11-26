@@ -115,35 +115,36 @@ def test_every_button_on_every_screen_can_be_read(app):
     assert unreadable == {}
 
 
-def test_a_new_flow_gets_its_own_name_and_saving_over_another_asks_first(app):
+def test_a_new_flow_gets_its_own_name_and_saving_over_a_change_made_elsewhere_asks_first(app):
     page, folder, _ = app
     accept = {"now": False}
     asked = answer_dialogs(page, accept)
     open_flow(page, "morning")
     page.get_by_test_id("open-flows").click()
     page.get_by_test_id("new-flow").click()
-    assert page.get_by_test_id("flow-id").input_value() not in ("morning", "weekly")
+    assert page.get_by_test_id("flow-title").input_value() not in ("morning", "weekly")
 
+    open_flow(page, "weekly")
     add_wait(page)
-    page.get_by_test_id("flow-id").fill("weekly")
+    save_flow(folder / "user.db", Flow(id="weekly", nodes=[Node("n1", "save-file")]))  # another window
     page.get_by_test_id("save").click()
     page.wait_for_timeout(600)
-    assert asked and "weekly" in asked[-1] and stored(folder, "weekly") == ["open-menu", "Close dialog"]
+    assert asked and "weekly" in asked[-1] and stored(folder, "weekly") == ["save-file"]
 
     accept["now"] = True
     page.get_by_test_id("save").click()
     wait_status(page, "saved")
-    assert stored(folder, "weekly") == ["wait"]
+    assert stored(folder, "weekly") == ["open-menu", "Close dialog", "wait"]
 
 
-def test_a_name_that_cannot_be_stored_is_refused_in_words_and_destroys_nothing(app):
+def test_a_new_flow_named_like_another_destroys_nothing(app):
     page, folder, _ = app
     add_wait(page)
-    page.get_by_test_id("flow-id").fill("morning?v2")
+    page.get_by_test_id("flow-title").fill("morning")
     page.get_by_test_id("save").click()
+    wait_status(page, "saved")
 
-    assert "flow name" in page.get_by_test_id("error").inner_text().lower()
-    assert stored(folder, "morning") == ["open-menu", "save-file"]
+    assert stored(folder, "morning") == ["open-menu", "save-file"] and stored(folder, "morning-2") == ["wait"]
 
 
 def test_unsaved_changes_are_shown_and_never_dropped_without_asking(app):
@@ -159,7 +160,7 @@ def test_unsaved_changes_are_shown_and_never_dropped_without_asking(app):
     page.get_by_test_id("open-flows").click()
     page.get_by_test_id("flow-weekly").click()
     page.wait_for_timeout(500)
-    assert asked and page.get_by_test_id("flow-id").input_value() == "morning"
+    assert asked and page.get_by_test_id("flow-title").input_value() == "morning"
     assert page.locator(".react-flow__node").count() == 3
     assert stored(folder, "morning") == ["open-menu", "save-file"]
 
@@ -219,7 +220,7 @@ def test_a_value_the_field_cannot_hold_blocks_saving(app):
     page.locator('.react-flow__node[data-id="n1"]').dblclick()
     page.get_by_test_id("value-seconds").fill("2,5")
     page.get_by_test_id("close-detail").click()
-    page.get_by_test_id("flow-id").fill("waiting")
+    page.get_by_test_id("flow-title").fill("waiting")
     page.get_by_test_id("save").click()
 
     assert "Seconds to wait" in page.get_by_test_id("error").inner_text()
@@ -322,7 +323,7 @@ def test_a_flow_is_built_and_its_node_opened_with_the_keyboard_alone(app):
     page.get_by_test_id("open-flows").press("Enter")
     page.keyboard.press("Escape")
     assert page.get_by_test_id("new-flow").count() == 0
-    page.get_by_test_id("flow-id").fill("by-keys")
+    page.get_by_test_id("flow-title").fill("by-keys")
     page.get_by_test_id("save").press("Enter")
     wait_status(page, "saved")
     assert load_flow(folder / "user.db", None, "by-keys").edges == [("n1", "n2")]
@@ -396,7 +397,7 @@ def test_nodes_nobody_wired_are_pointed_out_and_can_be_chained_in_one_press(app)
     notice.filter(has_text="at the same time").wait_for()
     notice.get_by_role("button", name="Connect them in order").click()
     assert page.get_by_test_id("unwired").count() == 0
-    page.get_by_test_id("flow-id").fill("chained")
+    page.get_by_test_id("flow-title").fill("chained")
     page.get_by_test_id("save").click()
     wait_status(page, "saved")
 
@@ -538,7 +539,7 @@ def test_what_was_typed_and_where_the_person_was_survive_leaving_and_reloading(a
     page.get_by_test_id("tab-editor").click()
     page.reload()
     page.locator('.react-flow__node[data-id="n2"]').wait_for()
-    assert page.get_by_test_id("flow-id").input_value() == "morning"
+    assert page.get_by_test_id("flow-title").input_value() == "morning"
 
 
 def test_a_double_click_on_the_empty_canvas_moves_nothing(app):

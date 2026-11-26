@@ -73,8 +73,8 @@ td small { display: block; }
 /* editor */
 .editor { display: flex; flex-direction: column; height: 100%; }
 .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; background: var(--ground); border-bottom: 1px solid var(--line); }
-.flow-name { background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 8px; font-weight: 700; font-size: 16px; width: 220px; }
-.flow-name:hover, .flow-name:focus { border-color: var(--line); background: var(--surface); }
+.flow-name { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-weight: 700; font-size: 16px; width: 280px; }
+.flow-name:hover, .flow-name:focus { border-color: var(--muted); }
 .spacer { flex: 1; }
 .pill { white-space: nowrap; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--surface); }
 .pill-saved, .pill-finished { color: var(--ok); }
@@ -95,15 +95,18 @@ td small { display: block; }
 input, select, textarea { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 .field-inline select { max-width: 220px; } /* a long product name is cut short, never wider than the window */
 .menu-anchor { position: relative; }
-.menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 240px; padding: 6px; display: flex; flex-direction: column; gap: 4px;
+.menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 240px; max-width: min(420px, 90vw); max-height: 60vh;
+  overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 4px;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); }
+.menu > * { flex: none; } /* a long list scrolls; no row is squeezed */
 .menu.wide { right: 0; left: auto; width: min(320px, 90vw); padding: 12px; }
 .menu label { color: var(--muted); font-size: 12px; }
 .menu textarea { font-family: var(--mono); font-size: 13px; resize: vertical; }
 .menu-row { display: flex; align-items: center; gap: 6px; }
-.menu-item { flex: 1; justify-content: flex-start; gap: 8px; text-align: left; padding: 8px 10px; border-color: transparent; background: transparent; }
+.menu-item { flex: 1; min-width: 0; justify-content: flex-start; gap: 8px; text-align: left; overflow-wrap: anywhere; padding: 8px 10px;
+  border-color: transparent; background: transparent; }
 .menu-item:hover:not(:disabled) { background: var(--sunk); }
-.menu-item small { color: var(--muted); margin-left: auto; }
+.menu-item small { flex: none; white-space: nowrap; color: var(--muted); margin-left: auto; }
 .error { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; background: rgba(255, 122, 122, .14);
   border-left: 4px solid var(--bad); color: var(--ink); }
 .error span { overflow-wrap: anywhere; }
@@ -226,7 +229,8 @@ input[type="number"] { width: 70px; }
 
 /* the schedules screen */
 .schedule-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
-.schedule-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 12px; max-width: min(320px, 100%); }
+.schedule-form label { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: min(320px, 100%); color: var(--muted); font-size: 12px; }
+.schedule-form select { max-width: 100%; } /* a long flow name must not widen the page */
 .schedule-form input, .schedule-form select, .schedule-form button { height: 40px; box-sizing: border-box; font-size: 14px; }
 
 /* the setup check */
@@ -237,7 +241,11 @@ input[type="number"] { width: 70px; }
 /* narrow windows and 200% zoom */
 @media (max-width: 860px) {
   .spacer { display: none; }
-  .flow-name { width: 140px; }
+  .flow-name { flex: 1 1 180px; width: auto; min-width: 0; }
+  /* a menu spans the window under the top bar: beside its button it would leave the screen */
+  .topbar { position: relative; }
+  .menu-anchor { position: static; }
+  .menu, .menu.wide { top: 100%; left: 8px; right: 8px; width: auto; min-width: 0; max-width: none; }
   .summary { display: none; }
   .panes { grid-template-columns: 1fr; }
   .pane { border-right: 0; border-bottom: 1px solid var(--line); }

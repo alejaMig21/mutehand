@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { doubtWords, effectWords, flowWords, nameProblem, freshName, reasonWords, runWords, stateWords, whenWords, whyWords } from './words.js'
+import { doubtWords, effectWords, flowTitle, flowWords, freshTitle, reasonWords, runWords, stateWords, whenWords, whyWords } from './words.js'
 
 test('every reason a run can stop for is said in a sentence, never as a code', () => {
   const reasons = ['no_consent', 'control_not_found', 'unreadable', 'out_of_frame', 'rejected', 'to_revalidate',
@@ -16,7 +16,6 @@ test('every reason a run can stop for is said in a sentence, never as a code', (
 test('states, effects and doubts are plain words', () => {
   assert.deepEqual(['trusted', 'suspect', 'rejected', 'to_revalidate'].map(stateWords), ['Trusted', 'On trial', 'Rejected', 'Needs a re-check'])
   assert.deepEqual(['finished', 'stopped', 'waiting', 'emergency', 'error'].map(runWords), ['Finished', 'Stopped', 'Waiting', 'Stopped by you', 'Failed'])
-  assert.match(nameProblem('a'.repeat(101)), /100 characters/)
   assert.equal(effectWords('no_change'), 'nothing changed on screen')
   assert.equal(doubtWords({ button: 2, textfield: 1 }), '2 buttons, 1 text field')
   assert.equal(doubtWords({}), 'nothing')
@@ -27,14 +26,10 @@ test('a time is shown in the local short form, and anything else is left as it i
   assert.equal(whenWords('soon'), 'soon')
 })
 
-test('a flow name the server would refuse is refused before it is sent', () => {
-  for (const name of ['report', 'mañana', 'a.b-c_1']) assert.equal(nameProblem(name), '', name)
-  for (const name of ['', 'two words', 'a/b', 'x?v2', 'old#1', '..', '50%']) assert.match(nameProblem(name), /flow name/i, name)
-})
-
-test('a new flow never starts with the name of an existing one', () => {
-  assert.equal(freshName([]), 'my-flow')
-  assert.equal(freshName(['my-flow', 'my-flow-2']), 'my-flow-3')
+test('a new flow never starts with the name of an existing one, whatever the capitals', () => {
+  assert.equal(freshTitle([]), 'My flow')
+  assert.equal(freshTitle([{ title: 'my FLOW' }, { title: 'My flow 2' }]), 'My flow 3')
+  assert.equal(freshTitle([{ title: 'Report copy' }], 'Report copy'), 'Report copy 2')
 })
 
 test('why a step is rejected is told as what happened', () => {
@@ -45,7 +40,17 @@ test('why a step is rejected is told as what happened', () => {
   assert.match(whyWords(null), /not recorded/)
 })
 
+test('a flow is called by its name, and two with one name are told apart', () => {
+  const flows = [{ id: 'm', title: 'Morning report' }, { id: 'a', title: 'Twin' }, { id: 'b', title: 'Twin' }]
+
+  assert.equal(flowTitle('m', flows), 'Morning report')
+  assert.equal(flowTitle('a', flows), 'Twin (a)')
+  assert.equal(flowTitle('gone', flows), 'gone') // a flow that is no longer stored keeps its identifier
+})
+
 test('a test of one node is named after its flow', () => {
-  assert.equal(flowWords('morning#test:n2'), 'morning (one node tested)')
-  assert.equal(flowWords('morning'), 'morning')
+  const flows = [{ id: 'morning', title: 'Morning report' }]
+
+  assert.equal(flowWords('morning#test:n2', flows), 'Morning report (one node tested)')
+  assert.equal(flowWords('morning', flows), 'Morning report')
 })

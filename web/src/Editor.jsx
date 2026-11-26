@@ -5,7 +5,7 @@ import { chainLoose, fromFlowJson, layout, looseNodes, nextNodeId, toFlowJson, w
 import AppSelect from './AppSelect.jsx'
 import { Icon } from './icons.jsx'
 import { refOptions } from './bindings.js'
-import { appKey, appLabel, guessApp, SYSTEM_NODES, titleOf } from './catalog.js'
+import { appKey, appLabel, SYSTEM_NODES, taughtApp, titleOf } from './catalog.js'
 import NodeCard from './NodeCard.jsx'
 import NodeDetail from './NodeDetail.jsx'
 import NodePanel from './NodePanel.jsx'
@@ -13,7 +13,7 @@ import RunLog from './RunLog.jsx'
 import SearchPanel, { DRAG_TYPE } from './SearchPanel.jsx'
 import { useRuns } from './useRuns.js'
 import { safetySummary, summaryMarks, whyNotRunnable } from './safety.js'
-import { freshName, nameProblem, reasonWords, runWords } from './words.js'
+import { flowTitle, freshTitle, reasonWords, runWords } from './words.js'
 
 const NODE_TYPES = { card: NodeCard }
 const metaOf = (step) => ({ app: step.app, sensitive: step.sensitive, origin: step.origin, action: step.action,
@@ -26,7 +26,8 @@ const focusSoon = (...testIds) => setTimeout(() => {
   testIds.map((id) => document.querySelector(`[data-testid=${id}]`)).find(Boolean)?.focus()
 }, 0)
 const EMPTY_FLOW = JSON.stringify(toFlowJson([], []))
-const flowUrl = (name) => `/api/flows/${encode(name)}`
+const flowUrl = (id) => `/api/flows/${encode(id)}`
+const FIRST_TITLE = freshTitle([])
 
 export default function Editor(props) {
   return <ReactFlowProvider><EditorScreen {...props} /></ReactFlowProvider>
@@ -37,9 +38,10 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   const [steps, setSteps] = useState([])
   const [recipes, setRecipes] = useState([])
   const [flows, setFlows] = useState([])
-  const [flowId, setFlowId] = useState('my-flow')
-  const [origin, setOrigin] = useState({ name: null, revision: null }) // the stored flow on screen, as it was read
-  const [savedJson, setSavedJson] = useState(EMPTY_FLOW)
+  const [flowId, setFlowId] = useState(null) // null: a new flow, which gets its identifier when it is first saved
+  const [title, setTitle] = useState(FIRST_TITLE)
+  const [revision, setRevision] = useState(null) // of the stored flow on screen, as it was read
+  const [saved, setSaved] = useState({ json: EMPTY_FLOW, title: FIRST_TITLE, app: '' })
   const [appName, setAppName] = useState('')
   const [context, setContext] = useState('{}')
   const [nodes, setNodes, onNodesChange] = useNodesState([])
@@ -64,8 +66,12 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   const body = useMemo(() => toFlowJson(nodes, edges), [nodes, edges])
   const invalid = useMemo(() => nodes.flatMap((n) => Object.values(n.data.drafts ?? {}).filter(Boolean)
     .map((draft) => ({ ...draft, node: titleOf(n.data.node) }))), [nodes])
-  const isStored = origin.name === flowId
-  const dirty = JSON.stringify(body) !== savedJson || invalid.length > 0 || (origin.name !== null && !isStored)
+  const isStored = flowId !== null
+  const apps = useMemo(() => [...new Set(steps.map((s) => s.app))], [steps])
+  const runsOn = taughtApp(appName, apps)
+  // choosing an app on a new flow is not work to lose; on a stored one it is a change to keep
+  const dirty = JSON.stringify(body) !== saved.json || title !== saved.title || invalid.length > 0
+    || (isStored && runsOn !== taughtApp(saved.app, apps)) // both as taught: the steps may arrive after the flow
 
   const refresh = useCallback(() => {
     const fail = (e) => setError(e.message)
@@ -79,7 +85,9 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
       setFlows(found)
       if (busy.current.named) return
       busy.current.named = true // a first flow must not start with the name of a stored one
-      setFlowId((current) => (current === 'my-flow' ? freshName(found.map((f) => f.id)) : current))
+      const fresh = freshTitle(found)
+      setTitle((current) => (current === FIRST_TITLE ? fresh : current))
+      setSaved((current) => (current.title === FIRST_TITLE ? { ...current, title: fresh } : current))
     }).catch(fail)
     api('/api/doubts?status=open').then(setDoubts).catch(() => setDoubts([]))
   }, [])
@@ -115,10 +123,11 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
 
   // The Data of the last run (or test) of each node. Only shapes unless the person asked to see the values.
   const loadData = useCallback(async (values) => {
+    if (flowId === null) { setNodeData({}); return } // an unsaved flow has none yet
     try {
       setNodeData(await api(`${flowUrl(flowId)}/data${values ? '?values=1' : ''}`))
     } catch {
-      setNodeData({}) // an unsaved flow has none yet
+      setNodeData({})
     }
   }, [flowId])
   useEffect(() => { if (settled) loadData(showValues) }, [settled]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -219,7 +228,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
     setSelectedId(null)
   }
 
-  const mayLeave = () => !dirty || window.confirm(`“${flowId}” has changes that are not saved. Discard them?`)
+  const mayLeave = () => !dirty || window.confirm(`“${title.trim() || saved.title}” has changes that are not saved. Discard them?`)
 
   // Put a stored flow on the canvas. Only the latest request wins.
   async function show(id) {
@@ -232,11 +241,11 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
       setNodes(loaded.nodes)
       setEdges(loaded.edges)
       setFlowId(id)
-      setOrigin({ name: id, revision: stored.revision })
-      setSavedJson(JSON.stringify(toFlowJson(loaded.nodes, loaded.edges)))
-      const names = loaded.nodes.map((n) => n.data.node.step).filter(Boolean)
-      const app = guessApp(names, steps)
-      if (app && !names.some((name) => steps.some((s) => s.name === name && appKey(s.app) === appKey(appName)))) setAppName(app)
+      setRevision(stored.revision)
+      setTitle(stored.title)
+      if (stored.app) setAppName(stored.app)
+      setSaved({ json: JSON.stringify(toFlowJson(loaded.nodes, loaded.edges)), title: stored.title,
+        app: stored.app || runsOn })
       setSelectedId(null)
       setNodeData({})
       if (id !== flowId) setContext('{}') // starting values belong to one flow
@@ -265,9 +274,11 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
     setError('')
     setNodes([])
     setEdges([])
-    setFlowId(freshName(flows.map((f) => f.id)))
-    setOrigin({ name: null, revision: null })
-    setSavedJson(EMPTY_FLOW)
+    const fresh = freshTitle(flows)
+    setFlowId(null)
+    setRevision(null)
+    setTitle(fresh)
+    setSaved({ json: EMPTY_FLOW, title: fresh, app: '' })
     setContext('{}')
     setSelectedId(null)
     setNodeData({})
@@ -282,57 +293,64 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
     setMenu(null)
     if (!mayLeave()) return
     setError('')
-    const copyId = freshName(flows.map((flow) => flow.id), `${id}-copy`)
+    const source = flows.find((flow) => flow.id === id).title.slice(0, 90) // room for " copy" in a name
     try {
-      await api(`${flowUrl(id)}/duplicate`, { method: 'POST', body: { new_id: copyId } })
+      const copy = await api(`${flowUrl(id)}/duplicate`, { method: 'POST', body: { title: freshTitle(flows, `${source} copy`) } })
       refresh()
-      await show(copyId)
+      await show(copy.id)
     } catch (e) {
       setError(e.message)
     }
   }
 
-  // Save what is on screen. Never replaces a flow this screen has not seen without asking. True when stored.
+  // Save what is on screen. A new flow is created beside the others, whatever it is called; a stored one changed
+  // somewhere else is never replaced without asking. The flow's identifier when stored, else null.
   async function save() {
     setError('')
-    const problem = invalid.length
-      ? `Fix “${invalid[0].label}” in ${invalid[0].node} before saving: ${invalid[0].error}.` : nameProblem(flowId)
-    if (problem) { setError(problem); return false }
-    if (busy.current.saving) return false
+    if (invalid.length) {
+      setError(`Fix “${invalid[0].label}” in ${invalid[0].node} before saving: ${invalid[0].error}.`)
+      return null
+    }
+    if (busy.current.saving) return null
     busy.current.saving = true
+    const ticket = busy.current.ticket
     const sent = toFlowJson(nodes, edges)
-    const put = (extra) => api(flowUrl(flowId), { method: 'PUT', body: { ...sent, ...extra } })
+    const flow = { ...sent, title, app: runsOn }
+    const put = (extra) => api(flowUrl(flowId), { method: 'PUT', body: { ...flow, ...extra } })
     try {
       let stored
       try {
-        stored = await put({ base: isStored ? origin.revision : null })
+        stored = isStored ? await put({ base: revision }) : await api('/api/flows', { method: 'POST', body: flow })
       } catch (e) {
         if (e.status !== 409) throw e
-        if (!window.confirm(`${e.message}. Replace it with what is on the screen?`)) return false
+        if (!window.confirm(`${e.message}. Replace it with what is on the screen?`)) return null
         stored = await put({})
       }
-      setOrigin({ name: flowId, revision: stored.revision })
-      setSavedJson(JSON.stringify(sent))
-      patch(flowId, { acknowledged: true }) // the badge now speaks about the save, not the last run
-      sessionStorage.setItem('wf-flow', flowId)
       refresh()
-      return true
+      if (ticket !== busy.current.ticket) return null // another flow is on the screen by now
+      setFlowId(stored.id)
+      setRevision(stored.revision)
+      setSaved({ json: JSON.stringify(sent), title: stored.title, app: runsOn })
+      setTitle((current) => (current === title ? stored.title : current))
+      patch(stored.id, { acknowledged: true }) // the badge now speaks about the save, not the last run
+      sessionStorage.setItem('wf-flow', stored.id)
+      return stored.id
     } catch (e) {
       setError(e.message)
-      return false
+      return null
     } finally {
       busy.current.saving = false
     }
   }
 
-  // Before a run or a test: what is stored must be what is on the screen.
+  // Before a run or a test: what is stored must be what is on the screen. The identifier to run, else null.
   async function ensureStored() {
     if (dirty || !isStored) return save()
     const now = await api(flowUrl(flowId))
-    if (now.revision === origin.revision) return true
+    if (now.revision === revision) return flowId
     await show(flowId)
     setError('This flow was changed somewhere else. It is shown as it is now: check it and try again.')
-    return false
+    return null
   }
 
   async function run() {
@@ -340,14 +358,14 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
     busy.current.starting = true
     setStarting(true)
     setError('')
-    const name = flowId
     try {
       let values
       try { values = JSON.parse(context || '{}') } catch { throw new Error('Run data is not valid JSON.') }
-      if (!(await ensureStored())) return
-      forget(name)
-      const { run_id } = await api(`${flowUrl(name)}/run`, { method: 'POST', body: { app: appName, context: values } })
-      follow(name, run_id)
+      const id = await ensureStored()
+      if (!id) return
+      forget(id)
+      const { run_id } = await api(`${flowUrl(id)}/run`, { method: 'POST', body: { app: runsOn, context: values } })
+      follow(id, run_id)
     } catch (e) {
       setError(e.message)
       if (e.status === 409) attach() // it is running already: show it, with its Stop button
@@ -413,7 +431,6 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   const safety = useMemo(() => safetySummary(viewNodes, doubtCounts), [viewNodes, doubtCounts])
   const blocked = whyNotRunnable(safety, appName ? appLabel(appName) : undefined)
   const paused = running && Object.values(shownRun.nodes).includes('paused')
-  const apps = [...new Set(steps.map((s) => s.app))]
   const loose = looseNodes(nodes, edges)
   const shownEdges = edges.map((e) => ({ ...e, ariaLabel: `Wire from ${nameOf(e.source)} to ${nameOf(e.target)}` }))
   const outcome = shownRun && !running && {
@@ -428,8 +445,8 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
   return (
     <div className="editor">
       <header className="topbar">
-        <input className="flow-name" aria-label="Flow name" data-testid="flow-id" value={flowId}
-          onChange={(e) => setFlowId(e.target.value)} />
+        <input className="flow-name" aria-label="Flow name" data-testid="flow-title" value={title} maxLength={100}
+          onChange={(e) => setTitle(e.target.value)} />
         <span className={`pill pill-${status}`} data-testid="run-status" role="status">{statusWords}</span>
         <ul className="summary" aria-label="Safety of this flow" data-testid="safety-summary">
           {summaryMarks(safety).map(([glyph, words, tone]) => (
@@ -447,11 +464,11 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
               {flows.map((flow) => (
                 <div className="menu-row" key={flow.id}>
                   <button className="menu-item" data-testid={`flow-${flow.id}`} onClick={() => openFlow(flow.id)}>
-                    {flow.id} <small>{flow.origin}</small>
+                    <span>{flowTitle(flow.id, flows)}</span> <small>{flow.origin}</small>
                   </button>
                   {flow.origin === 'factory' && (
                     <button className="ghost small" data-testid={`duplicate-${flow.id}`}
-                      aria-label={`Duplicate template ${flow.id}`} onClick={() => duplicate(flow.id)}>
+                      aria-label={`Duplicate template ${flowTitle(flow.id, flows)}`} onClick={() => duplicate(flow.id)}>
                       Duplicate to edit
                     </button>
                   )}
@@ -464,7 +481,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
         <div className="spacer" />
 
         <label className="field-inline">App
-          <AppSelect aria-label="App to run on" data-testid="app-name" apps={apps} value={appName} onChange={setAppName} />
+          <AppSelect aria-label="App to run on" data-testid="app-name" apps={apps} value={runsOn} onChange={setAppName} />
         </label>
         <div className="menu-anchor">
           <button className="ghost" data-testid="run-data" aria-expanded={menu === 'data'} onClick={() => setMenu(menu === 'data' ? null : 'data')}>
@@ -510,7 +527,7 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
         )}
         {elsewhere.map(([name, r]) => (
           <div key={name} className="notice" data-testid="running-elsewhere" role="status">
-            <span><b>{name}</b> is running now.</span>
+            <span><b>{flowTitle(name, flows)}</b> is running now.</span>
             <button className="small" onClick={() => openFlow(name)}>Show it</button>
             <button className="danger small" disabled={!r.armed} onClick={() => stop(r.runId)}>Stop it</button>
           </div>
@@ -585,11 +602,12 @@ function EditorScreen({ active, onOpen, onUnsaved }) {
             onChange={updateSelected}
             onClose={closeDetail}
             onDelete={() => { deleteSelected(); setDetailOpen(false) }}
-            flowId={flowId}
-            appName={appName}
+            appName={runsOn}
             context={context}
             ensureSaved={async () => {
-              if (!(await ensureStored())) throw new Error('the flow was not saved, so nothing was tested')
+              const id = await ensureStored()
+              if (!id) throw new Error('the flow was not saved, so nothing was tested')
+              return id
             }}
             onTested={() => setSettled((n) => n + 1)}
           />

@@ -92,13 +92,8 @@ export const systemEntryFor = (node) => SYSTEM_NODES.find((s) => s.node.kind ===
 // What a node is called on screen.
 export const titleOf = (node) => (node.kind && node.kind !== 'step' ? systemEntryFor(node)?.title ?? node.kind : node.step)
 
-// A stored flow does not say which app it runs on: it is the app that has the most of its steps (the first on a tie).
-export function guessApp(stepNames, steps) {
-  const counts = new Map()
-  for (const name of stepNames) {
-    for (const step of steps) if (step.name === name) counts.set(step.app, (counts.get(step.app) ?? 0) + 1)
-  }
-  let best = null
-  for (const [app, count] of counts) if (best === null || count > counts.get(best)) best = app
-  return best
+// The app as the taught steps spell it, so a run finds them: 'Telegram' is telegram.exe.
+export function taughtApp(typed, apps) {
+  const app = typed.trim()
+  return apps.includes(app) ? app : apps.find((known) => appKey(known) === appKey(app)) ?? app
 }
