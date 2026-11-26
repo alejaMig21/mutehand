@@ -8,6 +8,7 @@ from contextlib import closing, contextmanager
 import pytest
 from fake_scheduler import FakeScheduler
 from test_editor_e2e import DIST, open_page
+from test_editor_safety_e2e import CONTRAST
 
 from workflow_factory import Flow, Node, load_flow, reject_step, run_flow, save_flow, save_step
 from workflow_factory.api import ApiServer
@@ -507,6 +508,116 @@ def test_no_screen_content_of_a_private_app_reaches_home(tmp_path):
         page.wait_for_timeout(300)
         shown = page.content() + "".join(r.text() for r in said if "/api/flow-summaries" in r.url or "/api/runs" in r.url)
         assert "Ana Ruiz" not in shown and "4471" not in shown
+
+
+FOCUSED = "() => document.activeElement.dataset.testid"
+
+
+def tab_to(page, test_id):
+    for _ in range(40):
+        if page.evaluate(FOCUSED) == test_id:
+            return
+        page.keyboard.press("Tab")
+    raise AssertionError(f"{test_id} cannot be reached with Tab")
+
+
+def test_home_works_with_the_keyboard_alone(tmp_path):
+    chores(tmp_path)
+    desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
+    desktop.click_seconds = 1.2
+    with home(tmp_path, desktop) as (page, _):
+        at_home(page)
+        says(page, "morning", "Never run")
+        tab_to(page, "tab-home")
+        tab_to(page, "new-chore")  # then each row: its name, then its Run now
+        page.keyboard.press("Tab")
+        assert page.evaluate(FOCUSED) == "open-chore-morning"
+        assert page.evaluate("() => getComputedStyle(document.activeElement, '::after').outlineStyle") == "solid"  # seen on the row
+        page.keyboard.press("Tab")
+        assert page.evaluate(FOCUSED) == "run-now-morning"
+        page.keyboard.press("Enter")
+        run_button(page, "morning").filter(has_text="Stop").wait_for()
+        page.wait_for_function("() => !document.activeElement.hasAttribute('aria-disabled')")  # Stop has armed
+        assert page.evaluate(FOCUSED) == "run-now-morning"  # the focus stayed on the button through its changes
+        assert run_button(page, "morning").get_attribute("aria-label") == "Stop: Morning report"
+        page.keyboard.press("Space")
+        says(page, "morning", "You stopped it")
+        assert page.evaluate(FOCUSED) == "run-now-morning" and clicked(desktop) == ["Alpha"]
+        page.keyboard.press("Shift+Tab")
+        page.keyboard.press("Enter")
+        on_the_flow_screen(page, "Morning report", 2)
+        page.wait_for_function("() => document.activeElement !== document.body")
+        page.get_by_test_id("back-home").press("Enter")
+        at_home(page)
+        page.wait_for_function("() => document.activeElement.dataset.testid === 'open-chore-morning'")  # back where they were
+        page.keyboard.press("Shift+Tab")
+        assert page.evaluate(FOCUSED) == "new-chore"
+        page.keyboard.press("Enter")
+        on_the_flow_screen(page, "My flow", 0)
+        page.wait_for_function("() => document.activeElement !== document.body")
+        page.get_by_test_id("back-home").press("Enter")  # a chore never saved has no row
+        page.wait_for_function("() => document.activeElement.dataset.testid === 'new-chore'")
+        page.get_by_test_id("tab-history").click()
+        page.get_by_test_id("tab-home").click()
+        says(page, "morning", "You stopped it")
+        assert page.evaluate(FOCUSED) == "tab-home"  # choosing a screen leaves the focus on its tab
+
+
+# every button shown on Home, and what reaches past the window or is too small to press
+BUTTONS = """(width) => [...document.querySelectorAll('.home button')].map((b) => {
+    const box = b.classList.contains('chore-open') ? b.closest('li').getBoundingClientRect() : b.getBoundingClientRect()
+    return [b.innerText.trim(), box.left >= 0 && box.right <= width && box.height >= 44
+      && (b.classList.contains('chore-open') || b.scrollWidth <= b.clientWidth)]
+  }).filter(([, fits]) => !fits)"""
+NO_SIDEWAYS_SCROLL = """() => [document.documentElement, document.querySelector('main')].every((el) => el.scrollWidth <= el.clientWidth)"""
+
+
+@pytest.mark.parametrize("width,height", [(1280, 800), (683, 384), (390, 740)])
+def test_home_fits_a_narrow_window_and_stays_readable(tmp_path, width, height):
+    db = tmp_path / "user.db"
+    chores(tmp_path)
+    long = "Weekly-report-" + "x" * 80
+    chore(tmp_path, "long-1", long, "open-menu", "save-file")
+    chore(tmp_path, "long-2", long, "print-" + "y" * 60)  # twins, and one that cannot run for a long reason
+    record_app_name(db, FakeDesktop(controls=[], product_name="Quill Ledger Professional Accounting " + "z" * 50).app_key())
+    desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
+    desktop.click_seconds = 1.0
+
+    def fine():
+        assert page.evaluate(NO_SIDEWAYS_SCROLL)
+        assert page.evaluate(BUTTONS, width) == []
+        assert page.evaluate(CONTRAST) == []
+
+    with home(tmp_path, desktop) as (page, _):
+        page.set_viewport_size({"width": width, "height": height})
+        run_button(page, "long-2").filter(has_text="Cannot run yet").wait_for()
+        fine()
+        run_button(page, "long-1").click()
+        run_button(page, "long-1").filter(has_text="Stop").wait_for()
+        page.wait_for_timeout(700)
+        fine()
+        # the row's button never lies over its words
+        for flow_id in ("long-1", "long-2", "morning"):
+            words, pressed = row(page, flow_id).locator(".chore-words").bounding_box(), run_button(page, flow_id).bounding_box()
+            assert words["x"] + words["width"] <= pressed["x"] or words["y"] + words["height"] <= pressed["y"], flow_id
+        says(page, "long-1", "Worked")
+        fine()
+        page.get_by_test_id("open-chore-long-1").click()
+        back = page.get_by_test_id("back-home").bounding_box()
+        assert back["x"] >= 0 and back["x"] + back["width"] <= width and back["y"] >= 0
+        assert page.evaluate(CONTRAST) == []
+
+
+def test_the_first_run_stays_on_home_when_nothing_is_missing(tmp_path, monkeypatch):
+    checks = [{"id": "agent-desktop", "title": "Desktop control", "why": "Needed.", "ok": True, "fix": None, "optional": False},
+              {"id": "second-monitor", "title": "A second monitor", "why": "Optional.", "ok": False, "fix": "None.", "optional": True}]
+    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: False)
+    monkeypatch.setattr("workflow_factory.api.run_checks", lambda data_dir: checks)
+    chores(tmp_path)
+    with home(tmp_path) as (page, _):
+        says(page, "morning", "Never run")
+        page.wait_for_timeout(500)
+        at_home(page)
 
 
 def test_an_app_remembered_in_another_spelling_runs_on_the_taught_one(tmp_path):

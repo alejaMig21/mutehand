@@ -37,6 +37,8 @@ export default function App() {
   const flowScreen = useRef(null)
   // the flow screen answers false when the person keeps what it holds instead: then Home stays
   const showFlow = (shown) => shown && setScreen('editor')
+  const left = useRef(null) // the flow left through the flow screen's way back: Home gives the focus to its row
+  const goHome = (id) => { left.current = id ?? ''; setScreen('home') }
   useEffect(() => {
     const lock = () => setLocked(true)
     window.addEventListener(LOCKED, lock)
@@ -88,10 +90,11 @@ export default function App() {
       <main className="screen">
         {/* the editor stays mounted so unsaved nodes, edges and run context survive a tab change */}
         <div style={{ display: screen === 'editor' ? 'block' : 'none', height: '100%' }}>
-          <Editor ref={flowScreen} active={screen === 'editor'} onOpen={setScreen} onUnsaved={setUnsaved} following={following} />
+          <Editor ref={flowScreen} active={screen === 'editor'} onOpen={setScreen} onBack={goHome} onUnsaved={setUnsaved}
+            following={following} />
         </div>
         {screen === 'home' && (
-          <Home following={following} onOpen={(id) => showFlow(flowScreen.current.open(id))}
+          <Home following={following} left={left} onOpen={(id) => showFlow(flowScreen.current.open(id))}
             onNew={() => showFlow(flowScreen.current.create())} />
         )}
         {Current && <Current onStart={() => setScreen('editor')} />}

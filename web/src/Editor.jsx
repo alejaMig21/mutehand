@@ -32,7 +32,7 @@ export default function Editor(props) {
   return <ReactFlowProvider><EditorScreen {...props} /></ReactFlowProvider>
 }
 
-function EditorScreen({ ref, active, onOpen, onUnsaved, following }) {
+function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   const { fitView, screenToFlowPosition } = useReactFlow()
   const [steps, setSteps] = useState([])
   const [recipes, setRecipes] = useState([])
@@ -468,7 +468,7 @@ function EditorScreen({ ref, active, onOpen, onUnsaved, following }) {
   return (
     <div className="editor">
       <header className="topbar">
-        <button className="ghost" data-testid="back-home" onClick={() => onOpen('home')}><Icon name="back" size={16} /> Home</button>
+        <button className="ghost" data-testid="back-home" onClick={() => onBack(flowId)}><Icon name="back" size={16} /> Home</button>
         <input className="flow-name" aria-label="Flow name" data-testid="flow-title" value={title} maxLength={100}
           onChange={(e) => setTitle(e.target.value)} />
         <span className={`pill pill-${status}`} data-testid="run-status" role="status">{statusWords}</span>

@@ -7,12 +7,20 @@ import { useLoad } from './useLoad.js'
 import { blockedWords, flowTitle, lastRunWords, runNoteWords } from './words.js'
 
 // The first screen: the person's flows ("chores" on screen), how each went, and Run now. `onOpen` shows a flow on the
-// flow screen, `onNew` an empty one.
-export default function Home({ following, onOpen, onNew }) {
+// flow screen, `onNew` an empty one; `left` holds the flow the person has just come back from, if any.
+export default function Home({ following, left, onOpen, onNew }) {
   const { offline, attach, settled } = following
   const load = useLoad('/api/flow-summaries')
   const { reload } = load
   const flows = load.data
+
+  // the button that led back is gone with the flow screen: the focus goes to the flow's row
+  useEffect(() => {
+    if (load.loading || left.current === null) return
+    const target = flows.some((flow) => flow.id === left.current) ? `open-chore-${left.current}` : 'new-chore'
+    left.current = null
+    document.querySelector(`[data-testid="${target}"]`)?.focus()
+  }, [load.loading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // a run that ended, another window or a scheduled run may have changed what is true: read it again
   useEffect(() => {
