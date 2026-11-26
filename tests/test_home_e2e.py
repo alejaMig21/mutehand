@@ -443,6 +443,33 @@ def test_the_flow_screen_follows_a_run_whose_answer_was_lost(tmp_path):
         page.get_by_test_id("run-status").filter(has_text="Finished").wait_for()
 
 
+def test_leaving_the_flow_screen_as_a_run_ends_leaves_the_boxes_in_sight(tmp_path):
+    chores(tmp_path)
+    desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
+    desktop.click_seconds = 1.0
+    with home(tmp_path, desktop) as (page, _):
+        complaints = []
+        page.on("console", lambda m: complaints.append(m.text) if m.type == "error" else None)
+        page.get_by_test_id("open-chore-morning").click()
+        on_the_flow_screen(page, "Morning report", 2)
+        # the way back is pressed the moment the screen says the run ended, before the canvas has fitted itself again
+        page.evaluate("""() => new MutationObserver((_, watching) => {
+            if (!document.querySelector('[data-testid=run-status]').textContent.includes('Finished')) return
+            watching.disconnect()
+            document.querySelector('[data-testid=back-home]').click()
+        }).observe(document.body, { subtree: true, childList: true, characterData: true })""")
+        page.get_by_test_id("run").click()
+        says(page, "morning", "Worked")
+        page.wait_for_timeout(500)
+        page.get_by_test_id("tab-editor").click()
+        page.wait_for_timeout(500)
+        assert complaints == []
+        canvas = page.locator(".canvas").bounding_box()
+        for box in page.locator(".react-flow__node").all():
+            drawn = box.bounding_box()
+            assert canvas["x"] <= drawn["x"] and drawn["y"] + drawn["height"] <= canvas["y"] + canvas["height"]
+
+
 def test_a_run_stays_followed_across_screens_and_a_reload(tmp_path):
     chores(tmp_path)
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])

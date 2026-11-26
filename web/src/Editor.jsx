@@ -159,7 +159,10 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
     }
   }, [onNodesChange])
 
-  const refit = () => setTimeout(() => fitView({ ...fit(), duration: 200 }), 60) // once the new node is on the canvas
+  // once the new node is on the canvas; one that has left the screen by then has no size to fit into
+  const refit = () => setTimeout(() => {
+    if (document.querySelector('.canvas')?.offsetWidth) fitView({ ...fit(), duration: 200 })
+  }, 60)
 
   // New boxes join after the chosen box, or after the last one. With a box chosen the new one takes its place as the
   // chosen one, so the next goes after it: the order is the order of the presses. A dropped box stays where it fell.
