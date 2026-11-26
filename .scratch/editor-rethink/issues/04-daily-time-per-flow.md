@@ -6,7 +6,7 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Setting a time on Home creates the Windows task and shows it on the first box, and the other way round
 - [ ] Changing the time leaves exactly one task; stopping removes it and the trigger
@@ -16,3 +16,8 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 - [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop and scheduler, red before green
 - [ ] Everything added works from the keyboard and fits a 683 px and a 390 px wide window; button text stays readable
 - [ ] Existing tests pass; no screen content of a private app appears in any message
+
+## Answer
+
+A flow's daily time is set, changed and stopped from its Home row and from the first box; the Windows task is the source of truth and the daily trigger node follows it.
+Commits: 658e1ff, 6b46ebe, 899e45d.
