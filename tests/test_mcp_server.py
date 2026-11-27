@@ -111,6 +111,91 @@ def test_a_recipe_taught_through_the_tools_is_applied_to_a_second_app(tmp_path):
     assert payload(ask(server, "list_recipes"))["result"][0]["name"] == "launch"
 
 
+def teach(server, app, name, control_name, **more):
+    return payload(ask(server, "teach_step", {"app": app, "name": name, "role": "button",
+                                                "control_name": control_name, **more}))
+
+
+def two_technologies(tmp_path):
+    paint = FakeDesktop(controls=[button("Save")], app="paint.exe")  # a click that changes nothing
+    excel = FakeDesktop(controls=[button("Save as")], app="excel.exe", product_name="Microsoft Excel",
+                        reveals={("button", "Save as"): [button("Folder"), button("File name")]})
+    return server_for(tmp_path, {"paint.exe": paint, "excel.exe": excel}), paint, excel
+
+
+def test_teaching_the_same_name_on_another_technology_adds_a_locator_and_keeps_the_first(tmp_path):
+    from workflow_factory import find_step, list_steps, step_report
+    from workflow_factory.steps import record_outcome
+
+    server, _, _ = two_technologies(tmp_path)
+    db = tmp_path / "user.db"
+
+    first = teach(server, "paint.exe", "Save", "Save")
+    record_outcome(db, find_step(db, None, "paint.exe", "Save"), True)
+    second = teach(server, "excel.exe", "Save", "Save as")
+
+    assert first["status"] == second["status"] == "saved"
+    rows = {s.app: s for s in list_steps(db, None)}
+    assert set(rows) == {"paint.exe", "excel.exe"} and {s.name for s in rows.values()} == {"Save"}
+    assert rows["paint.exe"].locator.name == "Save" and rows["excel.exe"].locator.name == "Save as"
+    assert rows["paint.exe"].effect != rows["excel.exe"].effect  # each locator keeps what it measured
+    assert step_report(db, rows["paint.exe"])["successes"] == 1  # the counter of one is not the other's
+    assert step_report(db, rows["excel.exe"])["successes"] == 0
+
+
+def test_a_name_with_a_technology_in_it_is_refused_before_the_app_is_touched_and_nothing_is_saved(tmp_path):
+    from workflow_factory import list_steps
+
+    server, paint, excel = two_technologies(tmp_path)
+    teach(server, "paint.exe", "Save", "Save")  # makes paint a known technology
+    excel.calls.clear()
+
+    refused = [teach(server, "excel.exe", name, "Save as") for name in (
+        "Save workbook in Excel", "Excel save", "excel.exe save", "Microsoft Excel save", "EXCEL-save")]
+    other = teach(server, "excel.exe", "Paint a border", "Save as")  # a technology known from another step
+
+    for answer in (*refused, other):
+        assert answer["status"] == "name_has_technology"
+        assert "must say what it does" in answer["message"] and "technology" in answer["message"]
+    assert excel.calls == []  # the refusal came before the app was touched
+    assert [s.app for s in list_steps(tmp_path / "user.db", None)] == ["paint.exe"]
+
+
+def test_a_name_that_only_looks_like_a_technology_is_taught(tmp_path):
+    server, _, _ = two_technologies(tmp_path)
+
+    assert teach(server, "excel.exe", "Excellent save", "Save as")["status"] == "saved"
+
+
+def test_the_refusal_names_the_rule_and_never_the_screen(tmp_path):
+    server, _, _ = two_technologies(tmp_path)
+
+    answer = teach(server, "excel.exe", "Excel save", "Save as")
+
+    assert "Folder" not in json.dumps(answer) and "File name" not in json.dumps(answer)
+
+
+def test_pattern_tags_are_kept_returned_and_merged_when_taught_on_another_technology(tmp_path):
+    server, _, _ = two_technologies(tmp_path)
+
+    first = teach(server, "paint.exe", "Save", "Save", tags=["File", "mouse", " file "])
+    second = teach(server, "excel.exe", "Save", "Save as", tags=["disk"])
+    third = teach(server, "paint.exe", "Save", "Save")  # no tags given: nothing is lost
+
+    assert first["tags"] == ["file", "mouse"]
+    assert second["tags"] == ["disk", "file", "mouse"]
+    assert third["tags"] == ["disk", "file", "mouse"]
+
+
+def test_a_refused_name_keeps_no_tags(tmp_path):
+    from workflow_factory.steps import step_tags
+
+    server, _, _ = two_technologies(tmp_path)
+    teach(server, "excel.exe", "Excel save", "Save as", tags=["file"])
+
+    assert step_tags(tmp_path / "user.db", "Excel save") == []
+
+
 # --- building a flow from a description -----------------------------------------------------------------------------------
 
 def taught(tmp_path, *names, app="paint.exe", action="click"):

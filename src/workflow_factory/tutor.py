@@ -8,6 +8,7 @@ as references.
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import sqlite3
 from collections import Counter
@@ -24,7 +25,10 @@ from workflow_factory.steps import (
     Sensitivity,
     Status,
     Step,
+    add_tags,
+    app_names,
     find_step,
+    list_steps,
     record_app_name,
     refused_write,
     save_step,
@@ -148,12 +152,28 @@ def _consent_required(category: Sensitivity, scope: Consent) -> dict:
     }
 
 
+def technology_in(user_db: Path, name: str, taught_on: str, product: str = "") -> str | None:
+    """The technology a step name gives away, as written in the name, or None. Technologies are the apps of every step
+    known, the one being taught and the product names seen; a word counts whole, with or without `.exe`."""
+    known = {plain_app(step.app) for step in list_steps(user_db, None, light=True)} | {plain_app(taught_on)}
+    terms = known | {n.casefold() for n in app_names(user_db).values()} | ({product.casefold()} if product else set())
+    for term in sorted(terms - {""}, key=len, reverse=True):
+        if found := re.search(rf"(?<![^\W_]){re.escape(term)}(?:\.exe)?(?![^\W_])", name, re.IGNORECASE):
+            return found.group()
+    return None
+
+
 def teach_step(
     user_db: Path, desktop: Desktop, name: str, locator: Locator, action: str = "click",
-    sensitive: Sensitivity | None = None, secret_ref: str | None = None,
+    sensitive: Sensitivity | None = None, secret_ref: str | None = None, tags: list[str] | None = None,
 ) -> dict:
-    """Perform the action once, measure its effect and save the step at once (autosave)."""
+    """Perform the action once, measure its effect and save the step at once (autosave). A step is named by what it
+    does: its name is refused if it carries a technology. `tags` are pattern tags, merged into the step's by name."""
     key = desktop.app_key()
+    if given := technology_in(user_db, name, key.process, key.name.strip().removesuffix(".exe")):
+        return {"status": "name_has_technology", "message": (
+            f"A step name must say what it does and must not contain a technology name or a program's process name "
+            f"({given!r} is one). Name the step by its action, for example 'Save', and teach it again.")}
     record_app_name(user_db, key)
     candidate = Step(app=key.process, version=key.version, name=name, locator=locator,
                        action=action, sensitive=sensitive, secret_ref=secret_ref)
@@ -190,7 +210,7 @@ def teach_step(
     # no effect a run could contradict: nothing was done, or what a selection changes depends on what is selected
     taught = "" if action in TEXT_ACTIONS or action == "select" else str(effect)
     save_step(user_db, replace(candidate, sensitive=category, effect=taught, frame=desktop.frame()))
-    return {"status": "saved", "step": name, "effect": str(effect)}
+    return {"status": "saved", "step": name, "effect": str(effect), "tags": add_tags(user_db, name, tags or [])}
 
 
 def list_open_doubts(user_db: Path) -> list[dict]:

@@ -44,7 +44,11 @@ A step becomes one node. Name it as the card should read: a verb and what it act
 ## Check before saving a step
 
 - It acts on one control and does one thing.
-- Its name says what it does, with no app name in it (the editor shows the app).
+- Its name says what it does, with no technology or process name in it (`Save`, never `Save workbook` or `Excel save`):
+  `teach_step` refuses such a name with `name_has_technology` before touching the app. A step is generic: teaching the same
+  name on another app adds a locator for that technology and keeps the others, each with its own measured effect.
+- Pattern tags (`tags`, optional: `file`, `mouse`) say what kind of step it is. They are kept by name and merged when the step
+  is taught on another app. Technology tags are never given: they are the apps the step was taught on.
 - The measured effect is the one you expected. An unexpected effect is a doubt, not a success: tell the person.
 - No secret, no personal text, no file path from the person's disk went into a name.
 

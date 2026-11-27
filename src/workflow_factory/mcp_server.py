@@ -66,13 +66,16 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop], factory_d
     def teach_step(
         app: str, name: str, role: str, control_name: str, automation_id: str | None = None,
         action: str = "click", sensitive: str | None = None, secret_ref: str | None = None,
+        tags: list[str] | None = None,
     ) -> dict:
-        """Do the action once, measure its effect and save the step at once. An action that writes
+        """Do the action once, measure its effect and save the step at once. Name the step by what it does
+        ("Save"), never by a program: a name with a technology in it is refused. Teaching the same name on another
+        app adds a locator there. `tags` are optional pattern tags ("file", "mouse") kept with the step. An action that writes
         text only checks that the control can be reached: nothing is clicked or written. A sensitive
         action returns consent_required: ask the user, then call record_consent and teach again."""
         return tutor.teach_step(
             user_db, desktop_for(app), name, Locator(role, control_name, automation_id), action,
-            Sensitivity(sensitive) if sensitive else None, secret_ref)
+            Sensitivity(sensitive) if sensitive else None, secret_ref, tags)
 
     @server.tool(name="teach_lesson")
     @_code_only
