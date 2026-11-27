@@ -254,5 +254,8 @@ test('boxes are numbered in the order they are read, and the start box is not co
 test('a choice with no yes path and a repeat with nothing to repeat cannot be kept yet', () => {
   assert.match(unfinished([{ id: 'a', kind: 'if', then: null }]), /yes/)
   assert.match(unfinished([{ id: 'a', kind: 'foreach', body: null }]), /repeats/)
+  // and the box is named by the number the person sees on it
+  assert.match(unfinished([{ id: 'a', step: 'x' }, { id: 'b', kind: 'if', then: null }], { a: 1, b: 2 }), /^Box 2:/)
+  assert.match(unfinished([{ id: 'a', step: 'x' }, { id: 'b', kind: 'foreach', body: null }], { a: 1, b: 2 }), /^Box 2:/)
   assert.equal(unfinished([{ id: 'a', kind: 'if', then: 'b' }, { id: 'b', kind: 'foreach', body: 'c' }, { id: 'c', step: 'x' }]), '')
 })

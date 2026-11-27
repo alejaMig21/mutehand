@@ -228,11 +228,13 @@ export function toFlowJson(nodes, edges) {
 }
 
 // What keeps stored nodes (as toFlowJson gives them) from being kept yet, in words; '' when nothing does. The server refuses a
-// choice with no yes path and a repeat with nothing to repeat, and a box added a moment ago is exactly that.
-export function unfinished(stored) {
+// choice with no yes path and a repeat with nothing to repeat, and a box added a moment ago is exactly that. `numbers` is
+// what boxNumbers gives: the box is named by the number the person sees on it.
+export function unfinished(stored, numbers = {}) {
   for (const node of stored) {
-    if (node.kind === 'if' && !node.then) return 'A two-paths box needs a line to its yes path.'
-    if (node.kind === 'foreach' && !node.body) return 'A repeat box needs the action it repeats: connect it to one.'
+    const which = numbers[node.id] ? `Box ${numbers[node.id]}: ` : ''
+    if (node.kind === 'if' && !node.then) return `${which}A two-paths box needs a line to its yes path.`
+    if (node.kind === 'foreach' && !node.body) return `${which}A repeat box needs the action it repeats: connect it to one.`
   }
   return ''
 }
