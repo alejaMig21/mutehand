@@ -809,6 +809,13 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
           </Panel>
         </ReactFlow>
 
+        {shownRun && !shownRun.logClosed && (
+          <RunLog log={shownRun.log} nodes={viewNodes} running={running}
+            steps={viewNodes.map((n) => ({ id: n.id, number: numbers[n.id], state: boxState(shownRun, n.id) ?? 'unreached' }))
+              .sort((a, b) => (a.number ?? 1e9) - (b.number ?? 1e9))}
+            onClose={() => { patch(flowId, { logClosed: true }); focusSoon('run') }} />
+        )}
+
         {nodes.length === 0 && (
           <div className="empty-canvas">
             <p>Add your first box with “Add a box”.</p>
@@ -848,10 +855,6 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
           onAddStep={addStep} onAddRecipe={addRecipe} />
         {opening && <div className="opening" role="status">Opening…</div>}
       </div>
-      {shownRun && !shownRun.logClosed && (
-        <RunLog log={shownRun.log} nodes={viewNodes} running={running}
-          onClose={() => { patch(flowId, { logClosed: true }); focusSoon('run') }} />
-      )}
     </div>
   )
 }
