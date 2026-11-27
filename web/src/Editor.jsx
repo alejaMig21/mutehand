@@ -66,6 +66,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const [tested, setTested] = useState(0)
   const [said, say] = useState('') // for people who cannot see the canvas change
   const [daily, setDaily] = useState(null) // {at, node_at} as the server says: the Windows task, and the box
+  const dailyNow = useRef(null) // what `daily` holds, for a save that finishes later
   const [settingDaily, setSettingDaily] = useState(false)
   const [focusStart, setFocusStart] = useState(0)
   const [framed, setFramed] = useState(false) // a stored flow is fitted to the window; a drawn one stays where it is put
@@ -126,6 +127,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   }, [active, settled, tested, refresh])
 
   useEffect(() => { onUnsaved(unkept) }, [unkept, onUnsaved])
+  useEffect(() => { dailyNow.current = daily }, [daily])
   useEffect(() => {
     if (!unkept) return undefined
     const warn = (event) => { event.preventDefault(); event.returnValue = '' }
@@ -456,6 +458,10 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       }
       refresh()
       if (!here()) return kept.id
+      const boxAt = sent.nodes.find((n) => n.kind === 'trigger' && n.fields?.mode?.value === 'daily')?.fields.at?.value ?? null
+      if (boxAt !== (dailyNow.current?.node_at ?? null)) { // the save moved the Windows task with the box: say what it is now
+        api(`${flowUrl(kept.id)}/daily`).then((time) => { if (here()) setDaily(time) }).catch(() => {})
+      }
       stored.current = { id: kept.id, revision: kept.revision }
       setFlowId(kept.id)
       setSaved({ json: JSON.stringify(sent), title: kept.title, app: snap.app })

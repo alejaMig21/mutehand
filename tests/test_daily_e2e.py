@@ -117,8 +117,7 @@ def test_a_time_set_on_the_first_box_shows_on_home_and_can_be_changed_and_stoppe
         page.get_by_test_id("daily-time").fill("06:45")
         page.get_by_test_id("daily-set").click()
         on_the_flow_screen(page, "Morning report", 3)
-        page.get_by_test_id("daily-add").filter(has_text="Every day at 06:45").wait_for()  # said, not drawn
-        assert start_box(page).count() == 0  # opening the chore never rewrote it
+        start_box(page).filter(has_text="Start: every day at 06:45").wait_for()
         assert mine(scheduler) == [TASK + "0645"]
 
         page.get_by_test_id("daily-change").click()
@@ -183,7 +182,7 @@ def test_a_schedule_made_before_shows_on_its_chore_and_on_the_canvas_without_rew
     with served(tmp_path, scheduler=scheduler) as (page, _, _):
         page.get_by_test_id("daily-morning").filter(has_text="Every day at 6:45 AM").wait_for()
         page.get_by_test_id("open-chore-morning").click()
-        on_the_flow_screen(page, "Morning report", 3)
+        on_the_flow_screen(page, "Morning report", 2)
         page.get_by_test_id("daily-add").filter(has_text="Every day at 06:45").wait_for()  # said, not drawn
         assert start_box(page).count() == 0  # opening the chore never rewrote it
 
@@ -281,3 +280,23 @@ def test_a_template_chore_cannot_be_given_a_time_and_says_why(tmp_path):
         set_on_home(page, "template", "07:30")
         row(page, "template").get_by_role("alert").filter(has_text="copy").wait_for()
         assert mine(scheduler) == []
+
+
+def test_adding_and_removing_the_daily_box_on_the_canvas_sets_and_stops_the_windows_task(tmp_path):
+    chores(tmp_path)
+    with served(tmp_path) as (page, scheduler, _):
+        at_home(page)
+        page.get_by_test_id("open-chore-morning").click()
+        on_the_flow_screen(page, "Morning report", 2)
+
+        page.get_by_text("Other boxes").click()
+        page.get_by_test_id("system-daily-trigger").click()  # 09:00, as the panel offers it
+        page.get_by_test_id("run-status").filter(has_text="Saved").wait_for()
+        assert mine(scheduler) == [TASK + "0900"]
+        start_box(page).filter(has_text="Start: every day at 09:00").wait_for()
+        assert page.get_by_text("Not set up in Windows yet").count() == 0
+
+        start_box(page).click()
+        page.get_by_test_id("delete-node").click()
+        page.get_by_test_id("run-status").filter(has_text="Saved").wait_for()
+        assert mine(scheduler) == [] and FOREIGN in scheduler.tasks
