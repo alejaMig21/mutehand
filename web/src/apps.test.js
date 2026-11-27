@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { noteWords, permissionWords, takeBackWords, relearnMessage, teachMessage } from './apps.js'
+import { noteWords, permissionWords, takeBackWords, teachMessage } from './apps.js'
+import { relearnMessage } from './stopped.js'
 
 const row = (extra) => ({ app: 'paint.exe', private: false, actions: 3, problems: 0, permissions: 0, ...extra })
 const stops = (actions, flows) => ({ actions, flows: flows.map((title) => ({ id: title, title })) })

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { api, encode } from './api.js'
-import { noteWords, permissionWords, relearnMessage, stopsWords, takeBackWords, teachMessage } from './apps.js'
+import { noteWords, permissionWords, stopsWords, takeBackWords, teachMessage } from './apps.js'
+import { relearnMessage } from './stopped.js'
 import { appKey, appLabel, chipFor } from './catalog.js'
 import ChatMessage from './ChatMessage.jsx'
 import { TeachFirst } from './FirstDay.jsx'

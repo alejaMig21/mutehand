@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { helpMessage, ranResult, rejectedWords, relearnWords, stoppedWords, triedResult } from './stopped.js'
+import { helpMessage, ranResult, rejectedWords, relearnMessage, relearnWords, stoppedWords, triedResult } from './stopped.js'
 
 const item = { flow: 'weekly', title: 'Weekly export', app: 'paint.exe', private: false, node: 'n2', box: 'Close message',
   reason: 'control_not_found', doubt: 12, note: null, at: new Date(2026, 10, 25, 9, 0).toISOString(), rejected_by_person: [] }
@@ -93,6 +93,13 @@ test('an app update names the app and the chores it blocks, never a file name', 
   assert.match(says.detail, /These chores wait for that: “Morning report”, “Evening report”\./)
   assert.match(says.message, /Paint was updated .* learned again/)
   assert.doesNotMatch(says.message, /\.exe/)
+})
+
+test('the update message is one text, with or without the chores that wait', () => {
+  const alone = relearnMessage('Paint')
+  assert.equal(alone, 'In Workflow Factory, Paint was updated and its actions have to be learned again. Please find which ones and teach them again.')
+  assert.equal(relearnWords({ app: 'paint.exe', flows }).message, relearnMessage('Paint', flows))
+  assert.match(relearnMessage('Paint', flows.slice(0, 1)), /^.*again so this chore can run: “Morning report”\.$/)
 })
 
 test('a rejected action says who rejected it, and a private app is not named', () => {

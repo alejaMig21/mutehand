@@ -62,7 +62,7 @@ export default function App() {
   }
   if (closed) {
     return <main data-testid="closed" className="notice-page"><h1>Workflow Factory is closed</h1>
-      <p>You can close this tab. To open it again, run <code>uv run workflow-factory</code> in the project folder.</p></main>
+      <p>You can close this tab. {OPEN_AGAIN}</p></main>
   }
   if (locked) {
     return (

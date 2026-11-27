@@ -61,15 +61,21 @@ export function ranResult(title, run) {
 
 export const titles = (flows) => flows.map((flow) => `“${flow.title}”`).join(', ')
 
-// An app update: what the card says, and the message to send in a chat. The actions are not named: the tutor lists them.
+// The message to send in a chat when an app was updated: one text wherever it is offered. The actions are not named: the tutor
+// finds which ones. `app` is the name on screen; `flows` are the chores that wait, when the place that offers it knows them.
+export function relearnMessage(app, flows = []) {
+  const waiting = flows.length ? ` so ${flows.length > 1 ? 'these chores' : 'this chore'} can run: ${titles(flows)}` : ''
+  return `In Workflow Factory, ${app} was updated and its actions have to be learned again. Please find which ones and teach them again${waiting}.`
+}
+
+// An app update: what the card says, and the message to send in a chat.
 export function relearnWords(item) {
   const app = appLabel(item.app)
   const many = item.flows.length > 1
   return {
     title: `${app} was updated`,
     detail: `Its actions have to be learned again. ${many ? 'These chores wait' : 'This chore waits'} for that: ${titles(item.flows)}.`,
-    message: `In Workflow Factory, ${app} was updated and its actions have to be learned again. Please teach them again so `
-      + `${many ? 'these chores' : 'this chore'} can run: ${titles(item.flows)}.`,
+    message: relearnMessage(app, item.flows),
   }
 }
 
