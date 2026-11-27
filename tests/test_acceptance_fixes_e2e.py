@@ -31,6 +31,7 @@ def test_a_chore_blocked_by_a_rejected_action_points_to_the_allow_again_that_exi
         why = page.get_by_test_id("chore-why-stuck")
         why.wait_for()
         assert "Steps" not in why.inner_text() and "Allow again" in why.inner_text()
+        page.get_by_test_id("attention").get_by_role("button", name="Allow again").wait_for()  # it is read apart from the chore
         assert page.get_by_test_id("attention").get_by_role("button", name="Allow again").count() == 1  # what the words point at
 
 
