@@ -59,6 +59,9 @@ CREATE TABLE IF NOT EXISTS step_state (
 SEEN_SCHEMA = "CREATE TABLE IF NOT EXISTS app_seen (app TEXT PRIMARY KEY, version TEXT NOT NULL)"
 # the product name each app's executable declared when it was last seen: what screens call it once it is closed
 NAMES_SCHEMA = "CREATE TABLE IF NOT EXISTS app_names (app TEXT PRIMARY KEY, name TEXT NOT NULL)"
+# pattern tags ("file", "mouse") belong to a step by name, whatever technologies it holds locators for; technology tags
+# are not stored: they are the apps of the step's rows
+TAGS_SCHEMA = "CREATE TABLE IF NOT EXISTS step_tags (name TEXT NOT NULL, tag TEXT NOT NULL, PRIMARY KEY (name, tag))"
 COLUMNS = (
     "app, version, name, precondition, action, role, control_name, automation_id,"
     " effect, origin, status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref, derived, template, drag_to"
@@ -372,6 +375,19 @@ def app_names(user_db: Path) -> dict[str, str]:
         names = dict(db.execute("SELECT app, name FROM app_names"))
     shared = Counter(name.casefold() for name in names.values())
     return {app: f"{name} ({app.capitalize()})" if shared[name.casefold()] > 1 else name for app, name in names.items()}
+
+
+def add_tags(user_db: Path, name: str, tags: list[str]) -> list[str]:
+    """Merge pattern tags into a step's (by name, never lost) and return them all. Tags are lower case and trimmed."""
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute(TAGS_SCHEMA)
+        db.executemany("INSERT OR IGNORE INTO step_tags VALUES (?, ?)",
+                       [(name, tag) for tag in {t.strip().casefold() for t in tags} - {""}])
+        return sorted(tag for (tag,) in db.execute("SELECT tag FROM step_tags WHERE name = ?", (name,)))
+
+
+def step_tags(user_db: Path, name: str) -> list[str]:
+    return add_tags(user_db, name, [])
 
 
 def confidence(successes: int, failures: int) -> float:

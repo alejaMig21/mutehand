@@ -60,7 +60,7 @@ def test_a_step_is_saved_as_soon_as_its_effect_is_measured(tmp_path):
     result = teach_step(user_db, desktop, name="open-menu", locator=Locator("button", "Open menu"))
 
     saved = find_step(user_db, None, "paint.exe", "open-menu")
-    assert result == {"status": "saved", "step": "open-menu", "effect": "revealed"}
+    assert result == {"status": "saved", "step": "open-menu", "effect": "revealed", "tags": []}
     assert saved.effect == "revealed" and saved.version == "1.0" and saved.frame == desktop.frame()
 
 
@@ -72,7 +72,7 @@ def test_teaching_a_step_that_writes_text_only_proves_the_control_and_acts_on_no
 
     result = teach_step(user_db, desktop, name="write", locator=Locator("textfield", "Name field"), action=action)
 
-    assert result == {"status": "saved", "step": "write", "effect": "no_change"}
+    assert result == {"status": "saved", "step": "write", "effect": "no_change", "tags": []}
     assert desktop.clicks == [] and desktop.typed == [] and desktop.pressed == []
     # nothing was done, so there is no taught effect that a later run could contradict
     assert find_step(user_db, None, "paint.exe", "write").effect == ""
