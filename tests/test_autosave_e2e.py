@@ -31,7 +31,11 @@ def stored(db, name="morning"):
 
 
 def status(page, words):
-    page.get_by_test_id("run-status").filter(has_text=re.compile(f"^{words}$")).wait_for(timeout=10_000)
+    try:
+        page.get_by_test_id("run-status").filter(has_text=re.compile(f"^{words}$")).wait_for(timeout=10_000)
+    except Exception as e:
+        raise AssertionError(f"{words!r} expected, the screen said {page.get_by_test_id('run-status').inner_text()!r}: "
+                             f"{page.locator('.notices').inner_text()!r}") from e
 
 
 def add(page, query, test_id):
