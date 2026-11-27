@@ -14,7 +14,7 @@ EXPECTED_TOOLS = {
     "observe_app", "mark_app_private", "set_study_order", "study_status", "teach_step", "teach_lesson",  # teach_lesson: old name
     "list_open_doubts", "answer_doubt", "record_consent",
     "save_recipe", "list_recipes", "apply_recipe", "mark_step_known",
-    "list_known_steps", "create_flow", "flow_status", "list_node_kinds",  # building a chore from a description
+    "list_known_steps", "create_flow", "flow_status", "list_node_kinds",  # building a flow from a description
 }
 FORBIDDEN = ("force", "trace", "screenshot", "debug")
 
@@ -111,7 +111,7 @@ def test_a_recipe_taught_through_the_tools_is_applied_to_a_second_app(tmp_path):
     assert payload(ask(server, "list_recipes"))["result"][0]["name"] == "launch"
 
 
-# --- building a chore from a description -----------------------------------------------------------------------------------
+# --- building a flow from a description -----------------------------------------------------------------------------------
 
 def taught(tmp_path, *names, app="paint.exe", action="click"):
     for name in names:
@@ -128,7 +128,7 @@ def test_the_tutor_lists_what_the_apprentice_already_knows_of_an_app(tmp_path):
     assert all(set(entry) == {"name", "action", "state"} for entry in result)
 
 
-def test_a_chore_made_from_steps_the_apprentice_knows_is_saved_ready_and_titled(tmp_path):
+def test_a_flow_made_from_steps_the_apprentice_knows_is_saved_ready_and_titled(tmp_path):
     taught(tmp_path, "open-menu", "save-file")
     nodes = [{"id": "a", "step": "open-menu"}, {"id": "b", "step": "save-file"}]
 
@@ -141,7 +141,7 @@ def test_a_chore_made_from_steps_the_apprentice_knows_is_saved_ready_and_titled(
     assert [f for f in flow_summaries(tmp_path / "user.db", None) if f["id"] == "morning-report"][0]["title"] == "Morning report"
 
 
-def test_a_chore_that_needs_a_step_not_taught_yet_is_saved_and_says_which_lessons_are_missing(tmp_path):
+def test_a_flow_that_needs_a_step_not_taught_yet_is_saved_and_says_which_lessons_are_missing(tmp_path):
     taught(tmp_path, "open-menu")
     nodes = [{"id": "a", "step": "open-menu"}, {"id": "b", "step": "send-it"}, {"id": "c", "step": "close-it"}]
 
@@ -152,11 +152,11 @@ def test_a_chore_that_needs_a_step_not_taught_yet_is_saved_and_says_which_lesson
     assert made["ready"] is False and made["why"] == "not_learned"
     assert made["missing_steps"] == ["send-it", "close-it"]
     assert again == {k: made[k] for k in ("flow_id", "ready", "why", "missing_steps")}
-    taught(tmp_path, "send-it", "close-it")  # after the lessons, the same chore is ready
+    taught(tmp_path, "send-it", "close-it")  # after the lessons, the same flow is ready
     assert payload(ask(server_for(tmp_path, {}), "flow_status", {"flow_id": made["flow_id"]}))["ready"] is True
 
 
-def test_a_chore_never_replaces_another_one_with_the_same_title(tmp_path):
+def test_a_flow_never_replaces_another_one_with_the_same_title(tmp_path):
     taught(tmp_path, "open-menu")
     args = {"title": "Same", "app": "paint.exe", "nodes": [{"id": "a", "step": "open-menu"}], "edges": None}
     server = server_for(tmp_path, {})
@@ -166,7 +166,7 @@ def test_a_chore_never_replaces_another_one_with_the_same_title(tmp_path):
     assert first["flow_id"] != second["flow_id"]
 
 
-def test_a_chore_that_is_not_a_valid_flow_is_refused_and_nothing_is_saved(tmp_path):
+def test_a_flow_that_is_not_a_valid_flow_is_refused_and_nothing_is_saved(tmp_path):
     server = server_for(tmp_path, {})
 
     for nodes in ([{"step": "x"}], [{"id": "a", "kind": "no-such-kind"}], "nope"):
@@ -186,7 +186,7 @@ def test_a_node_can_take_many_values_and_give_many_back_through_the_tutor_tool(t
     assert saved.nodes[0].inputs == (("first", "str"), ("last", "str"), ("age", "int"))
 
 
-def test_the_tutor_can_ask_which_kinds_of_box_and_data_operations_exist_and_how_a_field_is_written(tmp_path):
+def test_the_tutor_can_ask_which_kinds_of_node_and_data_operations_exist_and_how_a_field_is_written(tmp_path):
     kinds = payload(ask(server_for(tmp_path, {}), "list_node_kinds"))
 
     assert {"step", "if", "join", "loop", "trigger", "foreach", "wait", "stop", "data"} <= set(kinds["kinds"])
@@ -195,7 +195,7 @@ def test_the_tutor_can_ask_which_kinds_of_box_and_data_operations_exist_and_how_
     assert {"value", "ref", "expression"} == {form["form"] for form in kinds["field_forms"]}
 
 
-def test_a_data_box_written_from_the_listed_operations_is_saved_and_a_misspelled_one_is_refused(tmp_path):
+def test_a_data_node_written_from_the_listed_operations_is_saved_and_a_misspelled_one_is_refused(tmp_path):
     taught(tmp_path, "open-menu")
     good = {"id": "d", "kind": "data", "op": "math", "fields": {"a": {"value": 1}, "b": {"value": 2}, "operation": {"value": "add"}}}
     bad = {"id": "d", "kind": "data", "op": "mathh", "fields": {}}
@@ -218,7 +218,7 @@ def test_the_known_steps_of_a_private_app_are_counted_and_never_named(tmp_path):
     assert "send-it" not in json.dumps(result)
 
 
-def test_what_the_factory_already_knows_counts_when_a_chore_is_made_through_the_tutor_tools(tmp_path):
+def test_what_the_factory_already_knows_counts_when_a_flow_is_made_through_the_tutor_tools(tmp_path):
     build_factory(tmp_path / "factory.db", source_with_templates())
     server = build_server(tmp_path / "user.db", lambda app: None, factory_db=tmp_path / "factory.db")
 

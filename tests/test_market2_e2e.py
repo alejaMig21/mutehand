@@ -6,7 +6,7 @@ import re
 import pytest
 from test_apps_e2e import app_row, apps_screen
 from test_flow_more_e2e import more, served
-from test_home_e2e import chore, chores, home, row, run_button, says
+from test_home_e2e import home, put_flow, put_flows, row, run_button, says
 from test_stopped_e2e import card, stopped, try_again
 
 from workflow_factory import grant_consent, reject_step, run_flow, save_step
@@ -37,7 +37,7 @@ def reread(page, endpoint):
 
 @pytest.mark.parametrize("how", ["tab", "escape", "outside"])
 def test_the_more_menu_closes_when_a_tab_is_chosen_escape_is_pressed_or_the_page_is_clicked(tmp_path, how):
-    chores(tmp_path)
+    put_flows(tmp_path)
     with home(tmp_path) as (page, _):
         page.get_by_test_id("tab-apps").click()
         page.get_by_test_id("app-more-toggle").click()
@@ -51,13 +51,13 @@ def test_the_more_menu_closes_when_a_tab_is_chosen_escape_is_pressed_or_the_page
         assert not more_menu(page).evaluate("(d) => d.open")
 
         page.get_by_test_id("tab-home").click()
-        new = page.get_by_test_id("new-chore")
+        new = page.get_by_test_id("new-flow")
         new.wait_for()
         assert new.evaluate(AT_CENTRE)  # nothing is over the button
 
 
 def test_the_close_button_inside_the_more_menu_still_works(tmp_path):
-    chores(tmp_path)
+    put_flows(tmp_path)
     with home(tmp_path) as (page, _):
         page.get_by_test_id("app-more-toggle").click()
         page.get_by_test_id("quit").click()
@@ -79,14 +79,14 @@ def test_the_three_stages_are_plain_words_that_are_not_tappable(tmp_path):
         assert stages.locator("button, a, [role=button], [tabindex]").count() == 0
 
 
-def test_the_teach_card_on_apps_is_one_clear_message_not_a_switched_off_box(tmp_path):
+def test_the_teach_card_on_apps_is_one_clear_message_not_a_switched_off_node(tmp_path):
     with home(tmp_path) as (page, _):
         page.get_by_test_id("tab-apps").click()
         empty = page.get_by_test_id("apps-empty")
         empty.wait_for()
         assert empty.evaluate("(e) => getComputedStyle(e).color") == INK
         assert empty.evaluate("(e) => getComputedStyle(e).borderTopStyle") == "none"
-        assert empty.get_by_role("heading", name="Teach it your first chore").evaluate("(e) => getComputedStyle(e).color") == INK
+        assert empty.get_by_role("heading", name="Teach it your first flow").evaluate("(e) => getComputedStyle(e).color") == INK
         assert empty.get_by_role("button", name="Copy this message").is_enabled()
 
 
@@ -118,7 +118,7 @@ def test_when_the_browser_refuses_to_copy_the_message_is_selected_and_the_words_
 
 # --- 4: the search example finds something ---------------------------------------------------------------------------
 
-def test_the_example_in_the_search_box_finds_a_program_that_has_a_save_action(tmp_path):
+def test_the_example_in_the_search_node_finds_a_program_that_has_a_save_action(tmp_path):
     save_step(tmp_path / "user.db", step("Save", "Alpha", app="excel.exe"))
     save_step(tmp_path / "user.db", step("Print", "Alpha", app="word.exe"))
     with home(tmp_path) as (page, _):
@@ -135,12 +135,12 @@ def test_the_example_in_the_search_box_finds_a_program_that_has_a_save_action(tm
 
 def test_after_run_now_the_row_has_one_line_about_the_last_run(tmp_path):
     db = tmp_path / "user.db"
-    morning = chores(tmp_path)
+    morning = put_flows(tmp_path)
     run_flow(morning, desktop=FakeDesktop(controls=[button("Alpha"), button("Beta")]), user_db=db)  # an older, good run
     with home(tmp_path) as (page, _):
         says(page, "morning", r"Worked .+ at \d\d:\d\d")
         run_button(page, "morning").click()
-        result = page.get_by_test_id("chore-result-morning")
+        result = page.get_by_test_id("flow-result-morning")
         result.wait_for()
         assert re.fullmatch(r"Worked .+ at \d\d:\d\d\. 2 steps finished\.", result.inner_text().strip())
         reread(page, "/api/flow-overview")  # the list is read again: still one line
@@ -151,7 +151,7 @@ def test_after_run_now_the_row_has_one_line_about_the_last_run(tmp_path):
 
 def test_try_again_answers_in_place_of_the_card_and_the_list_below_stays_put(tmp_path):
     stopped(tmp_path)
-    chore(tmp_path, "evening", "Evening report", "open-menu")
+    put_flow(tmp_path, "evening", "Evening report", "open-menu")
     with home(tmp_path) as (page, _):
         card(page).wait_for()
         before = row(page, "evening").bounding_box()["y"]
@@ -161,7 +161,7 @@ def test_try_again_answers_in_place_of_the_card_and_the_list_below_stays_put(tmp
 
         fixed = page.get_by_test_id("tried-weekly")
         fixed.filter(has_text="Fixed").wait_for()
-        assert page.get_by_test_id("attention").is_visible()  # the red box did not just disappear
+        assert page.get_by_test_id("attention").is_visible()  # the red node did not just disappear
         assert abs(fixed.bounding_box()["y"] - tapped) < 200  # next to where the finger was
         reread(page, "/api/flow-overview")
         assert abs(row(page, "evening").bounding_box()["y"] - before) <= 60
@@ -201,24 +201,24 @@ def test_the_programs_keep_their_order_after_something_is_fixed(tmp_path):
         assert page.evaluate(order) == first
 
 
-# --- 8: the screens say chore, not flow -------------------------------------------------------------------------------------
+# --- 8: the screens say flow, node and step, never chore, box, action or draft ----------------------------------------------
 
-JARGON = re.compile(r"\bflows?\b|\bdraft\b", re.IGNORECASE)
+JARGON = re.compile(r"\bchores?\b|\bbox(?:es)?\b|\bactions?\b|\bdraft\b", re.IGNORECASE)
 LABELS = """() => [...document.querySelectorAll('[aria-label], [title], [placeholder]')]
   .flatMap((e) => ['aria-label', 'title', 'placeholder'].map((a) => e.getAttribute(a)).filter(Boolean))"""
 
 
-def test_the_chore_screen_never_says_flow_or_draft(tmp_path):
-    chores(tmp_path)
+def test_the_screens_never_say_flow_node_action_or_draft(tmp_path):
+    put_flows(tmp_path)
     with home(tmp_path) as (page, _):
-        page.get_by_test_id("new-chore").click()
+        page.get_by_test_id("new-flow").click()
         page.get_by_test_id("flow-title").wait_for()
-        assert page.get_by_test_id("flow-title").input_value() == "New chore"
+        assert page.get_by_test_id("flow-title").input_value() == "New flow"
         assert not JARGON.search(page.title())
         page.get_by_test_id("open-flows").click()
         page.get_by_test_id("new-flow").wait_for()
-        assert page.get_by_test_id("new-flow").inner_text().strip() == "New chore"
-        assert page.get_by_test_id("open-flows").inner_text().strip() == "Chores"
+        assert page.get_by_test_id("new-flow").inner_text().strip() == "New flow"
+        assert page.get_by_test_id("open-flows").inner_text().strip() == "Flows"
         everything = page.locator("body").inner_text() + " ".join(page.evaluate(LABELS))
         everything = everything.replace("React Flow", "")  # the library's credit in the canvas corner stays as it is
         assert not JARGON.search(everything), JARGON.findall(everything)
@@ -229,7 +229,7 @@ def test_the_chore_screen_never_says_flow_or_draft(tmp_path):
 # --- 9: rename says it worked --------------------------------------------------------------------------------------------
 
 def test_rename_says_renamed_in_the_row(tmp_path):
-    chores(tmp_path)
+    put_flows(tmp_path)
     with served(tmp_path) as (page, _, _):
         says(page, "morning", "Never run")
         more(page, "morning")

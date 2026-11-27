@@ -79,7 +79,7 @@ def test_deleting_removes_the_flow_and_its_daily_run_and_undo_restores_both(serv
 
     code, back, _ = call(server, "/api/flows/morning/restore", "POST")
 
-    assert code == 200 and back == view  # words, app, boxes, places and revision as they were
+    assert code == 200 and back == view  # words, app, nodes, places and revision as they were
     assert call(server, "/api/schedules")[1] == [
         {"name": "morning daily 0930", "flow": "morning", "app": "paint.exe", "at": "09:30"}]
     with closing(sqlite3.connect(tmp_path / "user.db")) as con:
@@ -162,7 +162,7 @@ def test_a_refused_removal_of_the_daily_run_leaves_the_flow_where_it_is(served):
     assert call(server, "/api/flows/morning")[0] == 200
 
 
-def test_the_history_of_a_flow_keeps_each_boxs_name_after_the_flow_changes(tmp_path):
+def test_the_history_of_a_flow_keeps_each_nodes_name_after_the_flow_changes(tmp_path):
     db = tmp_path / "user.db"
     save_step(db, step("open-menu", "Alpha"))
     flow = Flow(id="morning", nodes=[
@@ -176,7 +176,7 @@ def test_the_history_of_a_flow_keeps_each_boxs_name_after_the_flow_changes(tmp_p
     assert names == {"n1": ("wait", None, None), "n2": ("step", None, "open-menu")}
 
 
-def test_a_run_that_crashes_still_names_the_boxes_that_finished(tmp_path, monkeypatch):
+def test_a_run_that_crashes_still_names_the_nodes_that_finished(tmp_path, monkeypatch):
     db = tmp_path / "user.db"
     save_step(db, step("open-menu", "Alpha"))
     flow = Flow(id="morning", nodes=[Node("n1", kind="wait", fields={"seconds": {"value": 1}}), Node("n2", "open-menu")])
@@ -237,11 +237,11 @@ def test_a_trash_made_before_deletions_were_dated_still_works(served):
     assert call(server, "/api/deleted")[1][0]["id"] == "morning"
 
 
-def test_undo_that_cannot_set_the_daily_run_again_does_not_keep_a_daily_box_without_a_task(served):
+def test_undo_that_cannot_set_the_daily_run_again_does_not_keep_a_daily_node_without_a_task(served):
     server, scheduler, _ = served
-    box = {"id": "t", "kind": "trigger", "fields": {"mode": {"value": "daily"}, "at": {"value": "09:30"}}}
-    assert call(server, "/api/flows/morning", "PUT", {"nodes": [box, *ONE["nodes"]], "edges": None, "app": "paint.exe"})[0] == 200
-    assert len(call(server, "/api/schedules")[1]) == 1  # saving the box made the task
+    daily = {"id": "t", "kind": "trigger", "fields": {"mode": {"value": "daily"}, "at": {"value": "09:30"}}}
+    assert call(server, "/api/flows/morning", "PUT", {"nodes": [daily, *ONE["nodes"]], "edges": None, "app": "paint.exe"})[0] == 200
+    assert len(call(server, "/api/schedules")[1]) == 1  # saving the node made the task
     call(server, "/api/flows/morning", "DELETE")
     taken = server.schedule_runner
 
@@ -253,6 +253,6 @@ def test_undo_that_cannot_set_the_daily_run_again_does_not_keep_a_daily_box_with
     server.schedule_runner = refusing
     code, back, _ = call(server, "/api/flows/morning/restore", "POST")
 
-    assert code == 200 and back["daily_run_lost"] and back["daily_box_removed"] is True
+    assert code == 200 and back["daily_run_lost"] and back["daily_node_removed"] is True
     assert [n["kind"] for n in back["nodes"]] == ["step"] and call(server, "/api/schedules")[1] == []
     assert [n["kind"] for n in call(server, "/api/flows/morning")[1]["nodes"]] == ["step"]

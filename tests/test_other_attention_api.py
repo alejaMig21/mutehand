@@ -1,5 +1,5 @@
 """Other things that need the person (editor rethink, ticket 10): actions to learn again by app, a rejected action that
-blocks a chore, and a missing piece of setup. API side: the attention list."""
+blocks a flow, and a missing piece of setup. API side: the attention list."""
 
 import json
 
@@ -49,7 +49,7 @@ def test_an_updated_app_is_one_item_naming_the_app_and_every_flow_it_blocks(setu
     [item] = setup.items()
 
     assert item["kind"] == "relearn" and item["app"] == "paint.exe" and item["private"] is False
-    assert item["actions"] == ["open-menu", "save-file"]
+    assert item["steps"] == ["open-menu", "save-file"]
     assert item["flows"] == [{"id": "evening", "title": "Evening report"}, {"id": "morning", "title": "Morning report"}]
 
 
@@ -69,7 +69,7 @@ def test_a_private_apps_actions_are_not_named(tmp_path):
 
         [item] = made.items()
 
-        assert item["private"] is True and item["actions"] == []
+        assert item["private"] is True and item["steps"] == []
         assert "open-menu" not in json.dumps(item) and "save-file" not in json.dumps(item) and "Alpha" not in json.dumps(item)
     finally:
         made.server.stop()

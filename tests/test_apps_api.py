@@ -48,7 +48,7 @@ def test_one_row_per_app_with_counts_and_the_apps_that_need_the_person_first(tmp
 
     found = rows(server)
 
-    assert [(r["app"], r["actions"], r["problems"], r["permissions"]) for r in found] == [
+    assert [(r["app"], r["steps"], r["problems"], r["permissions"]) for r in found] == [
         ("zoom.exe", 1, 1, 0), ("mail.exe", 0, 0, 1), ("excel.exe", 2, 0, 0), ("paint.exe", 2, 0, 0)]  # by name on screen: Microsoft Excel
     assert all(r["private"] is False for r in found)
 
@@ -61,7 +61,7 @@ def test_an_app_updated_since_its_actions_were_learned_has_a_problem_per_action(
 
     [row] = rows(server)
 
-    assert (row["actions"], row["problems"]) == (3, 3)
+    assert (row["steps"], row["problems"]) == (3, 3)
 
 
 def test_search_finds_actions_across_apps_by_words_in_any_order_and_apps_by_name(tmp_path, server):
@@ -103,7 +103,7 @@ def test_search_never_matches_or_names_the_actions_of_a_private_app(tmp_path, se
     assert rows(server, "?q=chat") == []
     assert {r["app"]: r["found"] for r in rows(server, "?q=open")} == {"word.exe": ["open-doc"]}
     [telegram] = [r for r in rows(server) if r["app"] == "telegram.exe"]
-    assert telegram["private"] is True and telegram["actions"] == 1
+    assert telegram["private"] is True and telegram["steps"] == 1
 
 
 def test_an_app_lists_its_actions_with_the_ones_that_have_a_problem_first_and_why(tmp_path, server):
@@ -117,9 +117,9 @@ def test_an_app_lists_its_actions_with_the_ones_that_have_a_problem_first_and_wh
     status, app, _ = call(server, "/api/apps/paint.exe")
 
     assert status == 200 and app["app"] == "paint.exe" and app["private"] is False
-    assert [(a["name"], a["state"]) for a in app["actions"]] == [
+    assert [(a["name"], a["state"]) for a in app["steps"]] == [
         ("c-send", "rejected"), ("d-old", "to_revalidate"), ("a-save", "suspect"), ("b-open", "suspect")]
-    assert app["actions"][0]["why"] == {"kind": "person"}
+    assert app["steps"][0]["why"] == {"kind": "person"}
 
 
 def test_a_private_apps_detail_names_no_action_or_control_and_its_buttons_work_from_handles(tmp_path, server):
@@ -139,17 +139,17 @@ def test_a_private_apps_detail_names_no_action_or_control_and_its_buttons_work_f
     assert status == 200 and app["private"] is True
     for secret in ("pay-rent", "open-it", "Transfer", "Balance"):
         assert secret not in text
-    assert [a["state"] for a in app["actions"]] == ["rejected", "suspect"] and app["actions"][0]["why"] == {"kind": "different_effect"}
+    assert [a["state"] for a in app["steps"]] == ["rejected", "suspect"] and app["steps"][0]["why"] == {"kind": "different_effect"}
     [permission] = app["permissions"]
-    assert len(permission["stops"]["actions"]) == 1 and permission["action"] == "click"
-    assert call(server, f"/api/steps/vault.exe/{app['actions'][0]['name']}/restore", "POST")[0] == 200
-    assert call(server, "/api/apps/vault.exe")[1]["actions"][0]["state"] != "rejected"
+    assert len(permission["stops"]["steps"]) == 1 and permission["action"] == "click"
+    assert call(server, f"/api/steps/vault.exe/{app['steps'][0]['name']}/restore", "POST")[0] == 200
+    assert call(server, "/api/apps/vault.exe")[1]["steps"][0]["state"] != "rejected"
     taken = {key: permission[key] for key in ("app", "control", "action")}
     assert call(server, "/api/consents", "DELETE", taken)[0] == 200
     assert call(server, "/api/apps/vault.exe")[1]["permissions"] == []
 
 
-def test_a_permission_says_which_chores_and_actions_stop_without_it_by_data(tmp_path, server):
+def test_a_permission_says_which_flows_and_actions_stop_without_it_by_data(tmp_path, server):
     db = tmp_path / "user.db"
     save_step(db, step("send-it", "Send", app="mail.exe", sensitive=Sensitivity.OUTWARD_ACTION))
     save_step(db, step("send-two", "Send", app="mail.exe", sensitive=Sensitivity.OUTWARD_ACTION))
@@ -166,8 +166,8 @@ def test_a_permission_says_which_chores_and_actions_stop_without_it_by_data(tmp_
     assert status == 200
     by_control = {p["control"]: p for p in app["permissions"]}
     assert by_control["Send"]["action"] == "click"
-    assert by_control["Send"]["stops"] == {"actions": ["send-it", "send-two"], "flows": [{"id": "report", "title": "Weekly report"}]}
-    assert by_control["*"]["stops"]["actions"] == ["pay", "send-it", "send-two"]
+    assert by_control["Send"]["stops"] == {"steps": ["send-it", "send-two"], "flows": [{"id": "report", "title": "Weekly report"}]}
+    assert by_control["*"]["stops"]["steps"] == ["pay", "send-it", "send-two"]
     assert [f["id"] for f in by_control["*"]["stops"]["flows"]] == ["pay-flow", "report"]
 
 
@@ -191,7 +191,7 @@ def test_an_app_nobody_knows_is_not_found(server):
 def test_names_with_a_space_or_a_dot_reach_the_right_app(tmp_path, server):
     save_step(tmp_path / "user.db", step("go", "A", app="My App.v2.exe"))
 
-    assert call(server, "/api/apps/My%20App.v2.exe")[1]["actions"][0]["name"] == "go"
+    assert call(server, "/api/apps/My%20App.v2.exe")[1]["steps"][0]["name"] == "go"
 
 
 def many_steps(db, apps=30, per_app=30):

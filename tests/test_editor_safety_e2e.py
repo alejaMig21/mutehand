@@ -196,7 +196,7 @@ def test_a_run_that_cannot_start_says_why_and_where_to_go(app):
     outcome.filter(has_text="stopped earlier").wait_for()
     assert "Starting" not in page.get_by_test_id("run-log").inner_text()
 
-    outcome.get_by_role("button", name="Show the stopped box").click()  # the strip says why, and offers Try again
+    outcome.get_by_role("button", name="Show the stopped node").click()  # the strip says why, and offers Try again
     reason = page.get_by_test_id("strip-reason")
     reason.wait_for()
     assert "not on the screen" in reason.inner_text() and "control_not_found" not in reason.inner_text()
@@ -206,7 +206,7 @@ def test_the_flow_screen_notices_what_was_changed_in_apps(app):
     page, folder, _ = app
     reject_step(folder / "user.db", "paint.exe", "save-file")  # another window, or the tutor, did it
     page.get_by_test_id("tab-home").click()
-    page.get_by_test_id("open-chore-morning").click()
+    page.get_by_test_id("open-flow-morning").click()
     page.get_by_test_id("node-n2").filter(has_text="Rejected").wait_for()
     assert page.get_by_test_id("run").is_disabled()
 
@@ -215,7 +215,7 @@ def test_the_flow_screen_notices_what_was_changed_in_apps(app):
     page.get_by_test_id("app-allow-again-save-file").click()
     page.get_by_test_id("app-problem-save-file").wait_for(state="detached")
     page.get_by_test_id("tab-home").click()
-    page.get_by_test_id("open-chore-morning").click()
+    page.get_by_test_id("open-flow-morning").click()
 
     page.get_by_test_id("node-n2").wait_for()
     page.get_by_test_id("node-n2").filter(has_not_text="Rejected").wait_for()  # read again as the screen comes back
@@ -238,8 +238,8 @@ def test_allowing_an_action_far_down_an_app_keeps_the_place_and_says_so_in_view(
     said.filter(has_text="is allowed again").wait_for()
     page.wait_for_timeout(300)
 
-    box = said.bounding_box()
-    assert 0 <= box["y"] and box["y"] + box["height"] <= 768  # said where the person looks, wherever the page is scrolled
+    rect = said.bounding_box()
+    assert 0 <= rect["y"] and rect["y"] + rect["height"] <= 768  # said where the person looks, wherever the page is scrolled
 
 
 def test_a_screen_that_could_not_load_never_claims_there_is_nothing(app):
@@ -289,11 +289,11 @@ def test_at_double_zoom_the_main_actions_stay_on_screen_and_the_canvas_is_not_co
     page.set_viewport_size({"width": 683, "height": 384})
     page.reload()
     page.get_by_test_id("search").wait_for()
-    assert page.locator(".canvas").bounding_box()["height"] >= 220  # the boxes to add go under it, not over it
+    assert page.locator(".canvas").bounding_box()["height"] >= 220  # the nodes to add go under it, not over it
     page.get_by_test_id("app-more-toggle").click()
     for test_id in ("undo", "run", "tab-apps", "quit"):
-        box = page.get_by_test_id(test_id).bounding_box()
-        assert box["x"] >= 0 and box["x"] + box["width"] <= 683, test_id
+        rect = page.get_by_test_id(test_id).bounding_box()
+        assert rect["x"] >= 0 and rect["x"] + rect["width"] <= 683, test_id
     assert page.evaluate("() => document.querySelector('main').scrollWidth <= 683")
 
 
@@ -334,7 +334,7 @@ def test_history_and_apps_speak_plain_words(app):
 def test_a_wrong_link_says_so_instead_of_showing_an_empty_editor(tmp_path):
     from playwright.sync_api import sync_playwright
 
-    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))  # something is learned: Home offers a new chore
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))  # something is learned: Home offers a new flow
     server = serve(tmp_path, FakeDesktop(controls=[]))
     try:
         with sync_playwright() as playwright:
@@ -351,7 +351,7 @@ def test_a_wrong_link_says_so_instead_of_showing_an_empty_editor(tmp_path):
 
 
 def remove_the_wires_of(page, node_id):
-    page.wait_for_timeout(400)  # the canvas re-fits after a box is added
+    page.wait_for_timeout(400)  # the canvas re-fits after a node is added
     page.locator(f'.react-flow__node[data-id="{node_id}"]').click()
     wires = page.get_by_role("button", name=re.compile("^Remove the wire to"))
     while wires.count():
@@ -363,7 +363,7 @@ def test_nodes_nobody_wired_are_pointed_out_and_can_be_chained_in_one_press(app)
     page.get_by_test_id("flow-title").fill("chained")
     for entry in ("palette-open-menu", "palette-save-file", "palette-Close dialog"):
         page.get_by_test_id(entry).click()
-    assert page.get_by_test_id("unwired").count() == 0  # new boxes join by themselves
+    assert page.get_by_test_id("unwired").count() == 0  # new nodes join by themselves
     remove_the_wires_of(page, "n1")
     remove_the_wires_of(page, "n2")
     notice = page.get_by_test_id("unwired")
@@ -463,8 +463,8 @@ def test_a_node_dropped_on_an_empty_canvas_stays_where_it_was_dropped(app):
     node.wait_for()
     page.wait_for_timeout(600)
 
-    box, canvas = node.bounding_box(), pane.bounding_box()
-    assert abs(box["x"] - canvas["x"] - 150) < 30 and abs(box["y"] - canvas["y"] - 380) < 30
+    rect, canvas = node.bounding_box(), pane.bounding_box()
+    assert abs(rect["x"] - canvas["x"] - 150) < 30 and abs(rect["y"] - canvas["y"] - 380) < 30
 
 
 def test_a_notice_appearing_does_not_move_what_is_under_the_pointer(app):
@@ -485,7 +485,7 @@ def test_where_the_person_was_survives_a_reload(app):
     page.get_by_test_id("tab-apps").click()
     page.get_by_test_id("tab-home").click()
 
-    page.get_by_test_id("open-chore-morning").click()
+    page.get_by_test_id("open-flow-morning").click()
     page.reload()
 
     page.locator('.react-flow__node[data-id="n2"]').wait_for()
@@ -530,7 +530,7 @@ def test_a_test_of_one_node_shows_the_servers_words_untouched_and_says_when_it_c
     page.get_by_test_id("test-result").filter(has_text="still trying").wait_for()
 
 
-def test_the_run_data_box_says_in_plain_words_that_empty_braces_mean_no_values(app):
+def test_the_run_data_node_says_in_plain_words_that_empty_braces_mean_no_values(app):
     page, _, _ = app
     open_flow(page, "morning")
     page.get_by_test_id("run-data").click()

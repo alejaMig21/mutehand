@@ -1,4 +1,4 @@
-"""A chore's daily time, set from its row on Home or from the first box of its flow screen. Driven in the built editor
+"""A flow's daily time, set from its row on Home or from the first node of its flow screen. Driven in the built editor
 against the real API with the stand-in desktop and scheduler. Opt-in: `pytest -m web`."""
 
 import subprocess
@@ -13,9 +13,9 @@ from test_home_e2e import (
     FOCUSED,
     NO_SIDEWAYS_SCROLL,
     at_home,
-    chore,
-    chores,
     on_the_flow_screen,
+    put_flow,
+    put_flows,
     row,
     run_button,
     says,
@@ -63,12 +63,12 @@ def set_on_home(page, flow_id, at):
     page.get_by_test_id(f"daily-set-{flow_id}").click()
 
 
-def start_box(page):
+def start_node(page):
     return page.locator('.react-flow__node:has([data-testid="daily-change"])')
 
 
-def test_a_time_set_on_home_makes_the_windows_task_and_shows_on_the_first_box(tmp_path):
-    chores(tmp_path)
+def test_a_time_set_on_home_makes_the_windows_task_and_shows_on_the_first_node(tmp_path):
+    put_flows(tmp_path)
     with served(tmp_path) as (page, scheduler, _):
         at_home(page)
         assert "Run every day" in page.get_by_test_id("daily-morning").inner_text()
@@ -77,13 +77,13 @@ def test_a_time_set_on_home_makes_the_windows_task_and_shows_on_the_first_box(tm
 
         page.get_by_test_id("daily-morning").filter(has_text="Every day at 7:30 AM").wait_for()
         assert mine(scheduler) == [TASK + "0730"] and FOREIGN in scheduler.tasks
-        page.get_by_test_id("open-chore-morning").click()
-        on_the_flow_screen(page, "Morning report", 3)  # the two boxes and the start box
-        start_box(page).filter(has_text="Start: every day at 07:30").wait_for()
+        page.get_by_test_id("open-flow-morning").click()
+        on_the_flow_screen(page, "Morning report", 3)  # the two nodes and the start node
+        start_node(page).filter(has_text="Start: every day at 07:30").wait_for()
 
 
-def test_changing_the_time_on_home_leaves_one_task_and_stopping_removes_it_and_the_first_box(tmp_path):
-    chores(tmp_path)
+def test_changing_the_time_on_home_leaves_one_task_and_stopping_removes_it_and_the_first_node(tmp_path):
+    put_flows(tmp_path)
     with served(tmp_path) as (page, scheduler, _):
         at_home(page)
         set_on_home(page, "morning", "07:30")
@@ -101,15 +101,15 @@ def test_changing_the_time_on_home_leaves_one_task_and_stopping_removes_it_and_t
         assert mine(scheduler) == [] and FOREIGN in scheduler.tasks
         flow = load_flow(tmp_path / "user.db", None, "morning")
         assert [n.id for n in flow.nodes] == ["n1", "n2"]
-        page.get_by_test_id("open-chore-morning").click()
+        page.get_by_test_id("open-flow-morning").click()
         on_the_flow_screen(page, "Morning report", 2)
 
 
-def test_a_time_set_on_the_first_box_shows_on_home_and_can_be_changed_and_stopped_there(tmp_path):
-    chores(tmp_path)
+def test_a_time_set_on_the_first_node_shows_on_home_and_can_be_changed_and_stopped_there(tmp_path):
+    put_flows(tmp_path)
     with served(tmp_path) as (page, scheduler, _):
         at_home(page)
-        page.get_by_test_id("open-chore-morning").click()
+        page.get_by_test_id("open-flow-morning").click()
         on_the_flow_screen(page, "Morning report", 2)
         page.get_by_test_id("daily-add").wait_for()
 
@@ -117,18 +117,18 @@ def test_a_time_set_on_the_first_box_shows_on_home_and_can_be_changed_and_stoppe
         page.get_by_test_id("daily-time").fill("06:45")
         page.get_by_test_id("daily-set").click()
         on_the_flow_screen(page, "Morning report", 3)
-        start_box(page).filter(has_text="Start: every day at 06:45").wait_for()
+        start_node(page).filter(has_text="Start: every day at 06:45").wait_for()
         assert mine(scheduler) == [TASK + "0645"]
 
         page.get_by_test_id("daily-change").click()
         page.get_by_test_id("daily-time").fill("07:10")
         page.get_by_test_id("daily-set").click()
-        start_box(page).filter(has_text="Start: every day at 07:10").wait_for()
+        start_node(page).filter(has_text="Start: every day at 07:10").wait_for()
         assert mine(scheduler) == [TASK + "0710"]
 
         page.get_by_test_id("back-home").click()
         page.get_by_test_id("daily-morning").filter(has_text="Every day at 7:10 AM").wait_for()
-        page.get_by_test_id("open-chore-morning").click()
+        page.get_by_test_id("open-flow-morning").click()
         on_the_flow_screen(page, "Morning report", 3)
         page.get_by_test_id("daily-change").click()
         page.get_by_test_id("daily-stop").click()
@@ -137,8 +137,8 @@ def test_a_time_set_on_the_first_box_shows_on_home_and_can_be_changed_and_stoppe
         assert mine(scheduler) == []
 
 
-def test_a_scheduler_that_refuses_is_explained_and_leaves_the_chore_as_it_was(tmp_path):
-    chores(tmp_path)
+def test_a_scheduler_that_refuses_is_explained_and_leaves_the_flow_as_it_was(tmp_path):
+    put_flows(tmp_path)
     scheduler = FakeScheduler()
 
     def refusing(args, **kwargs):
@@ -157,8 +157,8 @@ def test_a_scheduler_that_refuses_is_explained_and_leaves_the_chore_as_it_was(tm
         page.get_by_test_id("daily-morning").filter(has_text="Run every day").wait_for()
 
 
-def test_run_now_starts_a_chore_with_or_without_a_daily_time(tmp_path):
-    chores(tmp_path)
+def test_run_now_starts_a_flow_with_or_without_a_daily_time(tmp_path):
+    put_flows(tmp_path)
     with served(tmp_path) as (page, _, desktop):
         at_home(page)
         run_button(page, "morning").click()
@@ -173,25 +173,25 @@ def test_run_now_starts_a_chore_with_or_without_a_daily_time(tmp_path):
         assert [c.name for c in desktop.clicks] == ["Alpha", "Beta", "Alpha", "Beta"]
 
 
-def test_a_schedule_made_before_shows_on_its_chore_and_on_the_canvas_without_rewriting_it(tmp_path):
-    chores(tmp_path)
+def test_a_schedule_made_before_shows_on_its_flow_and_on_the_canvas_without_rewriting_it(tmp_path):
+    put_flows(tmp_path)
     scheduler = FakeScheduler()
-    # a task made by the old Schedules screen, which put no start box on the flow
+    # a task made by the old Schedules screen, which put no start node on the flow
     create_schedule("morning daily 0645", "morning", "paint.exe", "06:45", ["--user-db", str(tmp_path / "user.db")],
                     runner=scheduler)
     with served(tmp_path, scheduler=scheduler) as (page, _, _):
         page.get_by_test_id("daily-morning").filter(has_text="Every day at 6:45 AM").wait_for()
-        page.get_by_test_id("open-chore-morning").click()
+        page.get_by_test_id("open-flow-morning").click()
         on_the_flow_screen(page, "Morning report", 2)
         page.get_by_test_id("daily-add").filter(has_text="Every day at 06:45").wait_for()  # said, not drawn
-        assert start_box(page).count() == 0  # opening the chore never rewrote it
+        assert start_node(page).count() == 0  # opening the flow never rewrote it
 
 
 def test_the_daily_time_works_with_the_keyboard_alone(tmp_path):
-    chores(tmp_path)
+    put_flows(tmp_path)
     with served(tmp_path) as (page, scheduler, _):
         at_home(page)
-        page.get_by_test_id("chore-morning").wait_for()  # the heading is there while the list still loads
+        page.get_by_test_id("flow-morning").wait_for()  # the heading is there while the list still loads
         tab_to(page, "daily-morning")
         page.keyboard.press("Enter")
         assert page.evaluate(FOCUSED) == "daily-time-morning"  # the form opens with the time field ready
@@ -211,11 +211,11 @@ def test_the_daily_time_works_with_the_keyboard_alone(tmp_path):
         assert mine(scheduler) == []
 
 
-def test_the_first_box_daily_time_works_with_the_keyboard_alone(tmp_path):
-    chores(tmp_path)
+def test_the_first_node_daily_time_works_with_the_keyboard_alone(tmp_path):
+    put_flows(tmp_path)
     with served(tmp_path) as (page, scheduler, _):
         at_home(page)
-        page.get_by_test_id("open-chore-morning").click()
+        page.get_by_test_id("open-flow-morning").click()
         on_the_flow_screen(page, "Morning report", 2)
         tab_to(page, "daily-add")
         page.keyboard.press("Enter")
@@ -229,8 +229,8 @@ def test_the_first_box_daily_time_works_with_the_keyboard_alone(tmp_path):
 
 @pytest.mark.parametrize("width,height", [(1280, 800), (683, 384), (390, 740)])
 def test_the_daily_time_fits_a_narrow_window_and_stays_readable(tmp_path, width, height):
-    chores(tmp_path)
-    chore(tmp_path, "long-1", "Weekly-report-" + "x" * 80, "open-menu", "save-file")
+    put_flows(tmp_path)
+    put_flow(tmp_path, "long-1", "Weekly-report-" + "x" * 80, "open-menu", "save-file")
 
     def fine():
         assert page.evaluate(NO_SIDEWAYS_SCROLL)
@@ -250,25 +250,25 @@ def test_the_daily_time_fits_a_narrow_window_and_stays_readable(tmp_path, width,
         page.get_by_test_id("daily-long-1").click()
         fine()
         page.get_by_test_id("daily-cancel-long-1").click()
-        page.get_by_test_id("open-chore-morning").click()
+        page.get_by_test_id("open-flow-morning").click()
         on_the_flow_screen(page, "Morning report", 2)
         for test_id in ("daily-add",):
-            box = page.get_by_test_id(test_id).bounding_box()
-            assert box["x"] >= 0 and box["x"] + box["width"] <= width and box["height"] >= 44
+            rect = page.get_by_test_id(test_id).bounding_box()
+            assert rect["x"] >= 0 and rect["x"] + rect["width"] <= width and rect["height"] >= 44
         page.get_by_test_id("daily-add").click()
         page.get_by_test_id("daily-set").click()
         on_the_flow_screen(page, "Morning report", 3)
-        box = page.get_by_test_id("daily-change").bounding_box()  # drawn at the canvas zoom: its own height is checked
-        assert box["x"] >= 0 and box["x"] + box["width"] <= width
+        rect = page.get_by_test_id("daily-change").bounding_box()  # drawn at the canvas zoom: its own height is checked
+        assert rect["x"] >= 0 and rect["x"] + rect["width"] <= width
         assert page.get_by_test_id("daily-change").evaluate("(b) => b.offsetHeight") >= 44
         page.get_by_test_id("daily-change").click()
         assert page.evaluate(CONTRAST) == []
         for test_id in ("daily-time", "daily-set", "daily-stop", "daily-cancel"):
-            box = page.get_by_test_id(test_id).bounding_box()
-            assert box["x"] >= 0 and box["x"] + box["width"] <= width and box["height"] >= 44, test_id
+            rect = page.get_by_test_id(test_id).bounding_box()
+            assert rect["x"] >= 0 and rect["x"] + rect["width"] <= width and rect["height"] >= 44, test_id
 
 
-def test_a_template_chore_cannot_be_given_a_time_and_says_why(tmp_path):
+def test_a_template_flow_cannot_be_given_a_time_and_says_why(tmp_path):
     from workflow_factory import save_step
 
     from fake_desktop import step
@@ -282,21 +282,21 @@ def test_a_template_chore_cannot_be_given_a_time_and_says_why(tmp_path):
         assert mine(scheduler) == []
 
 
-def test_adding_and_removing_the_daily_box_on_the_canvas_sets_and_stops_the_windows_task(tmp_path):
-    chores(tmp_path)
+def test_adding_and_removing_the_daily_node_on_the_canvas_sets_and_stops_the_windows_task(tmp_path):
+    put_flows(tmp_path)
     with served(tmp_path) as (page, scheduler, _):
         at_home(page)
-        page.get_by_test_id("open-chore-morning").click()
+        page.get_by_test_id("open-flow-morning").click()
         on_the_flow_screen(page, "Morning report", 2)
 
-        page.get_by_text("Other boxes").click()
+        page.get_by_text("Other nodes").click()
         page.get_by_test_id("system-daily-trigger").click()  # 09:00, as the panel offers it
         page.get_by_test_id("run-status").filter(has_text="Saved").wait_for()
         assert mine(scheduler) == [TASK + "0900"]
-        start_box(page).filter(has_text="Start: every day at 09:00").wait_for()
+        start_node(page).filter(has_text="Start: every day at 09:00").wait_for()
         assert page.get_by_text("Not set up in Windows yet").count() == 0
 
-        start_box(page).click()
+        start_node(page).click()
         page.get_by_test_id("delete-node").click()
         page.get_by_test_id("run-status").filter(has_text="Saved").wait_for()
         assert mine(scheduler) == [] and FOREIGN in scheduler.tasks

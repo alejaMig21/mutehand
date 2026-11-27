@@ -41,7 +41,7 @@ def set_time(server, at, flow="morning"):
     return call(server, f"/api/flows/{flow}/daily", "PUT", {"at": at})
 
 
-def test_setting_a_time_makes_the_windows_task_and_the_first_box_together(served):
+def test_setting_a_time_makes_the_windows_task_and_the_first_node_together(served):
     server, scheduler, db = served
 
     code, body, _ = set_time(server, "07:30")
@@ -55,7 +55,7 @@ def test_setting_a_time_makes_the_windows_task_and_the_first_box_together(served
     assert call(server, "/api/flows/morning/daily")[1]["at"] == "07:30"
 
 
-def test_the_trigger_leads_to_the_first_box_whether_wires_are_stored_or_implied(served, tmp_path):
+def test_the_trigger_leads_to_the_first_node_whether_wires_are_stored_or_implied(served, tmp_path):
     server, _, db = served
     save_flow(db, Flow(id="wired", nodes=[Node("a", "open-menu"), Node("b", "save-file")], edges=[("a", "b")]), "Wired", "mspaint.exe")
 
@@ -68,7 +68,7 @@ def test_the_trigger_leads_to_the_first_box_whether_wires_are_stored_or_implied(
         assert (trigger.id, "a") in flow.all_edges and (trigger.id, "b") not in flow.all_edges
 
 
-def test_a_manual_start_box_becomes_the_daily_one_instead_of_a_second_start(served):
+def test_a_manual_start_node_becomes_the_daily_one_instead_of_a_second_start(served):
     server, _, db = served
     manual = Node("go", kind="trigger", fields={"mode": {"value": "manual"}})
     save_flow(db, Flow(id="morning", nodes=[manual, Node("a", "open-menu")]), "Morning report", "mspaint.exe")
@@ -79,7 +79,7 @@ def test_a_manual_start_box_becomes_the_daily_one_instead_of_a_second_start(serv
     assert [n.id for n in flow.nodes] == ["go", "a"] and [t.id for t in daily_triggers(flow)] == ["go"]
 
 
-def test_a_new_start_box_is_drawn_above_the_first_box_when_the_flow_has_places(served):
+def test_a_new_start_node_is_drawn_above_the_first_node_when_the_flow_has_places(served):
     server, _, db = served
     save_layout(db, "morning", {"a": {"x": 60, "y": 60}, "b": {"x": 60, "y": 220}})
 
@@ -276,7 +276,7 @@ def test_a_full_scheduler_refuses_before_anything_changes(served):
     assert code == 409 and "20" in body["error"] and TASK + "0730" not in scheduler.tasks
 
 
-# --- the canvas saves a flow whole: the same rule holds whichever box the person changed -------------------------------
+# --- the canvas saves a flow whole: the same rule holds whichever node the person changed -------------------------------
 
 
 def trigger_json(at="09:00", mode="daily"):
@@ -300,30 +300,30 @@ def refusing(scheduler, verb):
     return run
 
 
-def test_removing_the_daily_box_on_the_canvas_removes_the_windows_task(served):
+def test_removing_the_daily_node_on_the_canvas_removes_the_windows_task(served):
     server, scheduler, db = served
     set_time(server, "07:30")
-    box = call(server, "/api/flows/morning")[1]["nodes"]
+    stored = call(server, "/api/flows/morning")[1]["nodes"]
 
-    code, _, _ = canvas_save(server, [n for n in box if n["kind"] != "trigger"])
+    code, _, _ = canvas_save(server, [n for n in stored if n["kind"] != "trigger"])
 
     assert code == 200 and mine(scheduler) == [] and FOREIGN in scheduler.tasks
     assert daily_triggers(load_flow(db, None, "morning")) == []
 
 
-def test_a_task_that_cannot_be_removed_keeps_the_box_the_canvas_tried_to_remove(served):
+def test_a_task_that_cannot_be_removed_keeps_the_node_the_canvas_tried_to_remove(served):
     server, scheduler, db = served
     set_time(server, "07:30")
-    box = call(server, "/api/flows/morning")[1]["nodes"]
+    stored = call(server, "/api/flows/morning")[1]["nodes"]
     server.schedule_runner = refusing(scheduler, "/Delete")
 
-    code, body, _ = canvas_save(server, [n for n in box if n["kind"] != "trigger"])
+    code, body, _ = canvas_save(server, [n for n in stored if n["kind"] != "trigger"])
 
     assert code == 502 and "still runs every day" in body["error"]
     assert mine(scheduler) == [TASK + "0730"] and len(daily_triggers(load_flow(db, None, "morning"))) == 1
 
 
-def test_adding_a_daily_box_on_the_canvas_makes_the_windows_task(served):
+def test_adding_a_daily_node_on_the_canvas_makes_the_windows_task(served):
     server, scheduler, db = served
 
     code, _, _ = canvas_save(server, [trigger_json("09:00"), *STEPS])
@@ -332,11 +332,11 @@ def test_adding_a_daily_box_on_the_canvas_makes_the_windows_task(served):
     assert call(server, "/api/flows/morning/daily")[1] == {"at": "09:00", "node_at": "09:00"}
 
 
-def test_editing_the_time_of_the_daily_box_moves_the_windows_task_and_a_read_changes_nothing(served):
+def test_editing_the_time_of_the_daily_node_moves_the_windows_task_and_a_read_changes_nothing(served):
     server, scheduler, db = served
     set_time(server, "07:30")
-    box = call(server, "/api/flows/morning")[1]["nodes"]
-    changed = [{**n, "fields": {**n["fields"], "at": {"value": "08:45"}}} if n["kind"] == "trigger" else n for n in box]
+    stored = call(server, "/api/flows/morning")[1]["nodes"]
+    changed = [{**n, "fields": {**n["fields"], "at": {"value": "08:45"}}} if n["kind"] == "trigger" else n for n in stored]
 
     assert canvas_save(server, changed)[0] == 200
 
@@ -357,18 +357,18 @@ def test_a_scheduler_that_refuses_a_canvas_save_leaves_the_flow_as_it_was(served
     assert mine(scheduler) == [] and load_flow(db, None, "morning") == before
 
 
-def test_a_canvas_save_that_leaves_the_daily_box_alone_does_not_call_the_scheduler(served):
+def test_a_canvas_save_that_leaves_the_daily_node_alone_does_not_call_the_scheduler(served):
     server, scheduler, _ = served
     set_time(server, "07:30")
-    box = call(server, "/api/flows/morning")[1]["nodes"]
+    stored = call(server, "/api/flows/morning")[1]["nodes"]
     scheduler.calls.clear()
 
-    assert canvas_save(server, [*box, {"id": "c", "step": "save-file"}])[0] == 200
+    assert canvas_save(server, [*stored, {"id": "c", "step": "save-file"}])[0] == 200
 
     assert scheduler.calls == []
 
 
-def test_a_task_made_before_boxes_showed_it_is_left_when_the_canvas_saves_something_else(served):
+def test_a_task_made_before_nodes_showed_it_is_left_when_the_canvas_saves_something_else(served):
     server, scheduler, db = served
     call(server, "/api/schedules", "POST", {"flow": "morning", "app": "mspaint.exe", "at": "06:45"})
 

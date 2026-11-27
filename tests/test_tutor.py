@@ -67,10 +67,10 @@ def test_a_step_is_saved_as_soon_as_its_effect_is_measured(tmp_path):
 @pytest.mark.parametrize("action", ["type_value", "paste_text", "press_keys"])
 def test_teaching_a_step_that_writes_text_only_proves_the_control_and_acts_on_nothing(tmp_path, action):
     user_db = tmp_path / "user.db"
-    desktop = FakeDesktop(controls=[field("Name Box")])
-    desktop.fail_on = {"Name Box"}  # a real text box refuses a click without real input
+    desktop = FakeDesktop(controls=[field("Name field")])
+    desktop.fail_on = {"Name field"}  # a real text field refuses a click without real input
 
-    result = teach_step(user_db, desktop, name="write", locator=Locator("textfield", "Name Box"), action=action)
+    result = teach_step(user_db, desktop, name="write", locator=Locator("textfield", "Name field"), action=action)
 
     assert result == {"status": "saved", "step": "write", "effect": "no_change"}
     assert desktop.clicks == [] and desktop.typed == [] and desktop.pressed == []

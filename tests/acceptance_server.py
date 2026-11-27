@@ -39,7 +39,7 @@ def desktop_for(app):
     return FakeDesktop(controls=[button(a) for a in ACTIONS.get(app, [])], app=app, product_name=NAMES.get(app, ""))
 
 
-def chore(db, flow_id, title, app, *actions, run=True):
+def put_flow(db, flow_id, title, app, *actions, run=True):
     flow = Flow(id=flow_id, nodes=[Node(f"n{i}", a) for i, a in enumerate(actions, 1)])
     save_flow(db, flow, title, app)
     if run is not False:  # True: it works; a list of actions: the screen lacks them, so it stops there
@@ -51,11 +51,11 @@ def everyday(db, server):
     learn(db, "excel.exe", "Microsoft Excel", ["Open the sheet", "Update the totals", "Save", "Print"])
     learn(db, "winword.exe", "Microsoft Word", ["Open a letter", "Fill in the name", "Save as PDF"])
     learn(db, "notepad.exe", "Notepad", ["Open the shopping list", "Add a line"])
-    chore(db, "morning-report", "Morning report", "excel.exe", "Open the sheet", "Update the totals", "Save")
-    chore(db, "weekly-export", "Weekly export", "excel.exe", "Open the sheet", "Print", "Save", run=["Print"])
-    chore(db, "send-invoices", "Send the invoices", "winword.exe", "Open a letter", "Fill in the name", "Save as PDF", run=False)
-    chore(db, "monthly-numbers", "Monthly numbers", "excel.exe", "Open the sheet", "Update the totals")
-    chore(db, "shopping", "Shopping list", "notepad.exe", "Open the shopping list", "Add a line")
+    put_flow(db, "morning-report", "Morning report", "excel.exe", "Open the sheet", "Update the totals", "Save")
+    put_flow(db, "weekly-export", "Weekly export", "excel.exe", "Open the sheet", "Print", "Save", run=["Print"])
+    put_flow(db, "send-invoices", "Send the invoices", "winword.exe", "Open a letter", "Fill in the name", "Save as PDF", run=False)
+    put_flow(db, "monthly-numbers", "Monthly numbers", "excel.exe", "Open the sheet", "Update the totals")
+    put_flow(db, "shopping", "Shopping list", "notepad.exe", "Open the shopping list", "Add a line")
     grant_consent(db, "winword.exe", "Save as PDF", "click")  # one thing it may do without asking, to take back
     result = server._daily_change("morning-report", "07:30")
     assert result[0] == 200, result
@@ -89,11 +89,11 @@ def many_apps(db, server):
             f"{kind} {'Pro' if n >= len(KINDS) else 'Home'} {n // len(KINDS) + 1}",
             [f"{v}" for v in VERBS[: 6 + n % 9]],
         )
-    chore(db, "morning-report", "Morning report", "sheets01.exe", "Open a file", "Add a table", "Save")
-    chore(db, "send-letters", "Send the letters", "writer00.exe", "Open a file", "Find and replace", "Export as PDF")
-    chore(db, "photo-album", "Photo album", "photos02.exe", "Open a file", "Add a table", "Save", run=False)
-    chore(db, "weekly-backup", "Weekly backup", "mail03.exe", "Open a file", "Share it", "Save")
-    chore(db, "month-end", "Month end", "bank09.exe", "Open a file", "Print", "Save")
+    put_flow(db, "morning-report", "Morning report", "sheets01.exe", "Open a file", "Add a table", "Save")
+    put_flow(db, "send-letters", "Send the letters", "writer00.exe", "Open a file", "Find and replace", "Export as PDF")
+    put_flow(db, "photo-album", "Photo album", "photos02.exe", "Open a file", "Add a table", "Save", run=False)
+    put_flow(db, "weekly-backup", "Weekly backup", "mail03.exe", "Open a file", "Share it", "Save")
+    put_flow(db, "month-end", "Month end", "bank09.exe", "Open a file", "Print", "Save")
     reject_step(db, "bank09.exe", "Print")  # blocks Month end
     app = "notes04.exe"  # updated since it was learned: its actions must be learned again
     learn(db, app, NAMES[app], ACTIONS[app], version="0.9")

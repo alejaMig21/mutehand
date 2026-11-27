@@ -146,7 +146,7 @@ def test_listing_many_steps_does_not_open_the_database_once_per_step(tmp_path, m
         for path in ("/api/steps", "/api/apps/paint.exe"):
             opened.clear()
             status, listed, _ = call(server, path)
-            counts.append((status, len(listed if isinstance(listed, list) else listed["actions"]), len(opened) < 12))
+            counts.append((status, len(listed if isinstance(listed, list) else listed["steps"]), len(opened) < 12))
     finally:
         server.stop()
 

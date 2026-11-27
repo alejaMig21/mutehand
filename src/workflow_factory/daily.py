@@ -40,8 +40,8 @@ def tasks_by_flow(user_db: Path, runner) -> dict[str, list[dict]]:
 def with_daily(flow: Flow, at: str | None, positions: dict) -> tuple[Flow, dict]:
     """The flow with `at` as its daily time (None: without one) and the positions to store with it.
 
-    A daily start box gets that time; else a manual one becomes daily; else a new one is put first, leading to the boxes
-    nothing leads to. Removing a time removes every daily start box and its wires."""
+    A daily start node gets that time; else a manual one becomes daily; else a new one is put first, leading to the nodes
+    nothing leads to. Removing a time removes every daily start node and its wires."""
     triggers = [node for node in flow.nodes if _daily(node)]
     if at is None:
         gone = {node.id for node in triggers}

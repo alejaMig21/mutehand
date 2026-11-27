@@ -11,17 +11,17 @@ from fake_desktop import FakeDesktop, button, step
 
 HOLES = [
     {"hole": "open-chat", "role": "button", "control_name": "Open chat"},
-    {"hole": "compose", "role": "button", "control_name": "Message box"},
+    {"hole": "compose", "role": "button", "control_name": "Message field"},
     {"hole": "send", "role": "button", "control_name": "Send message", "sensitive": "outward_action"},
 ]
 
 
 def telegram():
-    return FakeDesktop(controls=[button("Open chat"), button("Message box"), button("Send message")], app="telegram.exe")
+    return FakeDesktop(controls=[button("Open chat"), button("Message field"), button("Send message")], app="telegram.exe")
 
 
 def whatsapp(**names):
-    """WhatsApp calls the compose box and the send button differently; the first control is called the same."""
+    """WhatsApp calls the compose node and the send button differently; the first control is called the same."""
     return FakeDesktop(controls=[button("Open chat"), button(names.get("compose", "Type a message")),
                                  button(names.get("send", "Send"))], app="whatsapp.exe")
 
@@ -67,7 +67,7 @@ def test_the_recipe_is_applied_to_a_second_app_by_teaching_only_the_controls_tha
 
 def test_a_hole_that_fails_on_the_new_app_leaves_a_doubt_that_names_it_and_stops_there(db):
     teach_telegram(db)
-    desktop = whatsapp()  # nobody told the recipe where the compose box is: the default control does not exist here
+    desktop = whatsapp()  # nobody told the recipe where the compose node is: the default control does not exist here
 
     result = apply_recipe(db, desktop, "send-message")
 
@@ -142,7 +142,7 @@ def test_recipes_are_listed_with_their_holes_and_saving_again_replaces_the_patte
 
     assert list_recipes(db) == [{"name": "send-message", "holes": [
         {"hole": "open-chat", "role": "button", "control_name": "Open chat", "automation_id": None, "action": "click", "sensitive": None},
-        {"hole": "compose", "role": "button", "control_name": "Message box", "automation_id": None, "action": "click", "sensitive": None},
+        {"hole": "compose", "role": "button", "control_name": "Message field", "automation_id": None, "action": "click", "sensitive": None},
     ]}]
 
 

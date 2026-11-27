@@ -1,4 +1,4 @@
-"""The canvas reads top to bottom and its boxes join by themselves (editor rethink, ticket 07). Opt-in: `pytest -m web`.
+"""The canvas reads top to bottom and its nodes join by themselves (editor rethink, ticket 07). Opt-in: `pytest -m web`.
 
 The built editor in a headless browser against the real API, with the stand-in desktop and Windows scheduler.
 """
@@ -43,7 +43,7 @@ def editor(tmp_path, desktop=None, size=(1280, 860), screen="editor"):
 
 
 def three_actions(tmp_path):
-    for name, control in (("open-menu", "Alpha"), ("save-file", "Beta"), ("close-box", "Gamma")):
+    for name, control in (("open-menu", "Alpha"), ("save-file", "Beta"), ("close-node", "Gamma")):
         save_step(tmp_path / "user.db", step(name, control))
     return tmp_path / "user.db"
 
@@ -64,8 +64,8 @@ def save(page):
 
 
 def middle(page, node_id):
-    box = node(page, node_id).bounding_box()
-    return box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    rect = node(page, node_id).bounding_box()
+    return rect["x"] + rect["width"] / 2, rect["y"] + rect["height"] / 2
 
 
 def lines(flow):
@@ -75,7 +75,7 @@ def lines(flow):
 BRANCHED = [
     Node("a", "open-menu"),
     Node("d", kind="if", fields={"condition": {"value": True}}, then="b", otherwise="c"),
-    Node("b", "save-file"), Node("c", "close-box"),
+    Node("b", "save-file"), Node("c", "close-node"),
     Node("r", kind="foreach", fields={"items": {"value": [1]}}, body="x"), Node("x", "open-menu"),
 ]
 WIRES = [("a", "d"), ("d", "b"), ("d", "c"), ("b", "r")]
@@ -93,7 +93,7 @@ def drawn_left_to_right(tmp_path):
     return db
 
 
-def test_a_flow_drawn_left_to_right_opens_top_to_bottom_and_keeps_every_box_and_line(tmp_path):
+def test_a_flow_drawn_left_to_right_opens_top_to_bottom_and_keeps_every_node_and_line(tmp_path):
     db = drawn_left_to_right(tmp_path)
     before = load_flow(db, None, "old")
     with editor(tmp_path) as page:
@@ -106,8 +106,8 @@ def test_a_flow_drawn_left_to_right_opens_top_to_bottom_and_keeps_every_box_and_
         assert middle(page, "b")[0] < middle(page, "d")[0] < middle(page, "c")[0]  # yes on the left, no on the right
         labels = page.locator(".react-flow__edge-text").all_text_contents()
         assert sorted(labels) == ["each item", "no", "yes"]
-        box = node(page, "a").bounding_box()
-        for kind, edge_y in (("target", box["y"]), ("source", box["y"] + box["height"])):
+        rect = node(page, "a").bounding_box()
+        for kind, edge_y in (("target", rect["y"]), ("source", rect["y"] + rect["height"])):
             handle = node(page, "a").locator(f".react-flow__handle.{kind}").bounding_box()
             assert abs(handle["y"] + handle["height"] / 2 - edge_y) < 4, kind
             assert abs(handle["x"] + handle["width"] / 2 - middle(page, "a")[0]) < 4, kind
@@ -128,7 +128,7 @@ def choose(page, node_id):
 
 
 def only(db):
-    """The one chore a test built: it is kept under the name it had when its first box was added."""
+    """The one flow a test built: it is kept under the name it had when its first node was added."""
     return next(f["id"] for f in flow_summaries(db, None))
 
 
@@ -141,7 +141,7 @@ def save_as(page, title="made"):
     save(page)
 
 
-def test_boxes_join_by_themselves_after_the_chosen_box_or_the_last_one(tmp_path):
+def test_nodes_join_by_themselves_after_the_chosen_node_or_the_last_one(tmp_path):
     db = three_actions(tmp_path)
     with editor(tmp_path) as page:
         add(page, "palette-open-menu", "palette-save-file")  # n1, n2: after the last one
@@ -149,7 +149,7 @@ def test_boxes_join_by_themselves_after_the_chosen_box_or_the_last_one(tmp_path)
         assert node(page, "n1").bounding_box()["y"] < node(page, "n2").bounding_box()["y"]
 
         choose(page, "n1")
-        add(page, "palette-close-box", "palette-open-menu")  # n3 goes between n1 and n2, then n4 after n3
+        add(page, "palette-close-node", "palette-open-menu")  # n3 goes between n1 and n2, then n4 after n3
         tops = [node(page, n).bounding_box()["y"] for n in ("n1", "n3", "n4", "n2")]
         assert tops == sorted(tops) and len(set(tops)) == 4
         save_as(page)
@@ -157,12 +157,12 @@ def test_boxes_join_by_themselves_after_the_chosen_box_or_the_last_one(tmp_path)
         assert stored_wires(db) == [("n1", "n3"), ("n3", "n4"), ("n4", "n2")]
 
 
-def test_the_two_paths_of_a_decision_are_labelled_and_filled_by_adding_boxes(tmp_path):
+def test_the_two_paths_of_a_decision_are_labelled_and_filled_by_adding_nodes(tmp_path):
     db = three_actions(tmp_path)
     with editor(tmp_path) as page:
         add(page, "palette-open-menu", "system-if", "palette-save-file")  # n3 takes the yes path
         choose(page, "n2")
-        add(page, "palette-close-box")  # n4 the no path
+        add(page, "palette-close-node")  # n4 the no path
 
         assert sorted(page.locator(".react-flow__edge-text").all_text_contents()) == ["no", "yes"]
         assert middle(page, "n3")[0] < middle(page, "n2")[0] < middle(page, "n4")[0]
@@ -176,7 +176,7 @@ def test_a_third_line_out_of_a_decision_is_refused_in_words(tmp_path):
     db = three_actions(tmp_path)
     save_flow(db, Flow(id="forked", edges=[("d", "b"), ("d", "c")], nodes=[
         Node("d", kind="if", fields={"condition": {"value": True}}, then="b", otherwise="c"),
-        Node("b", "save-file"), Node("c", "close-box"), Node("e", "open-menu")]))
+        Node("b", "save-file"), Node("c", "close-node"), Node("e", "open-menu")]))
     with editor(tmp_path) as page:
         open_flow(page, "forked", "e")
         node(page, "d").press("Space")
@@ -186,12 +186,12 @@ def test_a_third_line_out_of_a_decision_is_refused_in_words(tmp_path):
         assert page.locator(".react-flow__edge").count() == 2
 
 
-def test_a_repeat_takes_the_next_action_and_a_start_box_leads_to_the_first_one(tmp_path):
+def test_a_repeat_takes_the_next_action_and_a_start_node_leads_to_the_first_one(tmp_path):
     db = three_actions(tmp_path)
     with editor(tmp_path) as page:
         add(page, "system-foreach", "palette-open-menu", "palette-save-file")  # n2 is repeated, n3 follows
-        page.get_by_text("Other boxes").click()
-        add(page, "system-manual-trigger")  # n4 goes above the first box
+        page.get_by_text("Other nodes").click()
+        add(page, "system-manual-trigger")  # n4 goes above the first node
         assert page.get_by_test_id("unwired").count() == 0
         assert node(page, "n4").bounding_box()["y"] < node(page, "n1").bounding_box()["y"]
         save_as(page)
@@ -200,14 +200,14 @@ def test_a_repeat_takes_the_next_action_and_a_start_box_leads_to_the_first_one(t
         assert flow.nodes[0].body == "n2" and sorted(flow.edges) == [("n1", "n3"), ("n4", "n1")]
 
 
-def test_a_recipe_joins_after_the_last_box_as_a_chain(tmp_path):
+def test_a_recipe_joins_after_the_last_node_as_a_chain(tmp_path):
     from workflow_factory.recipes import apply_recipe, save_recipe
 
     db = three_actions(tmp_path)
     save_recipe(db, "two-presses", [{"hole": name, "role": "button", "control_name": name} for name in ("Alpha", "Beta")])
     apply_recipe(db, FakeDesktop(controls=[button("Alpha"), button("Beta")]), "two-presses")
     with editor(tmp_path) as page:
-        add(page, "palette-close-box", "recipe-two-presses")
+        add(page, "palette-close-node", "recipe-two-presses")
         node(page, "n3").wait_for()
         assert page.get_by_test_id("unwired").count() == 0
         save_as(page)
@@ -216,11 +216,11 @@ def test_a_recipe_joins_after_the_last_box_as_a_chain(tmp_path):
 
 
 def panel(page):
-    return page.get_by_role("complementary", name="Add a box")
+    return page.get_by_role("complementary", name="Add a node")
 
 
 def offered(page):
-    return panel(page).get_by_role("list", name="Actions").get_by_role("button").all_inner_texts()
+    return panel(page).get_by_role("list", name="Steps").get_by_role("button").all_inner_texts()
 
 
 def test_the_panel_offers_only_the_chosen_apps_actions_and_finds_them_by_plain_words(tmp_path):
@@ -228,15 +228,15 @@ def test_the_panel_offers_only_the_chosen_apps_actions_and_finds_them_by_plain_w
     save_step(db, step("write-text", "Alpha", app="word.exe"))
     with editor(tmp_path) as page:
         page.get_by_test_id("palette-open-menu").wait_for()
-        assert panel(page).get_by_role("heading", name="Add a box").is_visible()
-        assert offered(page) == ["close-box", "open-menu", "save-file"]
+        assert panel(page).get_by_role("heading", name="Add a node").is_visible()
+        assert offered(page) == ["close-node", "open-menu", "save-file"]
 
         page.get_by_test_id("app-name").select_option("word.exe")
         page.get_by_test_id("palette-write-text").wait_for()
         assert offered(page) == ["write-text"]
 
         page.get_by_test_id("app-name").select_option("paint.exe")
-        find = page.get_by_role("searchbox", name="Find an action")
+        find = page.get_by_role("searchbox", name="Find a step")
         find.fill("file save")  # plain words, in any order
         page.get_by_test_id("palette-open-menu").wait_for(state="detached")
         assert offered(page) == ["save-file"]
@@ -244,7 +244,7 @@ def test_the_panel_offers_only_the_chosen_apps_actions_and_finds_them_by_plain_w
         panel(page).get_by_text("Nothing matches").wait_for()
 
 
-def test_decisions_repeats_and_waits_are_in_plain_words_and_every_other_box_and_recipe_is_still_there(tmp_path):
+def test_decisions_repeats_and_waits_are_in_plain_words_and_every_other_node_and_recipe_is_still_there(tmp_path):
     from workflow_factory.recipes import save_recipe
 
     db = three_actions(tmp_path)
@@ -257,7 +257,7 @@ def test_decisions_repeats_and_waits_are_in_plain_words_and_every_other_box_and_
         assert page.get_by_test_id("recipe-two-presses").is_visible()
         assert not page.get_by_test_id("system-compare").is_visible()  # kept under its own heading, closed at first
 
-        page.get_by_text("Other boxes").click()
+        page.get_by_text("Other nodes").click()
         for key in ("manual-trigger", "daily-trigger", "join", "stop", "compare", "and", "or", "not", "fixed", "convert",
                     "split", "join-text", "format", "regex", "get", "set", "math"):
             assert page.get_by_test_id(f"system-{key}").is_visible(), key
@@ -266,7 +266,7 @@ def test_decisions_repeats_and_waits_are_in_plain_words_and_every_other_box_and_
         assert "Two paths: yes or no" in page.get_by_test_id("node-n1").inner_text()
 
 
-def test_a_search_opens_the_other_boxes_that_match(tmp_path):
+def test_a_search_opens_the_other_nodes_that_match(tmp_path):
     three_actions(tmp_path)
     with editor(tmp_path) as page:
         page.get_by_test_id("search").fill("compare")
@@ -287,16 +287,16 @@ def says(page, node_id, words):
 
 def three_in_a_row(tmp_path):
     db = three_actions(tmp_path)
-    save_flow(db, Flow(id="row", nodes=[Node("a", "open-menu"), Node("b", "save-file"), Node("c", "close-box")],
+    save_flow(db, Flow(id="row", nodes=[Node("a", "open-menu"), Node("b", "save-file"), Node("c", "close-node")],
                        edges=[("a", "b"), ("b", "c")]))
     return db
 
 
-def test_the_boxes_of_a_stopped_run_say_done_stopped_here_and_not_reached(tmp_path):
+def test_the_nodes_of_a_stopped_run_say_done_stopped_here_and_not_reached(tmp_path):
     three_in_a_row(tmp_path)
     with editor(tmp_path, FakeDesktop(controls=[button("Alpha"), button("Gamma")])) as page:  # Beta is not on screen
         open_flow(page, "row", "c")
-        for node_id, title in (("a", "1. open-menu"), ("b", "2. save-file"), ("c", "3. close-box")):
+        for node_id, title in (("a", "1. open-menu"), ("b", "2. save-file"), ("c", "3. close-node")):
             assert title in card(page, node_id).inner_text()
         assert "Not reached" not in card(page, "c").inner_text()  # nothing ran yet
 
@@ -309,7 +309,7 @@ def test_the_boxes_of_a_stopped_run_say_done_stopped_here_and_not_reached(tmp_pa
         assert [e.get_attribute("data-id") for e in green.all()] == ["a-b"]  # the line it went down
 
 
-def test_the_running_box_says_so_and_after_stop_nothing_is_left_running(tmp_path):
+def test_the_running_node_says_so_and_after_stop_nothing_is_left_running(tmp_path):
     three_in_a_row(tmp_path)
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta"), button("Gamma")])
     desktop.click_seconds = 1.5
@@ -330,7 +330,7 @@ def test_the_path_not_taken_is_not_reached(tmp_path):
     db = three_actions(tmp_path)
     save_flow(db, Flow(id="forked", edges=[("d", "b"), ("d", "c")], nodes=[
         Node("d", kind="if", fields={"condition": {"value": True}}, then="b", otherwise="c"),
-        Node("b", "save-file"), Node("c", "close-box")]))
+        Node("b", "save-file"), Node("c", "close-node")]))
     with editor(tmp_path) as page:
         open_flow(page, "forked", "c")
         page.get_by_test_id("run").click()
@@ -365,7 +365,7 @@ def test_a_missing_action_offers_the_message_to_send_in_a_chat_and_nothing_is_st
 
         page.get_by_test_id("search").fill("archive a chat")
         teach.press("Enter")
-        message = "I want to teach you a new action in Zzqx: archive a chat"
+        message = "I want to teach you a new step in Zzqx: archive a chat"
         assert page.get_by_test_id("chat-text").inner_text() == message
         assert "chat" in page.get_by_test_id("chat-message").inner_text().lower() and teach.get_attribute("aria-expanded") == "true"
 
@@ -377,7 +377,7 @@ def test_a_missing_action_offers_the_message_to_send_in_a_chat_and_nothing_is_st
         assert "Alice" not in page.get_by_test_id("chat-message").inner_text()
 
         page.get_by_test_id("search").fill("")
-        assert page.get_by_test_id("chat-text").inner_text() == "I want to teach you a new action in Zzqx: [what you want done]"
+        assert page.get_by_test_id("chat-text").inner_text() == "I want to teach you a new step in Zzqx: [what you want done]"
         assert page.get_by_text("Copied. Paste it in the chat.").count() == 0  # that was another message
 
         page.evaluate("() => { window.refuseCopy = true }")
@@ -390,14 +390,14 @@ def test_a_missing_action_offers_the_message_to_send_in_a_chat_and_nothing_is_st
 
 
 def test_with_nothing_learned_the_panel_still_says_how_to_teach(tmp_path):
-    save_flow(tmp_path / "user.db", Flow(id="old", nodes=[Node("a", "open-menu")]))  # a chore whose action is not known here
+    save_flow(tmp_path / "user.db", Flow(id="old", nodes=[Node("a", "open-menu")]))  # a flow whose action is not known here
     with editor(tmp_path, screen=None) as page:
-        page.get_by_test_id("open-chore-old").click()
+        page.get_by_test_id("open-flow-old").click()
         panel(page).get_by_text("Nothing learned yet.").wait_for()
         page.get_by_role("button", name="It is not here: teach it").click()
 
         words = page.get_by_test_id("chat-text").inner_text()
-        assert words == "I want to teach you a chore: [what you want done, and in which program]"
+        assert words == "I want to teach you a flow: [what you want done, and in which program]"
 
 
 VIEW = "() => document.querySelector('.react-flow__viewport').style.transform"
@@ -418,9 +418,9 @@ def test_the_zoom_buttons_work_from_the_keyboard_and_show_everything_again(tmp_p
         page.wait_for_timeout(500)
 
         assert page.evaluate(VIEW) == fitted
-        canvas = page.get_by_role("region", name="Boxes of this chore").bounding_box()
-        for box in (n.bounding_box() for n in page.locator(".react-flow__node").all()):
-            assert canvas["y"] <= box["y"] and box["y"] + box["height"] <= canvas["y"] + canvas["height"]
+        canvas = page.get_by_role("region", name="Nodes of this flow").bounding_box()
+        for rect in (n.bounding_box() for n in page.locator(".react-flow__node").all()):
+            assert canvas["y"] <= rect["y"] and rect["y"] + rect["height"] <= canvas["y"] + canvas["height"]
 
 
 LONG = "Quill Ledger Professional Accounting Workbench for Teams and Families"
@@ -443,7 +443,7 @@ def test_in_a_narrow_window_everything_added_fits_is_readable_and_works_from_the
         entry = page.get_by_test_id(f"palette-{long_step}")
         entry.press("Enter")
         node(page, "n1").wait_for()
-        page.get_by_text("Other boxes").press("Enter")
+        page.get_by_text("Other nodes").press("Enter")
         page.get_by_test_id("system-join").press("Enter")
         node(page, "n2").wait_for()
         page.get_by_role("button", name="It is not here: teach it").press("Enter")
@@ -452,14 +452,14 @@ def test_in_a_narrow_window_everything_added_fits_is_readable_and_works_from_the
         for name in ("Zoom in", "Zoom out", "Show everything"):
             page.get_by_role("button", name=name).press("Enter")
 
-        canvas = page.get_by_role("region", name="Boxes of this chore").bounding_box()
+        canvas = page.get_by_role("region", name="Nodes of this flow").bounding_box()
         column = panel(page).bounding_box()
         assert column["y"] >= canvas["y"] + canvas["height"] - 1, "the panel goes under the canvas"
         assert canvas["height"] >= 220 and canvas["width"] >= width - 20
         for part in panel(page).locator("button, select, input, summary, [data-testid=chat-text]").all():
             if part.is_visible():
-                box = part.bounding_box()
-                assert box["x"] >= 0 and box["x"] + box["width"] <= width, part
+                rect = part.bounding_box()
+                assert rect["x"] >= 0 and rect["x"] + rect["width"] <= width, part
         assert page.evaluate("() => [document.documentElement, document.querySelector('main'), "
                              "document.querySelector('.search-panel')].every((e) => e.scrollWidth <= e.clientWidth)")
         assert page.evaluate(CONTRAST) == [] and page.evaluate(SMALL) == []
@@ -471,32 +471,32 @@ def test_the_panel_and_zoom_buttons_are_large_enough_and_readable_in_a_wide_wind
     three_actions(tmp_path)
     with editor(tmp_path) as page:
         page.get_by_test_id("palette-open-menu").wait_for()
-        page.get_by_text("Other boxes").click()
+        page.get_by_text("Other nodes").click()
         page.get_by_role("button", name="It is not here: teach it").click()
 
         assert page.evaluate(CONTRAST) == [] and page.evaluate(SMALL) == []
-        canvas = page.get_by_role("region", name="Boxes of this chore").bounding_box()
+        canvas = page.get_by_role("region", name="Nodes of this flow").bounding_box()
         assert panel(page).bounding_box()["x"] >= canvas["x"] + canvas["width"] - 1  # beside the canvas, over none of it
 
 
-def test_every_box_stays_in_sight_while_the_flow_runs_and_where_it_stopped(tmp_path):
+def test_every_node_stays_in_sight_while_the_flow_runs_and_where_it_stopped(tmp_path):
     db = three_actions(tmp_path)
-    boxes = [Node(f"b{i}", "open-menu") for i in range(4)] + [Node("last", "save-file")]
-    save_flow(db, Flow(id="tall", nodes=boxes, edges=[(a.id, b.id) for a, b in pairwise(boxes)]))
+    nodes = [Node(f"b{i}", "open-menu") for i in range(4)] + [Node("last", "save-file")]
+    save_flow(db, Flow(id="tall", nodes=nodes, edges=[(a.id, b.id) for a, b in pairwise(nodes)]))
     with editor(tmp_path, FakeDesktop(controls=[button("Alpha")]), size=(1280, 800)) as page:
         open_flow(page, "tall", "last")
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-outcome").wait_for()
         page.wait_for_timeout(800)  # the canvas has made room for what the run shows
 
-        canvas = page.get_by_role("region", name="Boxes of this chore").bounding_box()
+        canvas = page.get_by_role("region", name="Nodes of this flow").bounding_box()
         notices = page.locator(".notices").bounding_box()
-        for box in (n.bounding_box() for n in page.locator(".react-flow__node").all()):
-            assert notices["y"] + notices["height"] <= box["y"], "no notice lies over a box"
-            assert box["y"] + box["height"] <= canvas["y"] + canvas["height"], "no box is under the run log"
+        for rect in (n.bounding_box() for n in page.locator(".react-flow__node").all()):
+            assert notices["y"] + notices["height"] <= rect["y"], "no notice lies over a node"
+            assert rect["y"] + rect["height"] <= canvas["y"] + canvas["height"], "no node is under the run log"
 
 
-def test_a_run_that_ends_while_another_screen_is_open_leaves_every_box_in_sight(tmp_path):
+def test_a_run_that_ends_while_another_screen_is_open_leaves_every_node_in_sight(tmp_path):
     three_in_a_row(tmp_path)
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta"), button("Gamma")])
     desktop.click_seconds = 0.5
@@ -506,30 +506,30 @@ def test_a_run_that_ends_while_another_screen_is_open_leaves_every_box_in_sight(
         page.get_by_test_id("tab-apps").click()
         page.wait_for_timeout(2_500)  # the run ends while the canvas is not on screen
         page.get_by_test_id("tab-home").click()
-        page.get_by_test_id("open-chore-row").click()
+        page.get_by_test_id("open-flow-row").click()
         page.get_by_test_id("run-status").filter(has_text="Finished").wait_for()
         page.wait_for_timeout(800)
 
-        canvas = page.get_by_role("region", name="Boxes of this chore").bounding_box()
-        for box in (n.bounding_box() for n in page.locator(".react-flow__node").all()):
-            assert box["width"] > 150 and canvas["x"] <= box["x"] and box["x"] + box["width"] <= canvas["x"] + canvas["width"]
-            assert canvas["y"] <= box["y"] and box["y"] + box["height"] <= canvas["y"] + canvas["height"]
+        canvas = page.get_by_role("region", name="Nodes of this flow").bounding_box()
+        for rect in (n.bounding_box() for n in page.locator(".react-flow__node").all()):
+            assert rect["width"] > 150 and canvas["x"] <= rect["x"] and rect["x"] + rect["width"] <= canvas["x"] + canvas["width"]
+            assert canvas["y"] <= rect["y"] and rect["y"] + rect["height"] <= canvas["y"] + canvas["height"]
 
 
-def test_in_a_narrow_window_what_can_be_done_with_the_chosen_box_covers_no_box(tmp_path):
+def test_in_a_narrow_window_what_can_be_done_with_the_chosen_node_covers_no_node(tmp_path):
     three_in_a_row(tmp_path)
     with editor(tmp_path, size=(390, 740)) as page:
         open_flow(page, "row", "c")
         choose(page, "a")
-        chosen = page.get_by_role("region", name="About the chosen box").bounding_box()
-        canvas = page.get_by_role("region", name="Boxes of this chore").bounding_box()
+        chosen = page.get_by_role("region", name="About the chosen node").bounding_box()
+        canvas = page.get_by_role("region", name="Nodes of this flow").bounding_box()
 
         assert chosen["y"] >= canvas["y"] + canvas["height"] - 1
         assert chosen["y"] + chosen["height"] <= panel(page).bounding_box()["y"] + 1
         assert chosen["x"] >= 0 and chosen["x"] + chosen["width"] <= 390
 
 
-def test_where_the_person_puts_a_box_is_kept_after_a_reload(tmp_path):
+def test_where_the_person_puts_a_node_is_kept_after_a_reload(tmp_path):
     db = three_actions(tmp_path)
     save_flow(db, Flow(id="two", nodes=[Node("a", "open-menu"), Node("b", "save-file")]))
     with editor(tmp_path) as page:

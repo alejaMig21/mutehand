@@ -8,34 +8,34 @@ import { sentenceOf, workedWords } from './sentences.js'
 import { stoppedWords } from './stopped.js'
 import { reasonWords, runWords } from './words.js'
 
-// What a box asks before a test: the ones that move the mouse or press keys. A data box and a read touch no control.
+// What a node asks before a test: the ones that move the mouse or press keys. A data node and a read touch no control.
 const touchesTheScreen = (node, meta) => (!node.kind || node.kind === 'step') && meta?.action !== 'read_value'
 const testable = (node) => node.kind === 'data' || !node.kind || node.kind === 'step'
-// Settings exist for a step (failure setting, inputs), a data box and any box with a field of its own.
+// Settings exist for a step (failure setting, inputs), a data node and any node with a field of its own.
 const hasSettings = (node, meta) => !node.kind || node.kind === 'step' || node.kind === 'data' || fieldsOf(node, meta).length > 0
 
-// Under the canvas, always, so that choosing a box never moves the canvas: what the chosen box does, how often it has worked,
-// and what can be done with it. Keyed by the box, so a test result never outlives the choice. The wires stay reachable here
+// Under the canvas, always, so that choosing a node never moves the canvas: what the chosen node does, how often it has worked,
+// and what can be done with it. Keyed by the node, so a test result never outlives the choice. The wires stay reachable here
 // without a mouse.
 export default function ExplanationStrip(props) {
   const { node } = props
   if (!node) {
     return (
-      <section className="strip" aria-label="About the chosen box" data-testid="strip">
-        <p className="strip-says">Choose a box to see what it does.</p>
+      <section className="strip" aria-label="About the chosen node" data-testid="strip">
+        <p className="strip-says">Choose a node to see what it does.</p>
       </section>
     )
   }
-  return <ChosenBox key={node.id} {...props} />
+  return <ChosenNode key={node.id} {...props} />
 }
 
-function ChosenBox({ node, meta, nodes, edges, appName, context, ensureSaved, onTested, onConnect, onDisconnect,
+function ChosenNode({ node: canvasNode, meta, nodes, edges, appName, context, ensureSaved, onTested, onConnect, onDisconnect,
   onSettings, onRemove, stopped, onTry, onChanged, trying }) {
   const [asking, setAsking] = useState(false)
   const [test, setTest] = useState({ state: 'idle' })
-  const box = node.data.node
-  const [before, name, after] = sentenceOf(box, meta, appName)
-  const worked = !box.kind || box.kind === 'step' ? workedWords(meta) : ''
+  const node = canvasNode.data.node
+  const [before, name, after] = sentenceOf(node, meta, appName)
+  const worked = !node.kind || node.kind === 'step' ? workedWords(meta) : ''
 
   const out = edges.filter((e) => e.source === node.id)
   const nameOf = (id) => {
@@ -50,7 +50,7 @@ function ChosenBox({ node, meta, nodes, edges, appName, context, ensureSaved, on
     try {
       const values = JSON.parse(context || '{}')
       const flowId = await ensureSaved() // a flow never saved before gets its identifier here
-      const { run_id } = await api(`/api/flows/${encode(flowId)}/nodes/${box.id}/test`, { method: 'POST', body: { app: appName, context: values } })
+      const { run_id } = await api(`/api/flows/${encode(flowId)}/nodes/${node.id}/test`, { method: 'POST', body: { app: appName, context: values } })
       for (;;) {
         const view = await api(`/api/runs/${run_id}`).catch((e) => {
           if (e.status) throw e
@@ -70,8 +70,8 @@ function ChosenBox({ node, meta, nodes, edges, appName, context, ensureSaved, on
   }
 
   return (
-    <section className="strip" aria-label="About the chosen box" data-testid="strip">
-      <h2>{titleOf(box)}</h2>
+    <section className="strip" aria-label="About the chosen node" data-testid="strip">
+      <h2>{titleOf(node)}</h2>
       <p className="strip-says" data-testid="strip-says">
         {before}{name && <strong>{name}</strong>}{after}
         {worked && <> <span data-testid="strip-worked">{worked}</span></>}
@@ -81,16 +81,16 @@ function ChosenBox({ node, meta, nodes, edges, appName, context, ensureSaved, on
           <Icon name="alert" size={18} /> <span><b>Stopped here.</b> {reasonWords(stopped.reason)} <span className="muted">{stoppedWords(stopped).hint}</span></span>
         </p>
       )}
-      <div className="strip-actions">
+      <div className="strip-buttons">
         {stopped && <StoppedActions item={stopped} prefix="strip" onTry={onTry} onChanged={onChanged} trying={trying} />}
-        {testable(box) && (
+        {testable(node) && (
           <button className="primary" data-testid="test-node" disabled={test.state === 'running' || asking}
-            onClick={() => (touchesTheScreen(box, meta) ? setAsking(true) : runTest())}>
-            <Icon name="flask" size={15} /> Test this box
+            onClick={() => (touchesTheScreen(node, meta) ? setAsking(true) : runTest())}>
+            <Icon name="flask" size={15} /> Test this node
           </button>
         )}
-        {hasSettings(box, meta) && <button data-testid="open-detail" onClick={onSettings}>Settings</button>}
-        <button className="quiet-danger" data-testid="delete-node" onClick={onRemove}><Icon name="trash" size={15} /> Remove box</button>
+        {hasSettings(node, meta) && <button data-testid="open-detail" onClick={onSettings}>Settings</button>}
+        <button className="quiet-danger" data-testid="delete-node" onClick={onRemove}><Icon name="trash" size={15} /> Remove node</button>
         <span className="test-result" role="status" data-testid="test-result">
           {test.state === 'running' && (test.lost ? 'Testing… the editor cannot reach the server, still trying.' : 'Testing…')}
           {test.state === 'ok' && 'Test finished'}

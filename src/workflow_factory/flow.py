@@ -255,7 +255,7 @@ class Flow:
 
     @property
     def resume_key(self) -> str:
-        """What a checkpoint is matched with: the flow without its start boxes. Giving a flow a daily time, or taking it
+        """What a checkpoint is matched with: the flow without its start nodes. Giving a flow a daily time, or taking it
         away, must not make a stopped flow start over and do again what it already did."""
         starts = {node.id for node in self.nodes if node.kind == "trigger"}
         if not starts:
@@ -863,7 +863,7 @@ def rejected_steps(flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path
 
 
 def _named(node: Node) -> dict:
-    """What the history keeps to say which box this was: node ids are reused when a flow is rebuilt."""
+    """What the history keeps to say which node this was: node ids are reused when a flow is rebuilt."""
     return {"step": node.step or None, "kind": node.kind, "op": node.op}
 
 

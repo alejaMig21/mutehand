@@ -19,7 +19,7 @@ WEEKLY = Flow(id="weekly", nodes=[Node("n1", "open-menu"), Node("n2", "close-mes
 
 
 class Setup:
-    """A data file with one chore that stops at its second box: Paint does not show the button."""
+    """A data file with one flow that stops at its second node: Paint does not show the button."""
 
     def __init__(self, tmp_path, effect="", app="paint.exe"):
         self.db = tmp_path / "user.db"
@@ -60,13 +60,13 @@ def test_nothing_is_listed_while_nothing_has_stopped(setup):
     assert setup.attention() == []
 
 
-def test_a_stopped_flow_is_listed_with_its_title_box_and_reason(setup):
+def test_a_stopped_flow_is_listed_with_its_title_node_and_reason(setup):
     setup.stop_the_flow()
 
     [item] = setup.attention()
 
     assert item["kind"] == "stopped" and item["flow"] == "weekly" and item["title"] == "Weekly export"
-    assert item["node"] == "n2" and item["box"] == "close-message" and item["reason"] == "control_not_found"
+    assert item["node"] == "n2" and item["step"] == "close-message" and item["reason"] == "control_not_found"
     assert item["doubt"] == 1 and item["note"] is None and item["rejected_by_person"] == []
 
 
@@ -78,7 +78,7 @@ def test_the_list_says_when_the_flow_stopped(setup):
     assert item["at"].startswith("2026-01-01T")  # when the stopped run ended
 
 
-def test_a_flow_with_two_open_doubts_is_one_item_and_a_tested_box_is_none(setup):
+def test_a_flow_with_two_open_doubts_is_one_item_and_a_tested_node_is_none(setup):
     save_step(setup.db, step("third", "Gamma"))
     save_flow(setup.db, Flow(id="weekly", nodes=[Node("n1", "open-menu"), Node("n2", "close-message"), Node("n3", "third")],
                              edges=[("n1", "n2"), ("n1", "n3")]))
@@ -115,7 +115,7 @@ def test_a_private_apps_rejected_actions_are_sent_as_handles_that_still_allow_th
         made.server.stop()
 
 
-def test_a_private_apps_box_is_not_named(tmp_path):
+def test_a_private_apps_node_is_not_named(tmp_path):
     made = Setup(tmp_path, app="vault.exe")
     try:
         mark_private(made.db, "vault.exe")
@@ -123,7 +123,7 @@ def test_a_private_apps_box_is_not_named(tmp_path):
 
         [item] = made.attention()
 
-        assert item["box"] is None and item["private"] is True
+        assert item["step"] is None and item["private"] is True
         assert "close-message" not in json.dumps(item) and "Beta" not in json.dumps(item)
     finally:
         made.server.stop()
@@ -140,7 +140,7 @@ def test_trying_again_closes_the_doubt_as_tried_again_and_resumes_from_where_it_
     view = setup.finished(started["run_id"])
 
     assert code == 202 and view["status"] == "finished"
-    assert [c.name for c in setup.desktop.clicks[before:]] == ["Beta"]  # the first box was not done twice
+    assert [c.name for c in setup.desktop.clicks[before:]] == ["Beta"]  # the first node was not done twice
     [doubt] = list_doubts(setup.db)
     assert (doubt.status, doubt.closed_as) == ("answered", "tried_again")
     assert setup.attention() == []
@@ -161,7 +161,7 @@ def state_of(db, name):
     return step_report(db, next(s for s in list_steps(db, None) if s.name == name))["state"]
 
 
-def test_trying_again_lifts_a_rejection_a_failed_check_made_and_does_the_box_again(tmp_path):
+def test_trying_again_lifts_a_rejection_a_failed_check_made_and_does_the_node_again(tmp_path):
     made = Setup(tmp_path, effect="closed_dialog")  # taught to close a dialog, but now it reveals something
     try:
         made.desktop._reveals[("button", "Beta")] = [button("New")]
@@ -238,11 +238,11 @@ def test_a_run_that_is_recorded_as_stopped_is_not_a_card_without_a_doubt(setup):
     assert setup.attention() == []
 
 
-def test_a_run_that_resumes_shows_the_boxes_done_before_as_done(setup):
+def test_a_run_that_resumes_shows_the_nodes_done_before_as_done(setup):
     setup.stop_the_flow()
     setup.desktop._controls.append(button("Beta"))
 
     _, started, _ = setup.try_again()
     view = setup.finished(started["run_id"])
 
-    assert view["nodes"] == {"n1": "done", "n2": "done"}  # the first box was done by the run that stopped
+    assert view["nodes"] == {"n1": "done", "n2": "done"}  # the first node was done by the run that stopped

@@ -1,4 +1,4 @@
-"""A chore's "More": rename it, delete it with an undo, read its history. Driven in the built editor. Opt-in: `pytest -m web`."""
+"""A flow's "More": rename it, delete it with an undo, read its history. Driven in the built editor. Opt-in: `pytest -m web`."""
 
 import re
 import sqlite3
@@ -8,7 +8,7 @@ import pytest
 from fake_scheduler import FOREIGN, FakeScheduler
 from test_editor_e2e import DIST, open_page
 from test_editor_safety_e2e import CONTRAST
-from test_home_e2e import BUTTONS, NO_SIDEWAYS_SCROLL, chore, chores, row, run_button, says
+from test_home_e2e import BUTTONS, NO_SIDEWAYS_SCROLL, put_flow, put_flows, row, run_button, says
 
 from workflow_factory import Flow, Node, run_flow, save_flow, save_step
 from workflow_factory.api import ApiServer
@@ -57,7 +57,7 @@ def ours(scheduler):
 
 
 def test_more_opens_and_closes_from_the_keyboard_and_the_focus_returns(tmp_path):
-    chores(tmp_path)
+    put_flows(tmp_path)
     with served(tmp_path) as (page, _, _):
         says(page, "morning", "Never run")
         page.get_by_test_id("more-morning").focus()
@@ -74,7 +74,7 @@ def test_more_opens_and_closes_from_the_keyboard_and_the_focus_returns(tmp_path)
 
 def test_renaming_by_keyboard_changes_the_title_only(tmp_path):
     db = tmp_path / "user.db"
-    morning = chores(tmp_path)
+    morning = put_flows(tmp_path)
     run_flow(morning, FakeDesktop(controls=[button("Alpha"), button("Beta")]), db)
     save_checkpoint(db, "morning", {"done": []}, "definition")
     with served(tmp_path) as (page, _, scheduler):
@@ -97,7 +97,7 @@ def test_renaming_by_keyboard_changes_the_title_only(tmp_path):
 
 
 def test_a_name_that_cannot_be_kept_is_said_in_words_and_escape_leaves_the_old_one(tmp_path):
-    chores(tmp_path)
+    put_flows(tmp_path)
     with served(tmp_path) as (page, _, _):
         more(page, "morning")
         page.get_by_test_id("more-rename-morning").click()
@@ -112,8 +112,8 @@ def test_a_name_that_cannot_be_kept_is_said_in_words_and_escape_leaves_the_old_o
         assert "Morning report" in row(page, "morning").inner_text() and page.evaluate(FOCUSED) == "more-rename-morning"
 
 
-def test_deleting_removes_the_chore_and_its_daily_run_and_undo_brings_both_back(tmp_path):
-    chores(tmp_path)
+def test_deleting_removes_the_flow_and_its_daily_run_and_undo_brings_both_back(tmp_path):
+    put_flows(tmp_path)
     with served(tmp_path) as (page, _, scheduler):
         daily(scheduler, tmp_path)
         says(page, "morning", "Never run")
@@ -123,7 +123,7 @@ def test_deleting_removes_the_chore_and_its_daily_run_and_undo_brings_both_back(
         notice = page.get_by_test_id("deleted-notice")
         notice.wait_for()
         assert "Morning report" in notice.inner_text() and "daily run" in notice.inner_text()
-        page.get_by_test_id("chore-morning").wait_for(state="detached")
+        page.get_by_test_id("flow-morning").wait_for(state="detached")
         assert ours(scheduler) == []
         assert page.evaluate(FOCUSED) == "undo-delete"  # the row that had the focus is gone
 
@@ -131,11 +131,11 @@ def test_deleting_removes_the_chore_and_its_daily_run_and_undo_brings_both_back(
         says(page, "morning", "Morning report")
         assert page.get_by_test_id("deleted-notice").count() == 0
         assert ours(scheduler) == ["\\Workflow factory - morning daily 0930"]
-        assert page.evaluate(FOCUSED) == "open-chore-morning"
+        assert page.evaluate(FOCUSED) == "open-flow-morning"
 
 
-def test_a_running_chore_cannot_be_deleted_until_it_is_stopped(tmp_path):
-    chores(tmp_path)
+def test_a_running_flow_cannot_be_deleted_until_it_is_stopped(tmp_path):
+    put_flows(tmp_path)
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
     desktop.click_seconds = 1.5
     with served(tmp_path, desktop) as (page, _, scheduler):
@@ -146,24 +146,24 @@ def test_a_running_chore_cannot_be_deleted_until_it_is_stopped(tmp_path):
         page.get_by_test_id("more-delete-morning").click()
 
         page.get_by_role("alert").filter(has_text="Stop it first").wait_for()
-        assert page.get_by_test_id("chore-morning").count() == 1 and len(ours(scheduler)) == 1
+        assert page.get_by_test_id("flow-morning").count() == 1 and len(ours(scheduler)) == 1
         assert page.get_by_test_id("deleted-notice").count() == 0
 
         run_button(page, "morning").filter(has_text="Stop").click()
         says(page, "morning", "You stopped it")
         page.get_by_test_id("more-delete-morning").click()
         page.get_by_test_id("deleted-notice").wait_for()
-        page.get_by_test_id("chore-morning").wait_for(state="detached")
+        page.get_by_test_id("flow-morning").wait_for(state="detached")
         assert ours(scheduler) == []
 
 
-def test_history_reads_newest_first_in_plain_words_with_box_names_after_the_flow_changed(tmp_path):
+def test_history_reads_newest_first_in_plain_words_with_node_names_after_the_flow_changed(tmp_path):
     db = tmp_path / "user.db"
     save_step(db, step("open-menu", "Alpha"))
     save_step(db, step("save-file", "Missing"))
     first = Flow(id="morning", nodes=[Node("n1", "open-menu"), Node("n2", kind="wait", fields={"seconds": {"value": 1}})])
     run_flow(first, FakeDesktop(controls=[button("Alpha")]), db)
-    # the flow is rebuilt: n2 is now another box, and the old run must still say what it ran
+    # the flow is rebuilt: n2 is now another node, and the old run must still say what it ran
     second = Flow(id="morning", nodes=[Node("n1", "open-menu"), Node("n2", "save-file")])
     save_flow(db, second, "Morning report", "paint.exe")
     run_flow(second, FakeDesktop(controls=[button("Alpha")]), db)
@@ -184,8 +184,8 @@ def test_history_reads_newest_first_in_plain_words_with_box_names_after_the_flow
         page.get_by_test_id("history-morning").wait_for(state="detached")
 
 
-def test_a_chore_that_never_ran_says_so_in_its_history(tmp_path):
-    chores(tmp_path)
+def test_a_flow_that_never_ran_says_so_in_its_history(tmp_path):
+    put_flows(tmp_path)
     with served(tmp_path) as (page, _, _):
         more(page, "morning")
         page.get_by_test_id("more-history-morning").click()
@@ -195,9 +195,9 @@ def test_a_chore_that_never_ran_says_so_in_its_history(tmp_path):
 @pytest.mark.parametrize("width,height", [(1280, 800), (683, 384), (390, 740)])
 def test_more_fits_a_narrow_window_and_stays_readable(tmp_path, width, height):
     db = tmp_path / "user.db"
-    chores(tmp_path)
+    put_flows(tmp_path)
     long = "Weekly-report-" + "x" * 80
-    chore(tmp_path, "long-1", long, "open-menu", "save-file")
+    put_flow(tmp_path, "long-1", long, "open-menu", "save-file")
     run_flow(Flow(id="long-1", nodes=[Node("n1", "open-menu"), Node("n2", "save-file")]), FakeDesktop(controls=[button("Alpha")]), db)
 
     def fine():

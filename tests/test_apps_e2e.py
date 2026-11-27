@@ -5,7 +5,7 @@ real API, with the stand-in desktop and Windows scheduler. Opt-in: `pytest -m we
 import pytest
 from test_canvas_e2e import stub_clipboard
 from test_editor_safety_e2e import CONTRAST
-from test_home_e2e import NO_SIDEWAYS_SCROLL, chore, chores, home
+from test_home_e2e import NO_SIDEWAYS_SCROLL, home, put_flow, put_flows
 
 from workflow_factory import Sensitivity, grant_consent, load_flow, reject_step, run_flow, save_step
 from workflow_factory.consent import consents
@@ -42,7 +42,7 @@ def test_with_25_apps_the_first_rows_show_and_show_more_adds_the_rest(tmp_path):
         assert page.title() == "Apps · Mutehand"
         app_row(page, "program00.exe").wait_for()
         assert page.locator("[data-testid^=app-row-]").count() == 14
-        assert "1 action" in app_row(page, "program00.exe").inner_text()
+        assert "1 step" in app_row(page, "program00.exe").inner_text()
         more = page.get_by_test_id("apps-show-more")
         assert more.inner_text().strip() == "Show 11 more programs"
 
@@ -89,16 +89,16 @@ def test_an_app_opens_with_its_actions_problems_first_each_with_its_button(tmp_p
     with home(tmp_path) as (page, _):
         stub_clipboard(page)
         apps_screen(page)
-        assert "5 actions" in app_row(page, "excel.exe").inner_text()
+        assert "5 steps" in app_row(page, "excel.exe").inner_text()
         assert "2 to fix" in app_row(page, "excel.exe").inner_text()
         app_row(page, "excel.exe").click()
         card = page.get_by_test_id("app-card-excel.exe")
         card.wait_for()
         assert "Microsoft Excel" in card.inner_text() and ".exe" not in card.inner_text()
-        parts = "[data-testid^=app-problem-], [data-testid=app-relearn], [data-testid^=app-action-]"
+        parts = "[data-testid^=app-problem-], [data-testid=app-relearn], [data-testid^=app-step-]"
         order = [p.get_attribute("data-testid") for p in card.locator(parts).all()]
-        assert order == ["app-relearn", "app-problem-Save", "app-action-New spreadsheet", "app-action-Open file",
-                         "app-action-Write in a cell"]
+        assert order == ["app-relearn", "app-problem-Save", "app-step-New spreadsheet", "app-step-Open file",
+                         "app-step-Write in a cell"]
         assert "learned again" in card.get_by_test_id("app-relearn").inner_text()
         assert "You rejected it." in card.get_by_test_id("app-problem-Save").inner_text()
 
@@ -117,7 +117,7 @@ def test_taking_a_permission_back_asks_first_says_what_stops_and_removes_only_th
     db = tmp_path / "user.db"
     save_step(db, step("Send it", "Send", app="mail.exe", sensitive=Sensitivity.OUTWARD_ACTION))
     save_step(db, step("Open inbox", "Inbox", app="mail.exe"))
-    chore(tmp_path, "weekly", "Weekly report", "Open inbox", "Send it", app="mail.exe")
+    put_flow(tmp_path, "weekly", "Weekly report", "Open inbox", "Send it", app="mail.exe")
     grant_consent(db, "mail.exe", "Send", "click")
     grant_consent(db, "mail.exe", "Reply", "click")
     grant_consent(db, "word.exe", "Send", "click")
@@ -130,8 +130,8 @@ def test_taking_a_permission_back_asks_first_says_what_stops_and_removes_only_th
 
         permission.get_by_role("button", name="Take back").click()
         asked = card.get_by_test_id("take-back-ask")
-        assert "This chore will stop: “Weekly report”" in asked.inner_text()
-        assert "The action “Send it” will not run without it." in asked.inner_text()
+        assert "This flow will stop: “Weekly report”" in asked.inner_text()
+        assert "The step “Send it” will not run without it." in asked.inner_text()
         assert len(consents(db)) == 3  # nothing happened yet
 
         asked.get_by_role("button", name="Keep it").click()
@@ -148,8 +148,8 @@ def test_taking_a_permission_back_asks_first_says_what_stops_and_removes_only_th
         assert card.get_by_test_id("app-permission-Reply-click").count() == 1
 
 
-def test_a_chore_stopped_on_an_app_is_noted_on_its_row(tmp_path):
-    chores(tmp_path)
+def test_a_flow_stopped_on_an_app_is_noted_on_its_row(tmp_path):
+    put_flows(tmp_path)
     db = tmp_path / "user.db"
     run_flow(load_flow(db, None, "morning"), desktop=FakeDesktop(controls=[button("Alpha")]), user_db=db)
     save_step(tmp_path / "user.db", step("calm", "Alpha", app="notes.exe"))
@@ -172,7 +172,7 @@ def test_the_message_to_teach_another_action_names_the_app_and_copies(tmp_path):
         card = page.get_by_test_id("app-card-excel.exe")
         card.get_by_test_id("app-teach").click()
         message = card.get_by_test_id("chat-text").inner_text()
-        assert "teach another action in Microsoft Excel" in message and ".exe" not in message
+        assert "teach another step in Microsoft Excel" in message and ".exe" not in message
         card.get_by_role("button", name="Copy this message").click()
         page.get_by_text("Copied. Paste it in the chat.").wait_for()
         assert page.evaluate("() => window.copied") == message
@@ -237,12 +237,12 @@ def test_no_screen_content_of_a_private_app_reaches_the_screen_a_search_or_a_mes
 def test_the_screen_fits_a_narrow_window_with_readable_buttons(tmp_path, width, height):
     db = tmp_path / "user.db"
     twenty_five(db)
-    save_step(db, step("A very long action name " + "x" * 60, "A", app="mail.exe", sensitive=Sensitivity.OUTWARD_ACTION))
+    save_step(db, step("A very long step name " + "x" * 60, "A", app="mail.exe", sensitive=Sensitivity.OUTWARD_ACTION))
     grant_consent(db, "mail.exe", "Send", "click")
-    reject_step(db, "mail.exe", "A very long action name " + "x" * 60)
+    reject_step(db, "mail.exe", "A very long step name " + "x" * 60)
     buttons = """(width) => [...document.querySelectorAll('.apps button')].filter((b) => b.offsetParent).map((b) => {
-        const box = b.getBoundingClientRect()
-        return [b.innerText.trim(), box.left >= 0 && box.right <= width && box.height >= 44]
+        const rect = b.getBoundingClientRect()
+        return [b.innerText.trim(), rect.left >= 0 && rect.right <= width && rect.height >= 44]
       }).filter(([, fits]) => !fits)"""
     with home(tmp_path) as (page, _):
         page.set_viewport_size({"width": width, "height": height})

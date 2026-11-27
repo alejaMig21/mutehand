@@ -68,7 +68,7 @@ def test_a_flow_takes_any_words_as_its_name_and_keeps_its_app_after_a_reload_and
     steps_of_two_apps(tmp_path)
     with editor(tmp_path) as (page, apps):
         page.get_by_test_id("palette-open-menu").first.click()
-        assert page.get_by_test_id("flow-title").input_value() == "New chore"
+        assert page.get_by_test_id("flow-title").input_value() == "New flow"
         page.get_by_test_id("flow-title").fill("Morning report: ¿ventas? 50% / week #1")
         page.get_by_test_id("app-name").select_option("word.exe")
         save(page)
@@ -119,7 +119,7 @@ def test_an_app_remembered_in_another_spelling_is_the_taught_one_and_is_listed_o
         page.get_by_test_id("run-status").filter(has_text="Finished").wait_for()
         assert set(apps) == {"word.exe"}
 
-        page.get_by_test_id("tab-home").click()  # the daily run takes the app the chore remembers
+        page.get_by_test_id("tab-home").click()  # the daily run takes the app the flow remembers
         page.get_by_test_id("daily-old-one").click()
         page.get_by_test_id("daily-set-old-one").click()
         page.get_by_test_id("daily-old-one").filter(has_text="Every day at").wait_for()
@@ -147,7 +147,7 @@ def test_two_flows_with_the_same_name_stay_two_flows_and_can_be_told_apart(tmp_p
     with editor(tmp_path) as (page, _):
         asked = []
         page.on("dialog", lambda dialog: (asked.append(dialog.message), dialog.dismiss()))
-        page.get_by_test_id("flow-title").fill("Morning")  # a chore is kept under its name as soon as it has a box
+        page.get_by_test_id("flow-title").fill("Morning")  # a flow is kept under its name as soon as it has a node
         page.get_by_test_id("palette-open-menu").first.click()
         save(page)
         new_flow(page)
@@ -162,13 +162,13 @@ def test_two_flows_with_the_same_name_stay_two_flows_and_can_be_told_apart(tmp_p
         for flow_id in ("morning", "morning-2"):
             page.get_by_test_id(f"flow-{flow_id}").filter(has_text=f"Morning ({flow_id})").wait_for()
         page.get_by_test_id("new-flow").click()
-        page.get_by_test_id("flow-title").fill("New chore")
+        page.get_by_test_id("flow-title").fill("New flow")
         page.get_by_test_id("palette-save-file").click()
         save(page)
         page.get_by_test_id("open-flows").click()
-        page.get_by_test_id("flow-new-chore").wait_for()  # the list is read again after a save
+        page.get_by_test_id("flow-new-flow").wait_for()  # the list is read again after a save
         page.get_by_test_id("new-flow").click()
-        assert page.get_by_test_id("flow-title").input_value() == "New chore 2"  # a new flow starts with a free name
+        assert page.get_by_test_id("flow-title").input_value() == "New flow 2"  # a new flow starts with a free name
 
 
 def test_a_blank_name_is_not_kept_and_says_so_and_a_change_made_elsewhere_is_never_replaced_unasked(tmp_path):
@@ -193,7 +193,7 @@ def test_a_blank_name_is_not_kept_and_says_so_and_a_change_made_elsewhere_is_nev
         assert [n.step for n in load_flow(tmp_path / "user.db", None, "old-one").nodes] == ["open-menu"]
 
 
-def test_a_box_of_a_flow_never_saved_can_be_tested(tmp_path):
+def test_a_node_of_a_flow_never_saved_can_be_tested(tmp_path):
     steps_of_two_apps(tmp_path)
     with editor(tmp_path) as (page, apps):
         page.get_by_test_id("palette-open-menu").first.click()
@@ -203,7 +203,7 @@ def test_a_box_of_a_flow_never_saved_can_be_tested(tmp_path):
         page.get_by_test_id("confirm-test").click()
         page.get_by_test_id("test-result").filter(has_text=re.compile("worked|passed|finished", re.IGNORECASE)).wait_for()
 
-        assert list(flows(tmp_path)) == ["new-chore"] and set(apps) == {"paint.exe"}
+        assert list(flows(tmp_path)) == ["new-flow"] and set(apps) == {"paint.exe"}
 
 
 def stopped_flow(tmp_path, flow_id="m-1", title="Morning sales report"):
@@ -228,7 +228,7 @@ def test_the_home_row_its_history_its_stop_card_and_its_daily_run_show_the_name(
 
         page.get_by_test_id("daily-m-1").click()
         page.get_by_test_id("daily-set-m-1").click()
-        row = page.get_by_test_id("chore-m-1")
+        row = page.get_by_test_id("flow-m-1")
         row.filter(has_text="Every day at").wait_for()
         assert "Morning sales report" in row.inner_text() and "m-1" not in row.inner_text()
 
@@ -251,7 +251,7 @@ def test_naming_saving_and_reopening_work_with_the_keyboard_alone(tmp_path):
     steps_of_two_apps(tmp_path)
     with editor(tmp_path) as (page, _):
         page.get_by_test_id("palette-open-menu").first.press("Enter")
-        page.get_by_role("textbox", name="Chore name").press("ControlOrMeta+a")
+        page.get_by_role("textbox", name="Flow name").press("ControlOrMeta+a")
         page.keyboard.type("Typed by hand")
         page.get_by_test_id("run-status").filter(has_text=re.compile("^Saved$")).wait_for()
         new_flow(page)
@@ -268,8 +268,8 @@ def test_long_names_fit_a_narrow_window_and_stay_readable(tmp_path, width, heigh
     save_flow(tmp_path / "user.db", Flow(id="long-2", nodes=[Node("a", "open-menu")]), long)
 
     def fits(locator):
-        box = locator.bounding_box()
-        assert box["x"] >= 0 and box["x"] + box["width"] <= width, (locator, box)
+        rect = locator.bounding_box()
+        assert rect["x"] >= 0 and rect["x"] + rect["width"] <= width, (locator, rect)
 
     def no_sideways_scroll():
         assert page.evaluate("() => [document.documentElement, document.querySelector('main')]"
@@ -295,7 +295,7 @@ def test_long_names_fit_a_narrow_window_and_stay_readable(tmp_path, width, heigh
         no_sideways_scroll()
         page.get_by_test_id("daily-long-1").click()
         page.get_by_test_id("daily-set-long-1").click()
-        page.get_by_test_id("chore-long-1").filter(has_text="Every day at").wait_for()
+        page.get_by_test_id("flow-long-1").filter(has_text="Every day at").wait_for()
         for test_id in ("daily-long-1", "run-now-long-1", "more-long-1"):
             fits(page.get_by_test_id(test_id))
         no_sideways_scroll()
