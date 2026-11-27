@@ -6,7 +6,7 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] The empty Home shows the sentence, the message with "Copy this message" and the three stages
 - [ ] With actions and no flows, "New chore" is the main button
@@ -14,3 +14,8 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 - [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop and scheduler, red before green
 - [ ] Everything added works from the keyboard and fits a 683 px and a 390 px wide window; button text stays readable
 - [ ] Existing tests pass; no screen content of a private app appears in any message
+
+## Answer
+
+Empty Home says what the product is for, gives the message to teach a chore with a copy button and shows the three stages; with actions learned and no chores "New chore" is the main button. The editor rule is now "nothing in the editor starts a lesson".
+Commits: d612b59, a3cbd79.
