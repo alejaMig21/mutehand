@@ -202,3 +202,35 @@ def test_the_history_endpoint_lists_one_flow_newest_first_without_its_tests(serv
     assert [r["flow_id"] for r in runs] == ["morning", "morning"] and runs[0]["id"] > runs[1]["id"]
     assert all(n["kind"] == "step" and n["step"] == "open-menu" for r in runs for n in r["nodes"])
     assert json.dumps(runs).count("Alpha") == 0  # no screen content
+
+
+def test_a_flow_deleted_a_moment_ago_is_listed_so_a_reload_can_still_undo_it(served):
+    server, scheduler, tmp_path = served
+    daily(server)
+    assert call(server, "/api/deleted")[1] == []
+    call(server, "/api/flows/morning", "DELETE")
+
+    assert call(server, "/api/deleted")[1] == [{"id": "morning", "title": "Morning report", "daily_runs": 1}]
+
+    call(server, "/api/flows/morning/restore", "POST")
+    assert call(server, "/api/deleted")[1] == []
+
+
+def test_a_flow_deleted_long_ago_is_no_longer_offered_but_stays_restorable(served):
+    server, _, tmp_path = served
+    call(server, "/api/flows/morning", "DELETE")
+    with closing(sqlite3.connect(tmp_path / "user.db")) as db, db:
+        db.execute("UPDATE flow_trash SET deleted_at = '2020-01-01T00:00:00+00:00'")
+
+    assert call(server, "/api/deleted")[1] == []
+    assert call(server, "/api/flows/morning/restore", "POST")[0] == 200
+
+
+def test_a_trash_made_before_deletions_were_dated_still_works(served):
+    server, _, tmp_path = served
+    with closing(sqlite3.connect(tmp_path / "user.db")) as db, db:
+        db.execute("DROP TABLE IF EXISTS flow_trash")
+        db.execute("CREATE TABLE flow_trash (id TEXT PRIMARY KEY, definition TEXT NOT NULL, positions TEXT, "
+                   "title TEXT, app TEXT, schedules TEXT NOT NULL)")
+    assert call(server, "/api/flows/morning", "DELETE")[0] == 200
+    assert call(server, "/api/deleted")[1][0]["id"] == "morning"

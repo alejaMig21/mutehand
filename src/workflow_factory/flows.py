@@ -8,6 +8,7 @@ from collections import Counter
 from collections.abc import Callable
 from contextlib import closing
 from dataclasses import asdict
+from datetime import UTC, datetime, timedelta
 from functools import cache
 from pathlib import Path
 
@@ -27,7 +28,8 @@ INFO_SCHEMA = "CREATE TABLE IF NOT EXISTS flow_info (id TEXT PRIMARY KEY, title 
 # a deleted flow waits here until it is undone: its words, places and daily runs, so that undo gives back all of them.
 # ponytail: kept for good, and its identifier stays taken so a new flow never inherits the old history; purge by age if it grows.
 TRASH_SCHEMA = ("CREATE TABLE IF NOT EXISTS flow_trash (id TEXT PRIMARY KEY, definition TEXT NOT NULL, positions TEXT, "
-                "title TEXT, app TEXT, schedules TEXT NOT NULL)")
+                "title TEXT, app TEXT, schedules TEXT NOT NULL, deleted_at TEXT)")
+UNDO_WINDOW = timedelta(minutes=10)  # how long after a delete Home offers Undo again, e.g. after a reload
 MAX_TITLE_CHARS = 100
 MAX_APP_CHARS = 100
 MAX_NEW_ID_CHARS = 50  # an identifier goes into the command of a Windows task, which has little room
@@ -107,6 +109,8 @@ def set_title(user_db: Path, flow_id: str, title: str) -> None:
 def _trash_tables(db: sqlite3.Connection) -> None:
     for schema in (SCHEMA, LAYOUT_SCHEMA, INFO_SCHEMA, TRASH_SCHEMA):
         db.execute(schema)
+    if not any(column[1] == "deleted_at" for column in db.execute("PRAGMA table_info(flow_trash)")):
+        db.execute("ALTER TABLE flow_trash ADD COLUMN deleted_at TEXT")  # a trash made before deletions were dated
 
 
 def trash_flow(user_db: Path, flow_id: str, schedules: list[dict]) -> bool:
@@ -119,8 +123,8 @@ def trash_flow(user_db: Path, flow_id: str, schedules: list[dict]) -> bool:
             return False
         positions = db.execute("SELECT positions FROM flow_positions WHERE id = ?", (flow_id,)).fetchone()
         info = db.execute("SELECT title, app FROM flow_info WHERE id = ?", (flow_id,)).fetchone() or (None, None)
-        db.execute("INSERT OR REPLACE INTO flow_trash VALUES (?, ?, ?, ?, ?, ?)",
-                   (flow_id, row[0], positions and positions[0], *info, json.dumps(schedules)))
+        db.execute("INSERT OR REPLACE INTO flow_trash VALUES (?, ?, ?, ?, ?, ?, ?)",
+                   (flow_id, row[0], positions and positions[0], *info, json.dumps(schedules), datetime.now(UTC).isoformat()))
         for table in ("flows", "flow_positions", "flow_info"):
             db.execute(f"DELETE FROM {table} WHERE id = ?", (flow_id,))
     return True
@@ -146,6 +150,17 @@ def restore_flow(user_db: Path, flow_id: str) -> list[dict] | None:
 def trashed_ids(user_db: Path) -> list[str]:
     with closing(sqlite3.connect(user_db)) as db:
         return [row[0] for row in db.execute("SELECT id FROM flow_trash")] if _has_table(db, "flow_trash") else []
+
+
+def recently_trashed(user_db: Path, now: datetime | None = None) -> list[dict]:
+    """The flows deleted within the undo window, newest first: {id, title, daily_runs}. What was deleted earlier stays
+    restorable but is no longer offered."""
+    since = ((now or datetime.now(UTC)) - UNDO_WINDOW).isoformat()
+    with closing(sqlite3.connect(user_db)) as db:
+        if not _has_table(db, "flow_trash") or not any(c[1] == "deleted_at" for c in db.execute("PRAGMA table_info(flow_trash)")):
+            return []
+        rows = db.execute("SELECT id, title, schedules FROM flow_trash WHERE deleted_at >= ? ORDER BY deleted_at DESC", (since,))
+        return [{"id": id_, "title": title or id_, "daily_runs": len(json.loads(tasks))} for id_, title, tasks in rows]
 
 
 def _has_table(db: sqlite3.Connection, name: str) -> bool:

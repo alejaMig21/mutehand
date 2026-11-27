@@ -39,6 +39,7 @@ from workflow_factory.flows import (
     load_flow,
     load_layout,
     new_flow_id,
+    recently_trashed,
     restore_flow,
     save_flow,
     save_layout,
@@ -537,6 +538,8 @@ class ApiServer:
                     times = daily.tasks_by_flow(api.user_db, api.schedule_runner)
                     return self._send(200, [{**flow, "daily": times[flow["id"]][0]["at"] if flow["id"] in times else None}
                                             for flow in flow_overview(api.user_db, api.factory_db)])
+                if method == "GET" and path == "/api/deleted":  # what Undo can still bring back, e.g. after a reload
+                    return self._send(200, recently_trashed(api.user_db))
                 flow_match = re.fullmatch(r"/api/flows/([^/]+)", path)
                 if flow_match and method == "DELETE":
                     return self._send(*api._delete(flow_match[1]))
