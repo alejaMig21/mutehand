@@ -38,12 +38,12 @@ real exe, not the npm `.cmd` shim).
 
 ## Status
 
-All 16 build tickets and the research tickets are done and tested (`uv run pytest -q`, plus opt-in tests with `-m
-live` and `-m web`). The product shell is in progress (`.scratch/usable-product/spec.md`): the one command and the
-zero-setup tutor connection are done; the editor was rebuilt around chores (Home, a top-to-bottom canvas, daily runs, an
-Apps screen and a first-day guide: `.scratch/editor-rethink/spec.md`). No lessons are taught yet; the data folder starts empty. The example flow
-Vivaldi -> Word -> Telegram is not built (research in `docs/research/17` to `19`); writing into a Word page needs the
-paste step of ticket 29.
+The editor is rebuilt around chores (14 tickets, `.scratch/editor-rethink/`): Home lists the chores with a daily time and what needs
+attention, Apps lists the programs it knows, a flow screen draws a chore top to bottom and saves itself, a deleted chore can be undone,
+and a first-day guide shows what to do with nothing taught. The tutor can also build a chore from a description
+(`list_known_steps`, `list_node_kinds`, `create_flow`, `flow_status`). Tests: `uv run pytest -q`, plus opt-in `-m web` (headless browser)
+and `-m live` (real apps; `tests/test_live_excel.py` and `test_live_word.py` need `WF_LIVE_EXCEL=1` / `WF_LIVE_WORD=1`). No lessons are
+taught yet; the data folder starts empty. The example flow Vivaldi -> Word -> Telegram is not built (research in `docs/research/17` to `19`).
 
 ## Rules worth knowing
 

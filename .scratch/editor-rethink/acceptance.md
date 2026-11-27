@@ -61,3 +61,32 @@ Open for the next market test: each recommendation above is re-checked against w
 - Private apps send opaque handles instead of action and control names; failed-check text is no longer sent.
 - Stale prose, duplicated helpers and one relearn message were cleaned.
 - Two flaky browser tests were fixed as test races (waiting for "Opening…" to end; a pause long enough to be seen under load).
+
+## Second round (2026-11-27, after the fixes above; casual, child and elephant again, same datasets)
+
+| Persona | Dataset | Before | After |
+|---|---|---|---|
+| casual | first-day | next 8/10, worked 5/10, tries 2/3 | next 6/10, worked 4/10, tries 3/8 (more tasks asked) |
+| casual | everyday | 8, 6, 6/8 | 8, 7, 8/8 |
+| casual | many-apps | 6, 6, 3/5 | 6, 7, 5/8 |
+| child | first-day | 8/10, 4 of 20 taps dead | 5/10, 7 of 16 dead |
+| child | everyday | 7/10, 8 of 55 dead | 7/10, 10 of 41 dead |
+| child | many-apps | 8/10, 4 of 17 dead | 7/10, 5 of 21 dead |
+| elephant | first-day | 12 shocks, 11 clean, 0 data | 16, 15, 0 |
+| elephant | everyday | 34, 32, 2 data | 32, 29, 6 (1 reload during autosave, 5 from API-level double creates) |
+| elephant | many-apps | 28, 25, 0 | 28, 26, 1 (a blank chore from random clicks) |
+
+Honest reading: everyday and many-apps improved for the casual person; the first day is still the weakest screen (nothing to do without
+the chat). The elephant held up on parallel runs, triple clicks, deletes and undo.
+
+Fixed after this round (tests in `tests/test_market2_e2e.py`): More menu closes on outside click, Escape and tab choice; first-day stages are
+plain, non-tappable words; Copy shows "Copied" at once and falls back to selecting the text; multi-word Apps search; one honest line after
+Run now; Try again answers in place without the list jumping; Take back says it in plain words; Apps keeps its order; the flow screen says
+"chore" instead of "flow"; Rename says "Renamed". The persona harness no longer stops itself on the first-day data.
+
+Checked and left: the elephant's "reload loses the new chore" is a harness artefact (`page.reload()` skips the browser's leave warning; a real
+reload shows it). Offline reload shows a blank page (the browser cannot load it). 100 KB names are cut to 100 characters. Six parallel API
+creates of a copy make six copies (the screen disables its button while busy).
+
+Decision to take in the morning: the app runs from the repository (`uv sync`, `uv run workflow-factory`); `DEFAULT_WEB_DIR` points at
+`web/dist` inside the checkout, so an installed wheel would not find the editor. Ship as a repository, or package `web/dist` into the wheel.
