@@ -12,8 +12,8 @@ uv sync                    # once
 uv run workflow-factory    # opens the editor in your browser; Ctrl+C here or Quit in the editor stops it
 ```
 
-A second `uv run workflow-factory` while one is running opens the same editor. The editor only shows what has
-already been taught: it never starts a lesson.
+A second `uv run workflow-factory` while one is running opens the same editor. Nothing in the editor starts a
+lesson; where teaching is needed, it shows the message to send in a chat.
 
 ## Teach it (an agent chat)
 

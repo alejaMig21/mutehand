@@ -3,6 +3,7 @@ import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
 import { Attention, TriedResults } from './Attention.jsx'
 import { appLabel, chipFor } from './catalog.js'
 import { changeDaily, DailyForm } from './Daily.jsx'
+import FirstDay, { FIRST_DAY_TITLE } from './FirstDay.jsx'
 import { Icon } from './icons.jsx'
 import More, { useDeleted } from './More.jsx'
 import Screen from './Screen.jsx'
@@ -20,6 +21,8 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
   const stopped = needs.data
   const reloadNeeds = needs.reload
   const undo = useDeleted(reload, flows)
+  const [bare, setBare] = useState(false) // nothing is learned yet: Home says what the product is for
+  const none = flows.length === 0
 
   // the button that led back is gone with the flow screen: the focus goes to the flow's row
   useEffect(() => {
@@ -42,17 +45,19 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
       <TriedResults tries={tried.tries} hide={tried.hide} />
       <Attention items={stopped} tries={tried.tries} tryAgain={tried.tryAgain} onChanged={() => { reload(); reloadNeeds() }}
         running={(id) => following.runs[id]?.status === 'running'} />
-      <Screen title="Your chores" load={load} isEmpty={flows.length === 0} emptyId="no-chores"
-        empty="No chores yet. Press “New chore” to make your first one."
+      <Screen title={none && bare ? FIRST_DAY_TITLE : 'Your chores'} load={load} isEmpty={false}
+        help={none && bare ? 'When you press a button, or by itself every morning.' : undefined}
         above={offline && <p role="status">{UNREACHABLE} Trying again…</p>}
-        tools={<button data-testid="new-chore" onClick={onNew}><Icon name="plus" size={20} /> New chore</button>}>
-        <ul className="chores">
-          {flows.map((flow) => (
-            <Chore key={flow.id} flow={flow} title={flowTitle(flow.id, flows)} following={following} reload={reload}
-              stopped={stopped.find((item) => item.flow === flow.id)} tryAgain={tried.tryAgain}
-              onDeleted={undo.onDeleted} onOpen={() => onOpen(flow.id)} />
-          ))}
-        </ul>
+        tools={!none && <button data-testid="new-chore" onClick={onNew}><Icon name="plus" size={20} /> New chore</button>}>
+        {none ? <FirstDay onNew={onNew} onFirstDay={setBare} /> : (
+          <ul className="chores">
+            {flows.map((flow) => (
+              <Chore key={flow.id} flow={flow} title={flowTitle(flow.id, flows)} following={following} reload={reload}
+                stopped={stopped.find((item) => item.flow === flow.id)} tryAgain={tried.tryAgain}
+                onDeleted={undo.onDeleted} onOpen={() => onOpen(flow.id)} />
+            ))}
+          </ul>
+        )}
       </Screen>
       {undo.notice}
     </div>

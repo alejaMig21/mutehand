@@ -103,6 +103,7 @@ def test_each_chore_shows_its_name_its_app_and_how_the_last_run_went(tmp_path):
 
 
 def test_with_no_chores_home_says_so_and_offers_a_new_one(tmp_path):
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))  # nothing learned at all is the first day: test_first_day_e2e
     with home(tmp_path) as (page, _):
         page.get_by_test_id("no-chores").wait_for()
         page.get_by_test_id("new-chore").wait_for()
