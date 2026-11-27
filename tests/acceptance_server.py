@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from fake_scheduler import FakeScheduler  # noqa: E402
 
-from workflow_factory import Flow, Node, reject_step, run_flow, save_flow, save_step  # noqa: E402
+from workflow_factory import Flow, Node, grant_consent, reject_step, run_flow, save_flow, save_step  # noqa: E402
 from workflow_factory.api import ApiServer  # noqa: E402
 from workflow_factory.desktop import AppKey  # noqa: E402
 from workflow_factory.steps import record_app_name, revalidate_changed_versions  # noqa: E402
@@ -56,6 +56,7 @@ def everyday(db, server):
     chore(db, "send-invoices", "Send the invoices", "winword.exe", "Open a letter", "Fill in the name", "Save as PDF", run=False)
     chore(db, "monthly-numbers", "Monthly numbers", "excel.exe", "Open the sheet", "Update the totals")
     chore(db, "shopping", "Shopping list", "notepad.exe", "Open the shopping list", "Add a line")
+    grant_consent(db, "winword.exe", "Save as PDF", "click")  # one thing it may do without asking, to take back
     result = server._daily_change("morning-report", "07:30")
     assert result[0] == 200, result
 
@@ -97,6 +98,8 @@ def many_apps(db, server):
     app = "notes04.exe"  # updated since it was learned: its actions must be learned again
     learn(db, app, NAMES[app], ACTIONS[app], version="0.9")
     revalidate_changed_versions(db, app, "1.0")
+    grant_consent(db, "mail03.exe", "Share it", "click")  # permissions to take back: on a Mail app and on the Photos app
+    grant_consent(db, "photos02.exe", "Print", "click")
     result = server._daily_change("send-letters", "18:00")
     assert result[0] == 200, result
 
