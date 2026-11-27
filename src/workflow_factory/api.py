@@ -14,6 +14,7 @@ import secrets
 import subprocess
 import threading
 import time
+import traceback
 import urllib.parse
 import uuid
 from collections.abc import Callable
@@ -504,7 +505,8 @@ class ApiServer:
                     self._send(400, {"error": str(error)})
                 except TypeError:
                     self._send(400, {"error": "that is not a valid request"})
-                except Exception:  # noqa: BLE001 - details could echo private content: say nothing
+                except Exception:  # noqa: BLE001 - details could echo private content: say nothing to the browser
+                    traceback.print_exc()  # but the person running the program can read why, on their own console
                     self._send(500, {"error": "internal error"})
 
             def _route(self, method: str, path: str):
