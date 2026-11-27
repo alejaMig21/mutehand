@@ -26,7 +26,7 @@ from workflow_factory import daily, schedule
 from workflow_factory.apps import app_detail, app_rows
 from workflow_factory.attention import attention_items, rejected_by_person
 from workflow_factory.consent import consents, covers, effective_sensitivity, revoke_consent
-from workflow_factory.desktop import Desktop, DesktopError
+from workflow_factory.desktop import Desktop, DesktopError, plain_app
 from workflow_factory.flow import clear_emergency_stop, emergency_stop, rejected_steps, run_flow
 from workflow_factory.flows import (
     check_positions,
@@ -68,10 +68,11 @@ from workflow_factory.steps import (
     list_steps,
     reject_step,
     restore_step,
+    search_matches,
     step_report,
     step_reports,
 )
-from workflow_factory.tutor import handle, is_private, private_apps
+from workflow_factory.tutor import handle, is_private, private_apps, step_context
 from workflow_factory.upgrade import dismiss_notice
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")  # the only names this server can be bound to
@@ -543,8 +544,15 @@ class ApiServer:
                     return self._send(202, {"ok": True})
                 if method == "GET" and path == "/api/steps":
                     steps = list_steps(api.user_db, api.factory_db)
-                    return self._send(200, [{**_step_view(step), **safety} for step, safety in
-                                            zip(steps, _safety(api.user_db, steps), strict=True)])
+                    context = step_context(api.user_db, steps)  # what the node panel searches: tags and technologies
+                    query, tech = (self.query.get("q") or [""])[0], (self.query.get("tech") or [""])[0]
+                    rows = []
+                    for step, safety in zip(steps, _safety(api.user_db, steps), strict=True):
+                        found = context.get(step.name, {"tags": [], "technologies": []})
+                        if (not tech or plain_app(step.app) == plain_app(tech)) and search_matches(
+                                query, step.name, [*found["tags"], *found["technologies"]]):
+                            rows.append({**_step_view(step), **safety, **found})
+                    return self._send(200, rows)
                 if method == "GET" and path == "/api/attention":
                     return self._send(200, attention_items(api.user_db, api.factory_db, api.user_db.parent))
                 notice_match = re.fullmatch(r"/api/notices/([\w.-]+)/dismiss", path)

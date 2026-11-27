@@ -7,6 +7,8 @@ import pytest
 
 from workflow_factory import Flow, Node, save_flow, save_step
 from workflow_factory.api import ApiServer
+from workflow_factory.steps import add_tags
+from workflow_factory.tutor import mark_private
 
 from fake_desktop import FakeDesktop, button, step
 
@@ -84,6 +86,32 @@ def test_a_request_whose_host_header_is_not_loopback_is_refused_against_dns_rebi
     status, _, _ = call(server, "/api/steps", host="evil.example.com")
 
     assert status == 403
+
+
+def test_the_step_listing_carries_tags_and_technologies_and_filters_with_the_shared_search_rule(tmp_path):
+    save_step(tmp_path / "user.db", step("Save", "Save", app="paint.exe"))
+    save_step(tmp_path / "user.db", step("Save", "Save", app="notepad.exe"))
+    save_step(tmp_path / "user.db", step("Éxport data", "Export", app="vault.exe"))
+    add_tags(tmp_path / "user.db", "Save", ["File"])
+    mark_private(tmp_path / "user.db", "vault.exe")
+    server = make_server(tmp_path)
+    try:
+        everything = call(server, "/api/steps")[1]
+        by_text = call(server, "/api/steps?q=sav")[1]
+        by_tag_text = call(server, "/api/steps?q=fil")[1]
+        by_tech = call(server, "/api/steps?tech=paint.exe")[1]
+        private_text = call(server, "/api/steps?q=export")[1]
+    finally:
+        server.stop()
+
+    saves = [item for item in everything if item["name"] == "Save"]
+    assert len(everything) == 3 and all(item["technologies"] == ["notepad.exe", "paint.exe"] for item in saves)
+    assert all(item["tags"] == ["file"] for item in saves)
+    assert {item["app"] for item in by_text} == {"paint.exe", "notepad.exe"} == {item["app"] for item in by_tag_text}
+    assert [item["app"] for item in by_tech] == ["paint.exe"]
+    vault = [item for item in everything if item["app"] == "vault.exe"][0]
+    assert vault["tags"] == [] and vault["technologies"] == []  # a private technology adds nothing it could be found by
+    assert [item["app"] for item in private_text] == ["vault.exe"]  # its own row still shows, by name, as before
 
 
 def test_the_api_sends_no_cross_origin_permission(server):

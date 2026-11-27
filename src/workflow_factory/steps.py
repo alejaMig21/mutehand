@@ -4,7 +4,9 @@ import base64
 import io
 import json
 import math
+import re
 import sqlite3
+import unicodedata
 from collections import Counter
 from contextlib import closing
 from dataclasses import asdict, dataclass, field
@@ -388,6 +390,29 @@ def add_tags(user_db: Path, name: str, tags: list[str]) -> list[str]:
 
 def step_tags(user_db: Path, name: str) -> list[str]:
     return add_tags(user_db, name, [])
+
+
+def all_tags(user_db: Path) -> dict[str, list[str]]:
+    """Step name -> its pattern tags, for every name that has any. One read."""
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute(TAGS_SCHEMA)
+        found: dict[str, list[str]] = {}
+        for name, tag in db.execute("SELECT name, tag FROM step_tags ORDER BY tag"):
+            found.setdefault(name, []).append(tag)
+        return found
+
+
+def words(text: str) -> list[str]:
+    """Lower case, accents removed, split on anything that is not a letter or digit."""
+    plain = "".join(c for c in unicodedata.normalize("NFKD", text.casefold()) if not unicodedata.combining(c))
+    return re.findall(r"[^\W_]+", plain)
+
+
+def search_matches(query: str, name: str, tags: list[str]) -> bool:
+    """The one search rule: every word of the query starts a word of the step's name or of one of its tags (pattern tags
+    and technology names alike). Capitals and accents do not matter. An empty query matches everything."""
+    present = [word for text in (name, *tags) for word in words(text)]
+    return all(any(word.startswith(part) for word in present) for part in words(query))
 
 
 def confidence(successes: int, failures: int) -> float:

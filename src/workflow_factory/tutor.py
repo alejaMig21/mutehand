@@ -26,13 +26,17 @@ from workflow_factory.steps import (
     Status,
     Step,
     add_tags,
+    all_tags,
     app_names,
     find_step,
     list_steps,
     record_app_name,
     refused_write,
     save_step,
+    search_matches,
+    step_reports,
     validate_step,
+    words,
 )
 
 # Apps whose content is private by default; the user can mark more.
@@ -88,6 +92,52 @@ def handle(*names: str) -> str:
 
 def is_private(user_db: Path, app: str, known: frozenset[str] | None = None) -> bool:
     return plain_app(app) in (known if known is not None else private_apps(user_db))
+
+
+def step_context(user_db: Path, steps: list[Step], private: frozenset[str] | None = None) -> dict[str, dict]:
+    """Per step name: its pattern tags and the technologies (as the screens name them) it has a locator for. A private
+    technology is left out, and a name known only there has no entry, so nothing about it can be found or shown."""
+    private = private_apps(user_db) if private is None else private
+    shown, tags, context = app_names(user_db), all_tags(user_db), {}
+    for step in steps:
+        if plain_app(step.app) not in private:
+            entry = context.setdefault(step.name, {"tags": tags.get(step.name, []), "technologies": set()})
+            entry["technologies"].add(shown.get(plain_app(step.app), step.app))
+    return {name: {**entry, "technologies": sorted(entry["technologies"])} for name, entry in context.items()}
+
+
+def known_steps(user_db: Path, factory_db: Path | None, technology: str | None = None, tag: str | None = None,
+                query: str | None = None) -> list[dict]:
+    """What the apprentice knows, one entry per step name: name, action, pattern tags, technologies and state (trusted
+    if any technology's step is). The filters combine: a technology it has a locator for, a pattern or technology tag,
+    and the search rule on name and tags. A private technology's steps are only counted, in a last {"private", "count"}
+    entry, and only when no tag or text is asked for (they have none to match)."""
+    steps = list_steps(user_db, factory_db, light=True)
+    private = private_apps(user_db)
+    context, reports = step_context(user_db, steps, private), step_reports(user_db, steps)
+    wanted = plain_app(technology) if technology else None
+    grouped: dict[str, list[tuple[Step, str]]] = {}
+    hidden: set[str] = set()
+    for step, report in zip(steps, reports, strict=True):
+        if wanted and plain_app(step.app) != wanted:
+            continue
+        if plain_app(step.app) in private:
+            hidden.add(step.name)
+        else:
+            grouped.setdefault(step.name, []).append((step, report["state"]))
+    entries = []
+    for name, rows in grouped.items():
+        tags, technologies = context[name]["tags"], context[name]["technologies"]
+        if (tag is None or words(tag) in [words(t) for t in [*tags, *technologies]]) \
+                and (not query or search_matches(query, name, [*tags, *technologies])):
+            states = [state for _, state in rows]
+            entries.append({"name": name, "action": rows[0][0].action, "tags": tags, "technologies": technologies,
+                            "state": str(Status.TRUSTED) if Status.TRUSTED in states else states[0]})
+    # names known only on private technologies; with a technology asked for, that technology's own steps
+    count = len(hidden if wanted else hidden - context.keys())
+    if count and tag is None and not query:
+        entries.append({"private": True, "count": count})
+    return sorted(entries, key=lambda entry: entry.get("name", "￿"))
 
 
 def observe(user_db: Path, desktop: Desktop) -> dict:

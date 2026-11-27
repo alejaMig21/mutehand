@@ -17,7 +17,7 @@ from workflow_factory.dataops import OPS
 from workflow_factory.desktop import Desktop
 from workflow_factory.flow import KINDS
 from workflow_factory.paths import default_user_db
-from workflow_factory.steps import Locator, Sensitivity, list_steps, step_reports
+from workflow_factory.steps import Locator, Sensitivity
 from workflow_factory.upgrade import start_user_db
 
 
@@ -138,13 +138,12 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop], factory_d
         tutor.record_consent(user_db, app, control, action)
 
     @server.tool(name="list_known_steps")
-    def list_known_steps(app: str) -> list[dict]:
-        """What the apprentice already knows how to do in an app: each step's name, action and state."""
-        known = [step for step in list_steps(user_db, factory_db, light=True) if step.app == app]
-        if tutor.is_private(user_db, app):  # the names of a private app's steps stay out, like what observe_app shows
-            return [{"private": True, "count": len(known)}] if known else []
-        return [{"name": step.name, "action": step.action, "state": report["state"]}
-                for step, report in zip(known, step_reports(user_db, known), strict=True)]
+    def list_known_steps(technology: str | None = None, tag: str | None = None, query: str | None = None) -> list[dict]:
+        """What the apprentice already knows how to do, one entry per step: name, action, tags, the technologies it is
+        known on and its state. Narrow it by technology (a program), by tag (a pattern tag or a technology name) or by
+        text (words that start a word of the name or tags; capitals and accents do not matter). A private technology's
+        steps are only counted, never named."""
+        return tutor.known_steps(user_db, factory_db, technology, tag, query)
 
     @server.tool(name="list_node_kinds")
     def list_node_kinds() -> dict:

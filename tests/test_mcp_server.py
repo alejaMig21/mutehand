@@ -7,6 +7,7 @@ from test_knowledge import source_with_templates
 from workflow_factory import build_factory, load_flow, save_step
 from workflow_factory.flows import flow_summaries
 from workflow_factory.mcp_server import build_server
+from workflow_factory.steps import add_tags
 
 from fake_desktop import FakeDesktop, button, step
 
@@ -207,10 +208,10 @@ def test_the_tutor_lists_what_the_apprentice_already_knows_of_an_app(tmp_path):
     taught(tmp_path, "open-menu", "save-file")
     taught(tmp_path, "send", app="mail.exe")
 
-    result = payload(ask(server_for(tmp_path, {}), "list_known_steps", {"app": "paint.exe"}))["result"]
+    result = payload(ask(server_for(tmp_path, {}), "list_known_steps", {"technology": "paint.exe"}))["result"]
 
     assert sorted(entry["name"] for entry in result) == ["open-menu", "save-file"]
-    assert all(set(entry) == {"name", "action", "state"} for entry in result)
+    assert all(set(entry) == {"name", "action", "tags", "technologies", "state"} for entry in result)
 
 
 def test_a_flow_made_from_steps_the_apprentice_knows_is_saved_ready_and_titled(tmp_path):
@@ -297,7 +298,7 @@ def test_the_known_steps_of_a_private_app_are_counted_and_never_named(tmp_path):
     server = server_for(tmp_path, {})
     ask(server, "mark_app_private", {"app": "telegram.exe"})
 
-    result = payload(ask(server, "list_known_steps", {"app": "telegram.exe"}))["result"]
+    result = payload(ask(server, "list_known_steps", {"technology": "telegram.exe"}))["result"]
 
     assert result == [{"private": True, "count": 2}]
     assert "send-it" not in json.dumps(result)
@@ -307,9 +308,68 @@ def test_what_the_factory_already_knows_counts_when_a_flow_is_made_through_the_t
     build_factory(tmp_path / "factory.db", source_with_templates())
     server = build_server(tmp_path / "user.db", lambda app: None, factory_db=tmp_path / "factory.db")
 
-    known = payload(ask(server, "list_known_steps", {"app": "paint.exe"}))["result"]
+    known = payload(ask(server, "list_known_steps", {"technology": "paint.exe"}))["result"]
     made = payload(ask(server, "create_flow", {"title": "From the factory", "app": "paint.exe",
                                                "nodes": [{"id": "a", "step": "open-menu"}], "edges": None}))
 
     assert [entry["name"] for entry in known] == ["open-menu"]
     assert made["ready"] is True and made["missing_steps"] == []
+
+
+# --- listing steps by technology, tag or text ---------------------------------------------------------------------------
+
+def listing(tmp_path, **arguments):
+    return payload(ask(server_for(tmp_path, {}), "list_known_steps", arguments))["result"]
+
+
+def taught_with_tags(tmp_path):
+    taught(tmp_path, "Save", app="paint.exe")
+    taught(tmp_path, "Save", "Pick colour", app="notepad.exe")
+    taught(tmp_path, "Éxport data", app="sheet.exe")
+    add_tags(tmp_path / "user.db", "Save", ["File"])
+    add_tags(tmp_path / "user.db", "Pick colour", ["mouse"])
+
+
+def test_a_step_known_on_several_technologies_is_listed_once_with_all_of_them_and_its_tags(tmp_path):
+    taught_with_tags(tmp_path)
+
+    result = {entry["name"]: entry for entry in listing(tmp_path)}
+
+    assert sorted(result) == ["Pick colour", "Save", "Éxport data"]
+    assert result["Save"]["technologies"] == ["notepad.exe", "paint.exe"] and result["Save"]["tags"] == ["file"]
+    assert set(result["Save"]) == {"name", "action", "tags", "technologies", "state"}
+
+
+def test_listing_by_technology_by_tag_and_by_text(tmp_path):
+    taught_with_tags(tmp_path)
+
+    def names(**arguments):
+        return sorted(entry["name"] for entry in listing(tmp_path, **arguments))
+
+    assert names(technology="sheet.exe") == ["Éxport data"]
+    assert names(tag="FILE") == ["Save"]
+    assert names(query="sav") == ["Save"]  # the start of a word
+    assert names(query="EXPORT") == ["Éxport data"]  # capitals and accents are ignored, both ways
+    assert names(query="sheet") == ["Éxport data"]  # a technology tag
+    assert names(query="mou") == ["Pick colour"]  # a pattern tag
+    assert names(query="pick col") == ["Pick colour"] and names(query="pick save") == []  # every word must match
+    assert names(technology="notepad.exe", tag="mouse") == ["Pick colour"]
+
+
+def test_a_private_technology_is_counted_never_named_and_gives_no_tags(tmp_path):
+    taught(tmp_path, "send-it", app="telegram.exe")
+    taught(tmp_path, "Save", app="paint.exe")
+    taught(tmp_path, "Save", app="telegram.exe")
+    add_tags(tmp_path / "user.db", "send-it", ["chat"])
+    server = server_for(tmp_path, {})
+    ask(server, "mark_app_private", {"app": "telegram.exe"})
+
+    everything = payload(ask(server, "list_known_steps", {}))["result"]
+    by_tag = payload(ask(server, "list_known_steps", {"tag": "chat"}))["result"]
+    by_text = payload(ask(server, "list_known_steps", {"query": "send"}))["result"]
+
+    assert [e["name"] for e in everything if "name" in e] == ["Save"]
+    assert everything[0]["technologies"] == ["paint.exe"] and everything[0]["tags"] == []
+    assert {"private": True, "count": 1} in everything  # only the step that exists nowhere else counts
+    assert by_tag == [] and by_text == []
+    assert "telegram" not in json.dumps(everything) and "send-it" not in json.dumps(everything)
