@@ -11,6 +11,7 @@ export default function More({ flow, title, reload, onDeleted, place }) {
   const [mode, setMode] = useState('menu') // menu | rename | history
   const [problem, setProblem] = useState('')
   const [busy, setBusy] = useState(false)
+  const [renamed, setRenamed] = useState('') // the name just kept, said where the person typed it
   const toggle = useRef(null)
   const renameButton = useRef(null)
 
@@ -39,9 +40,12 @@ export default function More({ flow, title, reload, onDeleted, place }) {
   return (
     <>
       <button className="chore-more" data-testid={`more-${id}`} ref={toggle} aria-expanded={open} aria-controls={`more-panel-${id}`}
-        aria-label={`More: ${title}`} onClick={() => (open ? close() : setOpen(true))}>
+        aria-label={`More: ${title}`} onClick={() => { setRenamed(''); if (open) close(); else setOpen(true) }}>
         More
       </button>
+      {renamed && !open && (
+        <p className="chore-line tone-ok" role="status" data-testid={`renamed-${id}`}><Icon name="checkcircle" size={18} /> Renamed to “{renamed}”.</p>
+      )}
       {open && (
         <div className="more-panel" id={`more-panel-${id}`} data-testid={`more-panel-${id}`}
           onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close() } }}>
@@ -56,7 +60,7 @@ export default function More({ flow, title, reload, onDeleted, place }) {
           </div>
           {mode === 'rename' && (
             <Rename id={id} title={title} reload={reload}
-              done={() => close()} cancel={() => { setMode('menu'); renameButton.current?.focus() }} />
+              done={(name) => { close(); setRenamed(name) }} cancel={() => { setMode('menu'); renameButton.current?.focus() }} />
           )}
           {mode === 'history' && <History id={id} />}
           {problem && <p className="chore-line tone-bad" role="alert"><Icon name="alert" size={18} /> {problem}</p>}
@@ -81,7 +85,7 @@ function Rename({ id, title, reload, done, cancel }) {
     try {
       await api(`/api/flows/${encode(id)}/rename`, { method: 'POST', body: { title: text } })
       reload()
-      done()
+      done(text.trim())
     } catch (err) {
       setProblem(err.message)
       setSaving(false)

@@ -382,7 +382,7 @@ def test_a_missing_action_offers_the_message_to_send_in_a_chat_and_nothing_is_st
 
         page.evaluate("() => { window.refuseCopy = true }")
         page.get_by_role("button", name="Copy this message").click()
-        page.get_by_text("Could not copy. Select the message and copy it yourself.").wait_for()
+        page.get_by_text("Could not copy by itself. The message is selected: press Ctrl+C, then paste it in the chat.").wait_for()
 
         assert {method for method, _ in sent} <= {"GET"} and desktop.calls == []  # it only shows words
         teach.click()

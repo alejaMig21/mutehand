@@ -132,7 +132,7 @@ export function boxState(run, id) {
 }
 
 // A name no stored flow has yet, whatever the capitals.
-export function freshTitle(flows, base = 'My flow') {
+export function freshTitle(flows, base = 'New chore') {
   const taken = flows.map((f) => f.title.toLowerCase())
   let title = base
   for (let n = 2; taken.includes(title.toLowerCase()); n++) title = `${base} ${n}`

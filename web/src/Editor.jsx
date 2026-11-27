@@ -515,7 +515,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     const current = await api(flowUrl(flowId))
     if (current.revision === stored.current.revision) return flowId
     await show(flowId)
-    setError('This flow was changed somewhere else. It is shown as it is now: check it and try again.')
+    setError('This chore was changed somewhere else. It is shown as it is now: check it and try again.')
     return null
   }
 
@@ -556,7 +556,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const status = running ? 'running' : conflict ? 'conflict' : unkept && template ? 'template'
     : unkept && (held || problem) ? 'problem' : unkept ? 'saving' : lastRun ?? (isStored ? 'saved' : 'draft')
   const statusWords = { conflict: 'Changed elsewhere', template: 'Not kept', problem: 'Not saved', saving: 'Saving…', saved: 'Saved',
-    draft: 'Draft' }[status] ?? runWords(status)
+    draft: 'Not saved yet' }[status] ?? runWords(status)
   // a run puts a notice over the canvas and a log under it: the whole flow comes back into sight as it goes and ends
   // (a canvas that is not on screen has no size to fit into: that waits until it is shown again)
   useEffect(() => { if (active && shownRun) refit() }, [active, shownRun?.runId, shownRun?.status]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -632,17 +632,17 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       .map((d) => reasonWords(d.detail ?? d.reason))[0] ?? ''}`,
     emergency: 'You stopped this run. Run it again to continue where it stopped.',
     error: `The run failed (${shownRun.error ?? 'unknown error'}).`,
-    busy: 'This flow is already running somewhere else.',
+    busy: 'This chore is already running somewhere else.',
   }[shownRun.status]
 
   return (
     <div className="editor">
       <header className="topbar">
         <button className="ghost" data-testid="back-home" onClick={() => onBack(flowId)}><Icon name="back" size={16} /> Home</button>
-        <input className="flow-name" aria-label="Flow name" data-testid="flow-title" value={title} maxLength={100}
+        <input className="flow-name" aria-label="Chore name" data-testid="flow-title" value={title} maxLength={100}
           onChange={(e) => setTitle(e.target.value)} />
         <span className={`pill pill-${status}`} data-testid="run-status" role="status">{statusWords}</span>
-        <ul className="summary" aria-label="Safety of this flow" data-testid="safety-summary">
+        <ul className="summary" aria-label="Safety of this chore" data-testid="safety-summary">
           {summaryMarks(safety).map(([glyph, words, tone]) => (
             <li key={words} className={`tone-${tone}`}><Icon name={glyph} size={15} /> {words}</li>
           ))}
@@ -650,11 +650,11 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
 
         <div className="menu-anchor">
           <button className="ghost" data-testid="open-flows" aria-expanded={menu === 'flows'} onClick={() => setMenu(menu === 'flows' ? null : 'flows')}>
-            <Icon name="folder" /> Flows
+            <Icon name="folder" /> Chores
           </button>
           {menu === 'flows' && (
-            <div className="menu" aria-label="Flows">
-              <button className="menu-item" data-testid="new-flow" onClick={newFlow}><Icon name="plus" /> New flow</button>
+            <div className="menu" aria-label="Chores">
+              <button className="menu-item" data-testid="new-flow" onClick={newFlow}><Icon name="plus" /> New chore</button>
               {flows.map((flow) => (
                 <div className="menu-row" key={flow.id}>
                   <button className="menu-item" data-testid={`flow-${flow.id}`} onClick={() => openFlow(flow.id)}>
@@ -702,7 +702,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
         ) : (
           <button className="primary" data-testid="run" onClick={run} disabled={starting || nodes.length === 0 || Boolean(blocked)}
             title={nodes.length === 0 ? 'Add a box first' : blocked}>
-            <Icon name="play" size={16} /> {starting ? 'Starting…' : 'Run flow'}
+            <Icon name="play" size={16} /> {starting ? 'Starting…' : 'Run now'}
           </button>
         )}
       </header>
@@ -854,7 +854,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
             onDisconnect={(edge) => { record(); setEdges((current) => current.filter((e) => e.id !== edge.id)) }}
             ensureSaved={async () => {
               const id = await ensureStored()
-              if (!id) throw new Error('the flow was not saved, so nothing was tested')
+              if (!id) throw new Error('the chore was not saved, so nothing was tested')
               return id
             }}
             onTested={() => setTested((n) => n + 1)} />

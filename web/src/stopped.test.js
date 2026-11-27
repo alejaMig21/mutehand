@@ -110,10 +110,13 @@ test('a rejected action says who rejected it, and a private app is not named', (
   assert.match(hidden.detail, /did not do what it was taught/)
 })
 
-test('a run started with Run now says which chore it was and that it worked, or where it stopped', () => {
-  const ok = ranResult('Morning report', run('finished', { a: 'done', b: 'done' }))
+test('a run that ended here is the one line of the row: when it worked and how many steps it did', () => {
+  const now = new Date(2026, 10, 27, 12, 0)
+  const ended = new Date(2026, 10, 27, 9, 5).toISOString()
+  const ok = ranResult({ ...run('finished', { a: 'done', b: 'done' }), ended }, now)
   assert.equal(ok.tone, 'ok')
-  assert.equal(ok.words, '“Morning report” worked: 2 steps finished.')
-  assert.equal(ranResult('Morning report', run('finished', { a: 'done' })).words, '“Morning report” worked: 1 step finished.')
-  assert.equal(ranResult('Morning report', run('running')), null)
+  assert.equal(ok.words, 'Worked today at 09:05. 2 steps finished.')
+  assert.equal(ranResult({ ...run('finished', { a: 'done' }), ended }, now).words, 'Worked today at 09:05. 1 step finished.')
+  assert.equal(ranResult({ ...run('running'), ended }, now), null)
+  assert.equal(ranResult(run('finished', { a: 'done' }), now), null) // no time known: the history line speaks
 })

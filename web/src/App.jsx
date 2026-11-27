@@ -11,7 +11,7 @@ import { useRuns } from './useRuns.js'
 const SCREENS = [
   ['home', 'Home', null],
   ['apps', 'Apps', Apps],
-  ['editor', 'Flow screen', null],
+  ['editor', 'Chore', null],
 ]
 const TABS = SCREENS.filter(([id]) => id !== 'editor')
 
@@ -39,6 +39,16 @@ export default function App() {
     const lock = () => setLocked(true)
     window.addEventListener(LOCKED, lock)
     return () => window.removeEventListener(LOCKED, lock)
+  }, [])
+  const menu = useRef(null)
+  useEffect(() => { // the More menu closes when the page is clicked anywhere else (a tab included) or Escape is pressed
+    const close = (e) => {
+      if (!menu.current?.open) return
+      if (e.type === 'keydown' ? e.key === 'Escape' : !menu.current.contains(e.target)) menu.current.open = false
+    }
+    document.addEventListener('click', close)
+    document.addEventListener('keydown', close)
+    return () => { document.removeEventListener('click', close); document.removeEventListener('keydown', close) }
   }, [])
   const [, label, Current] = SCREENS.find(([id]) => id === screen)
   useSyncExternalStore(onAppNames, getAppNames) // every screen is drawn again when the apps' names arrive
@@ -84,7 +94,7 @@ export default function App() {
           </button>
         ))}
         {/* closing is rare and a browser tab can be closed anyway, so it is kept one step away from the tabs */}
-        <details className="tabs-end app-more">
+        <details className="tabs-end app-more" ref={menu}>
           <summary data-testid="app-more-toggle">More</summary>
           <div className="app-more-menu">
             <button data-testid="quit" onClick={quit} title={`Closes the program. ${OPEN_AGAIN}`}>Close the program</button>

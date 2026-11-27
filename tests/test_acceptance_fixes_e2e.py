@@ -1,6 +1,8 @@
 """What the non-technical personas could not do on Home and Apps (editor rethink, ticket 14), each fixed once and kept fixed.
 Driven in the built editor. Opt-in: `pytest -m web`."""
 
+import re
+
 import pytest
 from acceptance_server import everyday, many_apps
 from fake_scheduler import FakeScheduler
@@ -29,6 +31,7 @@ def test_a_chore_blocked_by_a_rejected_action_points_to_the_allow_again_that_exi
         why = page.get_by_test_id("chore-why-stuck")
         why.wait_for()
         assert "Steps" not in why.inner_text() and "Allow again" in why.inner_text()
+        page.get_by_test_id("attention").get_by_role("button", name="Allow again").wait_for()  # it is read apart from the chore
         assert page.get_by_test_id("attention").get_by_role("button", name="Allow again").count() == 1  # what the words point at
 
 
@@ -95,11 +98,12 @@ def test_a_run_started_with_run_now_says_which_chore_worked_in_steps(tmp_path):
         run_button(page, "morning").click()
         result = page.get_by_test_id("chore-result-morning")
         result.wait_for()
-        assert result.inner_text().strip() == "“Morning report” worked: 2 steps finished."
+        assert re.fullmatch(r"Worked .+ at \d\d:\d\d\. 2 steps finished\.", result.inner_text().strip())
+        assert "Morning report" in row(page, "morning").inner_text()
         assert page.get_by_test_id("chore-result-evening").count() == 0
         run_button(page, "evening").click()
         page.get_by_test_id("chore-result-evening").wait_for()
-        assert "“Evening report” worked: 1 step finished." in row(page, "evening").inner_text()
+        assert "1 step finished." in row(page, "evening").inner_text()
         assert "box" not in page.locator("main").inner_text().lower()
 
 

@@ -79,6 +79,21 @@ def test_search_finds_actions_across_apps_by_words_in_any_order_and_apps_by_name
     assert len(rows(server, "?q=")) == 3  # no words: every app
 
 
+def test_a_search_of_several_words_falls_back_to_any_meaningful_word_when_no_program_has_them_all(tmp_path, server):
+    db = tmp_path / "user.db"
+    save_step(db, step("Save", "A", app="excel.exe"))
+    save_step(db, step("Print", "A", app="word.exe"))
+    save_step(db, step("Save picture", "A", app="paint.exe"))
+
+    # no action says "spreadsheet": the words that carry meaning are tried one by one ("a" carries none)
+    assert {r["app"]: r["found"] for r in rows(server, "?q=save%20a%20spreadsheet")} == {
+        "excel.exe": ["Save"], "paint.exe": ["Save picture"]}
+    # words that all match keep their narrow answer: the fallback is only for an empty one
+    assert {r["app"] for r in rows(server, "?q=save%20picture")} == {"paint.exe"}
+    assert rows(server, "?q=the%20a%20to") == []  # nothing but small words matches nothing
+    assert rows(server, "?q=zzz%20qqq") == []
+
+
 def test_search_never_matches_or_names_the_actions_of_a_private_app(tmp_path, server):
     db = tmp_path / "user.db"
     save_step(db, step("open-chat", "Chat with Ana Ruiz", app="telegram.exe"))

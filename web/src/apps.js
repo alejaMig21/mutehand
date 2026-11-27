@@ -35,7 +35,7 @@ export function stopsWords({ stops }, hidden) {
   return parts.join(' ')
 }
 
-export const takeBackWords = (permission, hidden) => `${stopsWords(permission, hidden)} It can be given again only while teaching, in a chat.`
+export const takeBackWords = (permission, hidden) => `${stopsWords(permission, hidden)} To give it again, ask the assistant in the chat to teach it.`
 
 // The words the person sends in a chat. Only the person starts anything with them.
 export const teachMessage = (app) => `In Workflow Factory I want to teach another action in ${app}. `

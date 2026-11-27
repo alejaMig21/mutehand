@@ -28,7 +28,7 @@ export function useRuns() {
       try {
         const view = await api(`/api/runs/${runId}`)
         setOffline(false)
-        patch(name, view)
+        patch(name, view.status === 'running' ? view : { ...view, ended: new Date().toISOString() }) // when it ended is the run's own news
         if (view.status !== 'running') break
         await sleep(250)
       } catch (e) {

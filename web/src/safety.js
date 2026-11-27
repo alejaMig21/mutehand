@@ -21,7 +21,7 @@ export function summaryMarks(summary) {
   return marks
 }
 
-// Why Run flow is off, in words, or '' when the flow may start.
+// Why Run now is off, in words, or '' when the chore may start.
 export function whyNotRunnable(summary, app = 'this app') {
   if (summary.missing.length) {
     const named = summary.missing.map((m) => (m.hole ? `the hole '${m.hole.hole}' of the recipe '${m.hole.recipe}'` : `'${m.step}'`)).join(', ')

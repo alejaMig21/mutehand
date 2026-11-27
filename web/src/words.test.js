@@ -37,8 +37,8 @@ test('a time is shown in the local short form, and anything else is left as it i
 })
 
 test('a new flow never starts with the name of an existing one, whatever the capitals', () => {
-  assert.equal(freshTitle([]), 'My flow')
-  assert.equal(freshTitle([{ title: 'my FLOW' }, { title: 'My flow 2' }]), 'My flow 3')
+  assert.equal(freshTitle([]), 'New chore')
+  assert.equal(freshTitle([{ title: 'new CHORE' }, { title: 'New chore 2' }]), 'New chore 3')
   assert.equal(freshTitle([{ title: 'Report copy' }], 'Report copy'), 'Report copy 2')
 })
 

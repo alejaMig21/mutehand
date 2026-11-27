@@ -55,17 +55,22 @@ export function TriedResults({ tries, hide }) {
   if (done.length === 0) return null
   return (
     <div className="tried-results">
-      {done.map(([flow, { result }]) => (
-        <section key={flow} className={`tried tried-${result.tone}`} role="status" data-testid={`tried-${flow}`}>
-          <Icon name={result.tone === 'ok' ? 'checkcircle' : 'alert'} size={28} />
-          <div>
-            <h2>{result.title}</h2>
-            {result.detail && <p>{result.detail}</p>}
-          </div>
-          <button data-testid={`tried-hide-${flow}`} onClick={() => hide(flow)}>Hide</button>
-        </section>
-      ))}
+      {done.map(([flow, { result }]) => <Tried key={flow} flow={flow} result={result} hide={hide} />)}
     </div>
+  )
+}
+
+// One try's answer. Without `hide` it is still going: there is nothing to hide yet.
+function Tried({ flow, result, hide }) {
+  return (
+    <section className={`tried tried-${result.tone}`} role="status" data-testid={`tried-${flow}`}>
+      <Icon name={result.tone === 'ok' ? 'checkcircle' : result.tone === 'info' ? 'spinner' : 'alert'} size={28} />
+      <div>
+        <h2>{result.title}</h2>
+        {result.detail && <p>{result.detail}</p>}
+      </div>
+      {hide && <button data-testid={`tried-hide-${flow}`} onClick={() => hide(flow)}>Hide</button>}
+    </section>
   )
 }
 
@@ -205,11 +210,18 @@ const rejectedKey = (item) => `rejected-${item.app}-${item.step}`
 
 // The things that need the person, first on Home. Absent when there are none. A rejected action that was just allowed again
 // stays where it was, saying so, until the person dismisses it: the list below does not jump up under the next press.
-export function Attention({ items, tries, tryAgain, onChanged, running }) {
+//
+// A try again answers the same way: its answer stands in the card, or where the card was once the chore no longer needs
+// the person, until it is hidden. `tries` and `hide` are the ones `useTryAgain` gives.
+export function Attention({ items, tries, hide, tryAgain, onChanged, running }) {
   const [kept, setKept] = useState({}) // key -> {item, at, words}
+  const placed = useRef({}) // flow -> where its card was when Try again was pressed
   const list = items.map((item) => ({ item }))
   for (const [key, one] of Object.entries(kept)) {
     if (!items.some((item) => item.kind === 'rejected' && rejectedKey(item) === key)) list.splice(Math.min(one.at, list.length), 0, { key, ...one })
+  }
+  for (const [flow, tried] of Object.entries(tries)) {
+    if (!items.some((item) => item.kind === 'stopped' && item.flow === flow)) list.splice(Math.min(placed.current[flow] ?? 0, list.length), 0, { flow, tried })
   }
   if (list.length === 0) return null
   const allowed = (item, at) => (words) => { setKept((all) => ({ ...all, [rejectedKey(item)]: { item, at, words } })); onChanged() }
@@ -217,7 +229,11 @@ export function Attention({ items, tries, tryAgain, onChanged, running }) {
     <section className="attention" aria-labelledby="attention-title" data-testid="attention">
       <h2 id="attention-title">{items.length ? `Needs your attention (${items.length})` : 'Done'}</h2>
       <ul>
-        {list.map(({ item, key, words }, at) => {
+        {list.map(({ item, key, words, flow, tried }, at) => {
+          if (flow) {
+            return <li key={`tried-${flow}`}><Tried flow={flow} hide={tried.result ? hide : undefined}
+              result={tried.result ?? { tone: 'info', title: `Trying “${tried.before.title}” again…` }} /></li>
+          }
           if (key) {
             return (
               <Card key={key} id={key} done title={words} detail={`${titles(item.flows)} can run now.`}>
@@ -230,10 +246,11 @@ export function Attention({ items, tries, tryAgain, onChanged, running }) {
           if (item.kind === 'setup') return <Setup key={`setup-${item.id}`} item={item} />
           const says = stoppedWords(item)
           return (
-            <Card key={item.flow} id={item.flow} title={says.title} detail={says.detail} hint={says.hint}>
+            <Card key={item.flow} id={item.flow} title={says.title} detail={says.detail} hint={says.hint}
+              below={tries[item.flow]?.result && <Tried flow={item.flow} result={tries[item.flow].result} hide={hide} />}>
               <StoppedActions item={item} prefix="attention" suffix={`-${item.flow}`} onChanged={onChanged}
                 trying={running(item.flow) || Boolean(tries[item.flow] && !tries[item.flow].result)}
-                onTry={tryAgain} />
+                onTry={(one) => { placed.current[one.flow] = at; tryAgain(one) }} />
             </Card>
           )
         })}
