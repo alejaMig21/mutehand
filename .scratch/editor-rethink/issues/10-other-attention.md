@@ -6,7 +6,7 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 
 **Blocked by:** 09
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] An app update shows one card naming the app and the blocked flows, with the message to send
 - [ ] A rejected step that blocks a flow says why, and "Allow again" lifts it
@@ -15,3 +15,8 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 - [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop and scheduler, red before green
 - [ ] Everything added works from the keyboard and fits a 683 px and a 390 px wide window; button text stays readable
 - [ ] Existing tests pass; no screen content of a private app appears in any message
+
+## Answer
+
+Home also lists apps to learn again with the chores they block, rejected actions that block a chore with "Allow again", and failed required setup checks with how to fix them.
+Commits: 8d2cc3d.
