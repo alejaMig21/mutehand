@@ -71,7 +71,7 @@ from workflow_factory.steps import (
     step_report,
     step_reports,
 )
-from workflow_factory.tutor import is_private, private_apps
+from workflow_factory.tutor import handle, is_private, private_apps
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")  # the only names this server can be bound to
 MAX_BODY_BYTES = 1_000_000
@@ -619,13 +619,19 @@ class ApiServer:
                 mark = re.fullmatch(r"/api/steps/([^/]+)/([^/]+)/(reject|restore)", path)
                 if mark and method == "POST":  # a step name is free text: the browser sends it percent-encoded
                     app, name = urllib.parse.unquote(mark[1]), urllib.parse.unquote(mark[2])
-                    if find_step(api.user_db, api.factory_db, app, name) is None:
+                    found = find_step(api.user_db, api.factory_db, app, name) or next(
+                        (s for s in list_steps(api.user_db, api.factory_db, light=True)  # a private app's action is named by handle
+                         if s.app == app and handle(s.app, s.name) == name), None)
+                    if found is None:
                         return self._send(404, {"error": "no such step"})
+                    name = found.name
                     (reject_step if mark[3] == "reject" else restore_step)(api.user_db, app, name)
                     return self._send(200, {"step": name, "action": mark[3]})
                 if path == "/api/consents" and method == "DELETE":  # revoke only: granting happens at teaching time
                     body = self._body()
-                    if not revoke_consent(api.user_db, body["app"], body["control"], body["action"]):
+                    control = next((c.control for c in consents(api.user_db) if c.app == body["app"]  # a private app's control is a handle
+                                    and handle("control", c.control) == body["control"]), body["control"])
+                    if not revoke_consent(api.user_db, body["app"], control, body["action"]):
                         return self._send(404, {"error": "no such consent"})
                     return self._send(200, {"revoked": True})
                 if path == "/api/doubts" and method == "GET":

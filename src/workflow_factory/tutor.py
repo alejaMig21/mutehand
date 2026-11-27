@@ -5,6 +5,10 @@ doubts. There is no force option and no screenshot tracing here, and secrets onl
 as references.
 """
 
+import hashlib
+import hmac
+import json
+import secrets
 import sqlite3
 from collections import Counter
 from contextlib import closing
@@ -67,6 +71,15 @@ def private_apps(user_db: Path) -> frozenset[str]:
     """The names (no .exe, lower case) of every private app: the defaults and the ones the person marked."""
     with closing(_connect(user_db)) as db:
         return DEFAULT_PRIVATE_APPS | {row[0] for row in db.execute("SELECT app FROM private_apps")}
+
+
+_HANDLE_KEY = secrets.token_bytes(16)  # lives as long as the process: a handle is only good for the page that asked for it
+
+
+def handle(*names: str) -> str:
+    """An opaque stand-in for names the browser must not see (an action or control of a private app). The same names give the
+    same handle in this process, so a button can send it back; nothing about the names can be read from it."""
+    return "h" + hmac.new(_HANDLE_KEY, json.dumps(names).encode(), hashlib.sha256).hexdigest()[:16]
 
 
 def is_private(user_db: Path, app: str, known: frozenset[str] | None = None) -> bool:

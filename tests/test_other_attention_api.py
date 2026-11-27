@@ -116,6 +116,9 @@ def test_a_private_apps_rejected_action_is_not_described(tmp_path):
         [item] = made.items()
 
         assert item["private"] is True and item["why"] == {"kind": "person"}
+        assert "save-file" not in json.dumps(item) and "Beta" not in json.dumps(item)  # an opaque handle, not the name
+        assert call(made.server, f"/api/steps/vault.exe/{item['step']}/restore", "POST")[0] == 200  # and it still allows it again
+        assert made.items() == []
     finally:
         made.server.stop()
 

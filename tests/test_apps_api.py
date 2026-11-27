@@ -1,7 +1,10 @@
 """The Apps screen's data (editor rethink, ticket 11): one row per app, a search across all apps, and what one app holds:
 its actions with the problems first and the permissions it was given. API side."""
 
+import json
+import sqlite3
 import time
+from contextlib import closing
 
 import numpy as np
 import pytest
@@ -102,6 +105,33 @@ def test_an_app_lists_its_actions_with_the_ones_that_have_a_problem_first_and_wh
     assert [(a["name"], a["state"]) for a in app["actions"]] == [
         ("c-send", "rejected"), ("d-old", "to_revalidate"), ("a-save", "suspect"), ("b-open", "suspect")]
     assert app["actions"][0]["why"] == {"kind": "person"}
+
+
+def test_a_private_apps_detail_names_no_action_or_control_and_its_buttons_work_from_handles(tmp_path, server):
+    db = tmp_path / "user.db"
+    save_step(db, step("pay-rent", "Transfer", app="vault.exe", sensitive=Sensitivity.OUTWARD_ACTION))
+    save_step(db, step("open-it", "Open", app="vault.exe"))
+    mark_private(db, "vault.exe")
+    reject_step(db, "vault.exe", "pay-rent")
+    with closing(sqlite3.connect(db)) as con, con:  # a check that failed: what it expected and saw is screen content
+        con.execute("UPDATE step_state SET why = ? WHERE name = 'pay-rent'",
+                    ('{"kind": "different_effect", "expected": "Balance 12", "got": "Balance 9", "at": "x"}',))
+    grant_consent(db, "vault.exe", "Transfer", "click")
+
+    status, app, _ = call(server, "/api/apps/vault.exe")
+
+    text = json.dumps(app)
+    assert status == 200 and app["private"] is True
+    for secret in ("pay-rent", "open-it", "Transfer", "Balance"):
+        assert secret not in text
+    assert [a["state"] for a in app["actions"]] == ["rejected", "suspect"] and app["actions"][0]["why"] == {"kind": "different_effect"}
+    [permission] = app["permissions"]
+    assert len(permission["stops"]["actions"]) == 1 and permission["action"] == "click"
+    assert call(server, f"/api/steps/vault.exe/{app['actions'][0]['name']}/restore", "POST")[0] == 200
+    assert call(server, "/api/apps/vault.exe")[1]["actions"][0]["state"] != "rejected"
+    taken = {key: permission[key] for key in ("app", "control", "action")}
+    assert call(server, "/api/consents", "DELETE", taken)[0] == 200
+    assert call(server, "/api/apps/vault.exe")[1]["permissions"] == []
 
 
 def test_a_permission_says_which_chores_and_actions_stop_without_it_by_data(tmp_path, server):

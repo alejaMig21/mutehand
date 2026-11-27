@@ -2,7 +2,7 @@
 
 Kinds: a stopped flow, actions to learn again after an app update, a rejected action a flow needs, and a required setup
 piece that is missing. Each item holds only roles, names the person gave and codes: no screen content, and no name of an
-action in a private app."""
+action in a private app: where a button needs one to send back, it gets a handle (see `tutor.handle`)."""
 
 from pathlib import Path
 
@@ -10,7 +10,7 @@ from workflow_factory.checks import run_checks
 from workflow_factory.flows import flow_overview, flow_summaries, load_flow, taught_app
 from workflow_factory.queue import last_runs, list_doubts
 from workflow_factory.steps import Status, list_steps, step_reports
-from workflow_factory.tutor import is_private, private_apps
+from workflow_factory.tutor import handle, is_private, private_apps
 
 
 def rejected_by_person(report: dict) -> bool:
@@ -47,13 +47,14 @@ def _stopped(user_db: Path, factory_db: Path | None, steps: list) -> list[dict]:
         doubt = min(by_flow[flow_id], key=lambda d: (order.get(d.node_id, len(order)), d.id))  # the first box in flow order
         hidden = is_private(user_db, app, private) if app else False
         used = dict.fromkeys(node.step for node in flow.nodes if node.kind in ("step", "loop"))
-        person = [{"app": app, "step": name} for name in used if (report := reports.get((app, name))) and rejected_by_person(report)]
+        person = [{"app": app, "step": handle(app, name) if hidden else name} for name in used
+                  if (report := reports.get((app, name))) and rejected_by_person(report)]
         last = runs.get(flow_id)
         items.append({
             "kind": "stopped", "flow": flow_id, "title": entry["title"], "app": app, "private": hidden,
             "node": doubt.node_id, "box": None if hidden else (doubt.step or None), "reason": doubt.detail or str(doubt.reason),
             "doubt": doubt.id, "note": doubt.note, "at": last["at"] if last else None,
-            "rejected_by_person": person,  # to call "Allow again" with: never printed for a private app
+            "rejected_by_person": person,  # to call "Allow again" with: a handle, not the name, for a private app
         })
     return sorted(items, key=lambda item: item["doubt"])
 
@@ -87,7 +88,7 @@ def _blocking(user_db: Path, factory_db: Path | None, steps: list, stopped: set[
             for name in blocked["steps"]:
                 why = (reports.get((app, name)) or {}).get("why") or {"kind": "person"}  # nobody recorded it: the person's
                 item = rejected.setdefault((app, name), {
-                    "kind": "rejected", "app": app, "private": hidden, "step": name,
+                    "kind": "rejected", "app": app, "private": hidden, "step": handle(app, name) if hidden else name,
                     "why": {"kind": why.get("kind")} if hidden else why, "flows": []})
                 item["flows"].append(mine)
     for item in relearn.values():

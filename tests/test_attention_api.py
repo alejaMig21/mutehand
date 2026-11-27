@@ -98,6 +98,23 @@ def test_a_deleted_flow_raises_no_card(setup):
     assert setup.attention() == []
 
 
+def test_a_private_apps_rejected_actions_are_sent_as_handles_that_still_allow_them_again(tmp_path):
+    made = Setup(tmp_path, app="vault.exe")
+    try:
+        mark_private(made.db, "vault.exe")
+        made.stop_the_flow()
+        reject_step(made.db, "vault.exe", "close-message")
+
+        [item] = made.attention()
+        [handle] = item["rejected_by_person"]
+
+        assert "close-message" not in json.dumps(item) and "Beta" not in json.dumps(item)
+        assert call(made.server, f"/api/steps/{handle['app']}/{handle['step']}/restore", "POST")[0] == 200
+        assert state_of(made.db, "close-message") != "rejected" and made.attention()[0]["rejected_by_person"] == []
+    finally:
+        made.server.stop()
+
+
 def test_a_private_apps_box_is_not_named(tmp_path):
     made = Setup(tmp_path, app="vault.exe")
     try:

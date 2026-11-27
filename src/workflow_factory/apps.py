@@ -1,6 +1,7 @@
 """What the Apps screen says: one row per app, a search across all of them, and what one app holds (its actions, problems
 first, and the permissions it was given with what would stop without each). Names, counts and codes only: no screen content,
-and the actions of a private app are neither matched by a search nor offered as search results."""
+and the actions of a private app are neither matched by a search nor offered as search results, and in `app_detail` its action
+and control names are handles (see `tutor.handle`)."""
 
 import re
 from dataclasses import asdict
@@ -10,7 +11,7 @@ from workflow_factory.consent import Consent, consents, covers, needs_consent
 from workflow_factory.desktop import plain_app
 from workflow_factory.flows import flow_summaries, load_flow
 from workflow_factory.steps import Status, app_names, list_steps, step_reports
-from workflow_factory.tutor import is_private, private_apps
+from workflow_factory.tutor import handle, is_private, private_apps
 
 PROBLEMS = (str(Status.REJECTED), str(Status.TO_REVALIDATE))
 
@@ -72,8 +73,10 @@ def app_detail(user_db: Path, factory_db: Path | None, app: str) -> dict | None:
     if key not in spelling:
         return None
     mine = [(step, report) for step, report in zip(steps, reports, strict=True) if plain_app(step.app) == key]
-    actions = [{"app": step.app, "name": step.name, "state": report["state"],
-                "why": (report["why"] or {"kind": "person"}) if report["state"] == str(Status.REJECTED) else None}
+    hidden = is_private(user_db, app)
+    shown = (lambda *names: handle(*names)) if hidden else (lambda *names: names[-1])  # what the browser gets for a name
+    actions = [{"app": step.app, "name": shown(step.app, step.name), "state": report["state"],
+                "why": _why(report["why"], hidden) if report["state"] == str(Status.REJECTED) else None}
                for step, report in mine]
     actions.sort(key=lambda action: (action["state"] not in PROBLEMS, action["name"]))
     by_name = {step.name: step for step, _ in mine}
@@ -84,12 +87,19 @@ def app_detail(user_db: Path, factory_db: Path | None, app: str) -> dict | None:
         if plain_app(granted.app) != key:
             continue
         needing = {name: step for name, step in by_name.items() if needs_consent(user_db, step) and covers([_as(granted, step)], step)}
-        permissions.append({**asdict(granted), "stops": {
-            "actions": sorted(needing),
+        permissions.append({**asdict(granted), "control": granted.control if granted.control == "*" else shown("control", granted.control),
+                            "stops": {
+            "actions": sorted(shown(step.app, name) for name, step in needing.items()),
             "flows": sorted(({"id": entry["id"], "title": entry["title"]} for entry, used in chores if used & needing.keys()),
                             key=lambda flow: flow["id"])}})
     permissions.sort(key=lambda permission: (permission["control"], permission["action"]))
-    return {"app": spelling[key], "private": is_private(user_db, app), "actions": actions, "permissions": permissions}
+    return {"app": spelling[key], "private": hidden, "actions": actions, "permissions": permissions}
+
+
+def _why(why: dict | None, hidden: bool) -> dict:
+    """Why an action is rejected. What a failed check expected and saw is screen content: a private app keeps only the kind."""
+    why = why or {"kind": "person"}
+    return {"kind": why.get("kind")} if hidden else why
 
 
 def _as(granted: Consent, step) -> Consent:
