@@ -21,8 +21,24 @@ A teaching session in which the tutor teaches the apprentice steps and recipes a
 _Avoid_: Skill, macro
 
 **Step**:
-One learned action on one control of an app, with its precondition, the action itself and the effect measured when it was taught. A step that writes text or selects keeps no effect, so runs neither trust nor reject it. It is a node of a flow and is reusable. On screen it is called an **action**.
-_Avoid_: Task
+One small, indivisible learned action, named by what it does ("Save") and never by a program. It holds one locator per technology it has been learned for, with its precondition, the action itself and the effect measured when it was taught. A step that writes text or selects keeps no effect, so runs neither trust nor reject it. A node of a flow uses it, and it is reusable.
+_Avoid_: Task, action
+
+**Technology**:
+The program, or kind of program, a step is learned for: Excel, Word, Paint. A node records the technology it acts on.
+_Avoid_: App (on screen), platform
+
+**Tag**:
+A mark by which the filter finds a step or component. A technology tag comes by itself from where the step was learned; a pattern tag ("file", "mouse") is added by the tutor.
+_Avoid_: Label, category
+
+**Locator**:
+How one step finds its control in one technology, through the locator ladder.
+_Avoid_: Selector
+
+**Universal step**:
+A step with no technology. It shows in the filter only when its name or tags match what was typed.
+_Avoid_: Global step
 
 **Basic operation**:
 A generic kind of action the system provides (write text in a field, press a button, read text, wait for a control, paste). A step is a basic operation bound to one app's control.
@@ -97,20 +113,20 @@ One scheduled execution of a flow on the user's PC.
 _Avoid_: Job, batch
 
 **Flow**:
-A graph of nodes, with triggers, branching, conditions, joins and capped loops, that describes a workday.
-_Avoid_: Workflow, pipeline, script
+A graph of nodes, with triggers, branching, conditions, joins and capped loops, that describes a workday. The screens use the same word.
+_Avoid_: Workflow, pipeline, script, chore
 
-**On-screen words**:
-What the screens say instead of the domain terms: **chore** is a Flow, **box** is a Node, **action** is a Step. The domain terms do not change in code, the API or these definitions.
-_Avoid_: Mixing the two sets in one sentence
+**Component**:
+A flow used as a node of another flow. It declares its own inputs and outputs, as many of each as it needs, and its technology tags are those of the steps inside it.
+_Avoid_: Sub-flow, macro, composite step
 
 **Title**:
 The free text a person calls a flow, shown on screen. The flow's identifier, made from its first title, never changes and is what checkpoints, history and Windows tasks use.
 _Avoid_: Showing the identifier as the name
 
 **Node**:
-One piece of a flow: a step or a system node.
-_Avoid_: Task, block
+One piece of a flow: a step, a component or a system node. A step node records the technology it acts on. The screens use the same word.
+_Avoid_: Task, block, box
 
 **System node**:
 A node that comes with the app and needs no teaching: triggers, logic, loops, joins, waits and data handling.
@@ -157,11 +173,11 @@ _Avoid_: Password field, stored credential
 ### Communication
 
 **Tutor queue**:
-The list of doubts the apprentice leaves for the tutor. The person sees it as cards that need attention on Home and as the reason under a stopped box, not as a screen of its own.
+The list of doubts the apprentice leaves for the tutor. The person sees it as cards that need attention on Home and as the reason under a stopped node, not as a screen of its own.
 _Avoid_: Inbox, ticket list
 
 **Doubt**:
-One entry in the tutor queue: where the apprentice stopped, why, a structural capture, and its status (open, answered, dismissed). A person who presses "Try again" on a stopped chore closes it as answered, marked tried again, and a person who asks for help leaves a note on it while it stays open.
+One entry in the tutor queue: where the apprentice stopped, why, a structural capture, and its status (open, answered, dismissed). A person who presses "Try again" on a stopped flow closes it as answered, marked tried again, and a person who asks for help leaves a note on it while it stays open.
 _Avoid_: Issue, error, question
 
 **Structural capture**:
