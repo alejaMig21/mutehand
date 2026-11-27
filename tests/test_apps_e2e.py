@@ -95,15 +95,16 @@ def test_an_app_opens_with_its_actions_problems_first_each_with_its_button(tmp_p
         card = page.get_by_test_id("app-card-excel.exe")
         card.wait_for()
         assert "Microsoft Excel" in card.inner_text() and ".exe" not in card.inner_text()
-        order = [p.get_attribute("data-testid") for p in card.locator("[data-testid^=app-problem-], [data-testid^=app-action-]").all()]
-        assert order == ["app-problem-Add a chart", "app-problem-Save", "app-action-New spreadsheet", "app-action-Open file",
+        parts = "[data-testid^=app-problem-], [data-testid=app-relearn], [data-testid^=app-action-]"
+        order = [p.get_attribute("data-testid") for p in card.locator(parts).all()]
+        assert order == ["app-relearn", "app-problem-Save", "app-action-New spreadsheet", "app-action-Open file",
                          "app-action-Write in a cell"]
-        assert "learned again" in card.get_by_test_id("app-problem-Add a chart").inner_text()
+        assert "learned again" in card.get_by_test_id("app-relearn").inner_text()
         assert "You rejected it." in card.get_by_test_id("app-problem-Save").inner_text()
 
-        card.get_by_test_id("app-message-Add a chart").click()
+        card.get_by_test_id("app-message-relearn").click()
         message = card.get_by_test_id("chat-text").inner_text()
-        assert "Microsoft Excel was updated" in message and "“Add a chart”" in message and ".exe" not in message
+        assert "Microsoft Excel was updated" in message and ".exe" not in message
 
         card.get_by_test_id("app-allow-again-Save").click()
         card.get_by_test_id("app-problem-Save").wait_for(state="detached")

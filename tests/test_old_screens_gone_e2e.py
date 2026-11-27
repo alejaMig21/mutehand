@@ -288,7 +288,7 @@ def test_a_daily_run_is_added_seen_and_stopped_on_the_chore_and_no_other_task_is
         page.get_by_test_id("daily-time-morning").fill("07:45")
         page.get_by_test_id("daily-set-morning").click()
 
-        page.get_by_test_id("daily-morning").filter(has_text="Every day at 07:45").wait_for()
+        page.get_by_test_id("daily-morning").filter(has_text="Every day at 7:45 AM").wait_for()
         created = next(task for name, task in scheduler.tasks.items() if name != FOREIGN)
         assert "--app paint.exe" in created["arguments"]  # it runs on the app the chore remembers
         assert "Defrag" not in page.locator("body").inner_text()

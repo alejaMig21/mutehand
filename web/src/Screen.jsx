@@ -27,7 +27,7 @@ export default function Screen({ title, help, load, said, empty, emptyId, isEmpt
           <button data-testid="retry" onClick={load.reload}>Try again</button>
         </div>
       ) : load.loading ? <p className="empty-state" role="status">Loading…</p>
-        : isEmpty ? <p className="empty-state" data-testid={emptyId}>{empty}</p> : children}
+        : isEmpty ? <div className="empty-state" data-testid={emptyId}>{empty}</div> : children}
     </section>
   )
 }

@@ -79,7 +79,7 @@ def test_try_again_closes_the_doubt_goes_on_from_where_it_stopped_and_says_it_is
 
         fixed = page.get_by_test_id("tried-weekly")
         fixed.filter(has_text="Fixed: “Weekly export” ran to the end just now.").wait_for()
-        assert "2 boxes finished." in fixed.inner_text()  # the one done before counts too
+        assert "2 steps finished." in fixed.inner_text()  # the one done before counts too
         assert clicked(desktop) == ["Beta"]  # the first box was not done again
         assert [(d.status, d.closed_as) for d in list_doubts(db)] == [("answered", "tried_again")]
         assert page.get_by_test_id("attention").count() == 0
@@ -165,7 +165,7 @@ def test_giving_the_chore_a_daily_time_after_it_stopped_does_not_send_it_back_to
         page.get_by_test_id("daily-weekly").click()
         page.get_by_test_id("daily-time-weekly").fill("07:30")
         page.get_by_test_id("daily-set-weekly").click()
-        row(page, "weekly").filter(has_text="07:30").wait_for()
+        row(page, "weekly").filter(has_text="7:30 AM").wait_for()
 
         try_again(page).click()
         page.get_by_test_id("tried-weekly").filter(has_text="Fixed").wait_for()
@@ -253,11 +253,11 @@ def test_no_screen_content_of_a_private_app_reaches_a_stopped_card_or_its_messag
         said = []
         page.on("response", lambda r: said.append(r) if "/api/attention" in r.url else None)
         page.get_by_test_id("attention-greet").wait_for()
-        assert "one of its boxes" in card(page, "greet").inner_text()
+        assert "one of its steps" in card(page, "greet").inner_text()
         page.get_by_test_id("attention-ask-help-greet").click()
         message = page.get_by_test_id("attention-help-greet").inner_text()
         shown = page.content() + message + "".join(r.text() for r in said)
-        assert "Ana Ruiz" not in shown and "4471" not in shown and "open-chat" not in shown and "one of its boxes" in message
+        assert "Ana Ruiz" not in shown and "4471" not in shown and "open-chat" not in shown and "one of its steps" in message
 
 
 @pytest.mark.parametrize("width,height", [(683, 384), (390, 740)])

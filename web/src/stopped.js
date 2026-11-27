@@ -7,7 +7,7 @@ import { appLabel } from './catalog.js'
 import { reasonWords, runNoteWords, sinceWords, whyWords } from './words.js'
 
 const ON_SCREEN = ['control_not_found', 'unreadable', 'out_of_frame', 'wrong_window', 'template_no_match'] // the app was not as taught
-const where = (item) => (item.box ? `“${item.box}”` : 'one of its boxes')
+const where = (item) => (item.box ? `“${item.box}”` : 'one of its steps')
 
 export function stoppedWords(item, now = new Date()) {
   const app = appLabel(item.app || 'the app')
@@ -27,7 +27,7 @@ export function helpMessage(item, appName, note) {
     + `It is open question ${item.doubt} in Workflow Factory.${mine ? ` My note: “${mine}”.` : ''} Please help me get it running again.`
 }
 
-const finishedBoxes = (run) => Object.values(run.nodes ?? {}).filter((state) => state === 'done' || state === 'continued').length
+const finishedSteps = (run) => Object.values(run.nodes ?? {}).filter((state) => state === 'done' || state === 'continued').length
 
 // How a try ended: {tone, title, detail}. `before` is the item when it was pressed, `after` the item now (null when the
 // chore is no longer stopped), `run` the run that ended.
@@ -35,8 +35,8 @@ export function triedResult(before, run, after) {
   const name = `“${before.title}”`
   const app = appLabel(before.app || 'the app')
   if (run.status === 'finished') {
-    const n = finishedBoxes(run)
-    return { tone: 'ok', title: `Fixed: ${name} ran to the end just now.`, detail: `${n} ${n === 1 ? 'box' : 'boxes'} finished.` }
+    const n = finishedSteps(run)
+    return { tone: 'ok', title: `Fixed: ${name} ran to the end just now.`, detail: `${stepsWords(n)} finished.` }
   }
   if (run.status === 'stopped') {
     if (!after) return { tone: 'bad', title: `Stopped again: ${name}.`, detail: '' }
@@ -52,7 +52,14 @@ export function triedResult(before, run, after) {
   return { tone: run.status === 'error' ? 'bad' : 'warn', title: `${name} did not run.`, detail: runNoteWords(run, app) }
 }
 
-const titles = (flows) => flows.map((flow) => `“${flow.title}”`).join(', ')
+const stepsWords = (n) => `${n} ${n === 1 ? 'step' : 'steps'}`
+
+// How a run started with Run now ended, for the chore's row: {tone, words}, or null while there is nothing to say yet.
+export function ranResult(title, run) {
+  return run?.status === 'finished' ? { tone: 'ok', words: `“${title}” worked: ${stepsWords(finishedSteps(run))} finished.` } : null
+}
+
+export const titles = (flows) => flows.map((flow) => `“${flow.title}”`).join(', ')
 
 // An app update: what the card says, and the message to send in a chat. The actions are not named: the tutor lists them.
 export function relearnWords(item) {

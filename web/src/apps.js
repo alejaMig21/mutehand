@@ -41,5 +41,6 @@ export const takeBackWords = (permission, hidden) => `${stopsWords(permission, h
 export const teachMessage = (app) => `In Workflow Factory I want to teach another action in ${app}. `
   + `Please ask me what I want it to be able to do in ${app}, then teach it.`
 
-export const updatedMessage = (app, action, hidden) => `In Workflow Factory ${app} was updated and ${hidden ? 'one of its actions' : `“${action}”`} `
-  + `has to be learned again. Please teach it again.`
+// One message for the whole app: the tutor finds which actions it has to teach again.
+export const relearnMessage = (app) => `In Workflow Factory ${app} was updated and its actions have to be learned again. `
+  + 'Please find which ones and teach them again.'

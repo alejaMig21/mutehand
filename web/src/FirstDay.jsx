@@ -10,6 +10,16 @@ const STAGES = [
   ['Let it repeat', 'Press Run, or choose a time for every day.'],
 ]
 
+// The message that starts teaching, for Home and Apps while nothing is learned.
+export function TeachFirst() {
+  return (
+    <section aria-labelledby="teach-heading" className="first-day-teach">
+      <h2 id="teach-heading">Teach it your first chore</h2>
+      <ChatMessage message="I want to teach you a chore: [what you want done, and in which program]" />
+    </section>
+  )
+}
+
 // What Home shows with no chore: the message that starts teaching and the three stages, while nothing is learned,
 // or the way to the first chore once something is. Nothing here starts a lesson: the message is for a chat.
 export default function FirstDay({ onNew, onFirstDay }) {
@@ -37,11 +47,7 @@ export default function FirstDay({ onNew, onFirstDay }) {
   }
   return (
     <div className="first-day" data-testid="first-day">
-      <section aria-labelledby="teach-heading" className="first-day-teach">
-        <h2 id="teach-heading">Teach it your first chore</h2>
-        <ChatMessage message="I want to teach you a chore: [what you want done, and in which program]"
-          intro="Open Claude Code in the Workflow Factory folder and send this:" />
-      </section>
+      <TeachFirst />
       <ol className="stages" data-testid="stages">
         {STAGES.map(([name, words], i) => <li key={name}><b>{i + 1}. {name}</b><span className="muted">{words}</span></li>)}
       </ol>

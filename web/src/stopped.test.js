@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { helpMessage, rejectedWords, relearnWords, stoppedWords, triedResult } from './stopped.js'
+import { helpMessage, ranResult, rejectedWords, relearnWords, stoppedWords, triedResult } from './stopped.js'
 
 const item = { flow: 'weekly', title: 'Weekly export', app: 'paint.exe', private: false, node: 'n2', box: 'Close message',
   reason: 'control_not_found', doubt: 12, note: null, at: new Date(2026, 10, 25, 9, 0).toISOString(), rejected_by_person: [] }
@@ -19,7 +19,7 @@ test('a box in a private app is not named, and a stop with no time is still said
   const says = stoppedWords({ ...item, private: true, box: null, at: null }, now)
 
   assert.equal(says.title, '“Weekly export” stopped')
-  assert.match(says.detail, /^At one of its boxes: /)
+  assert.match(says.detail, /^At one of its steps: /)
 })
 
 test('a stop the person caused says to allow the action again before anything else', () => {
@@ -50,13 +50,13 @@ test('a private app is named in the message, its box is not', () => {
 
 const run = (status, nodes = {}, extra = {}) => ({ status, nodes, ...extra })
 
-test('trying again that works says it is fixed and how many boxes finished', () => {
+test('trying again that works says it is fixed and how many steps finished', () => {
   const result = triedResult(item, run('finished', { t: 'done', a: 'done', b: 'continued', c: 'skipped' }), null)
 
   assert.equal(result.tone, 'ok')
   assert.equal(result.title, 'Fixed: “Weekly export” ran to the end just now.')
-  assert.equal(result.detail, '3 boxes finished.')
-  assert.equal(triedResult(item, run('finished', { a: 'done' }), null).detail, '1 box finished.')
+  assert.equal(result.detail, '3 steps finished.')
+  assert.equal(triedResult(item, run('finished', { a: 'done' }), null).detail, '1 step finished.')
 })
 
 test('trying again that stops at the same box for the same reason is the same problem', () => {
@@ -101,4 +101,12 @@ test('a rejected action says who rejected it, and a private app is not named', (
 
   assert.doesNotMatch(JSON.stringify(hidden), /secret-step/)
   assert.match(hidden.detail, /did not do what it was taught/)
+})
+
+test('a run started with Run now says which chore it was and that it worked, or where it stopped', () => {
+  const ok = ranResult('Morning report', run('finished', { a: 'done', b: 'done' }))
+  assert.equal(ok.tone, 'ok')
+  assert.equal(ok.words, '“Morning report” worked: 2 steps finished.')
+  assert.equal(ranResult('Morning report', run('finished', { a: 'done' })).words, '“Morning report” worked: 1 step finished.')
+  assert.equal(ranResult('Morning report', run('running')), null)
 })

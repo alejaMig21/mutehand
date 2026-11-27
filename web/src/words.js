@@ -40,6 +40,13 @@ export function flowTitle(id, flows) {
   return flows.some((f) => f !== flow && f.title === flow.title) ? `${flow.title} (${id})` : flow.title
 }
 
+// A daily time ("19:05") in the clock the person's language uses, the one their time field shows.
+export function timeWords(at, locale) {
+  const [hour, minute] = String(at).split(':').map(Number)
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return at
+  return new Date(2000, 0, 1, hour, minute).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
+}
+
 // A run that waits for the person to stop using the mouse and keyboard says so, wherever it is shown.
 export const PAUSED_WORDS = 'Paused: you moved the mouse. It resumes when you stop using the PC.'
 
@@ -90,7 +97,7 @@ export function runNoteWords(run, app) {
 }
 
 const BLOCKED = {
-  empty: 'It has no boxes yet. Open it to add some.', no_app: 'No app is chosen for it. Open it, choose one and press Save.',
+  empty: 'It has no steps yet. Open it to add some.', no_app: 'No app is chosen for it. Open it, choose one and press Save.',
   expression: 'It uses an expression, which cannot run yet.', unreadable: 'It cannot be read.',
   question: 'It stopped earlier and is waiting for you.',
 }
@@ -102,7 +109,7 @@ export function blockedWords(blocked, app) {
   const names = steps.map((step) => `“${step}”`).join(', ')
   const one = steps.length === 1
   if (why === 'not_learned') return `${names} ${one ? 'is' : 'are'} not learned ${app ? `for ${app} ` : ''}yet.`
-  if (why === 'rejected') return `${names} ${one ? 'is' : 'are'} rejected. To run this chore, restore ${one ? 'it' : 'them'} in Steps.`
+  if (why === 'rejected') return `${names} ${one ? 'is' : 'are'} rejected. To run this chore, press “Allow again”: on Home, in “Needs your attention”, or on Apps.`
   if (why === 'to_revalidate') return `${app} was updated: ${names} ${one ? 'has' : 'have'} to be learned again.`
   return BLOCKED[why] ?? `It cannot run: ${spaced(why)}.`
 }

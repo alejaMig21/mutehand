@@ -73,6 +73,8 @@ def test_a_rejected_action_that_blocks_a_chore_says_why_and_allow_again_lifts_it
 
         card.get_by_role("button", name="Allow again").click()
 
+        attention(page).get_by_text("“save-file” is allowed again.").wait_for()  # it stays where it was pressed, until OK
+        attention(page).get_by_role("button", name="OK").click()
         attention(page).wait_for(state="detached")
         assert state_of(tmp_path / "user.db", "save-file") != "rejected"
         assert row(page, "morning").get_by_test_id("run-now-morning").inner_text().strip() == "Run now"
@@ -101,6 +103,8 @@ def test_the_cards_work_from_the_keyboard_alone(tmp_path):
         page.get_by_test_id("attention-rejected-paint.exe-save-file").wait_for()
         page.get_by_test_id("attention-allow-again-paint.exe-save-file").focus()
         page.keyboard.press("Enter")
+        attention(page).get_by_text("is allowed again.").wait_for()
+        page.keyboard.press("Enter")  # the focus moved to its OK: the keyboard goes on from the same place
         attention(page).wait_for(state="detached")
         assert state_of(tmp_path / "user.db", "save-file") != "rejected"
     revalidate_changed_versions(tmp_path / "user.db", "paint.exe", "2.0")

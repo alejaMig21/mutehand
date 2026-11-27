@@ -8,7 +8,8 @@ import { Icon } from './icons.jsx'
 import More, { useDeleted } from './More.jsx'
 import Screen from './Screen.jsx'
 import { useLoad } from './useLoad.js'
-import { blockedWords, flowTitle, lastRunWords, PAUSED_WORDS, runNoteWords } from './words.js'
+import { ranResult } from './stopped.js'
+import { blockedWords, flowTitle, lastRunWords, PAUSED_WORDS, runNoteWords, timeWords } from './words.js'
 
 // The first screen: the person's flows ("chores" on screen), how each went, and Run now. `onOpen` shows a flow on the
 // flow screen, `onNew` an empty one; `left` holds the flow the person has just come back from, if any.
@@ -49,46 +50,52 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
         help={none && bare ? 'When you press a button, or by itself every morning.' : undefined}
         above={offline && <p role="status">{UNREACHABLE} Trying again…</p>}
         tools={!none && <button data-testid="new-chore" onClick={onNew}><Icon name="plus" size={20} /> New chore</button>}>
-        {none ? <FirstDay onNew={onNew} onFirstDay={setBare} /> : (
-          <ul className="chores">
-            {flows.map((flow) => (
-              <Chore key={flow.id} flow={flow} title={flowTitle(flow.id, flows)} following={following} reload={reload}
-                stopped={stopped.find((item) => item.flow === flow.id)} tryAgain={tried.tryAgain}
+        {none && !undo.notice ? <FirstDay onNew={onNew} onFirstDay={setBare} /> : (
+          <ul className="chores">{withNotice(
+            flows.map((flow, place) => (
+              <Chore key={flow.id} flow={flow} title={flowTitle(flow.id, flows)} following={following} reload={reload} place={place}
+                stopped={stopped.find((item) => item.flow === flow.id)} tryAgain={tried.tryAgain} clearTried={tried.clearDone}
                 onDeleted={undo.onDeleted} onOpen={() => onOpen(flow.id)} />
-            ))}
+            )), undo)}
           </ul>
         )}
       </Screen>
-      {undo.notice}
     </div>
   )
 }
 
-function Chore({ flow, title, following: { runs, follow, attach, forget }, reload, stopped, tryAgain, onOpen, onDeleted }) {
+// The undo notice stands where the deleted chore was, under one key so it is the same element while the list changes around it.
+const withNotice = (rows, { notice, at }) => (notice ? rows.toSpliced(Math.min(at, rows.length), 0, <li key="undo-notice">{notice}</li>) : rows)
+
+function Chore({ flow, title, following: { runs, follow, attach, forget }, reload, stopped, tryAgain, clearTried, place, onOpen, onDeleted }) {
   const { id, app } = flow
   const run = runs[id]
   const running = run?.status === 'running'
   const [starting, setStarting] = useState(false)
   const [problem, setProblem] = useState('')
   const [setting, setSetting] = useState(false) // the form of the daily time is open
+  const [saved, setSaved] = useState('') // what the daily form just did, said next to its button
   const dailyButton = useRef(null)
+  const whyLine = useRef(null)
   useEffect(() => { if (running) setProblem('') }, [running]) // it runs after all: what went wrong asking no longer matters
 
   const appName = app ? appLabel(app) : 'No app chosen'
   const chip = chipFor(app || title)
   const paused = running && Object.values(run.nodes).includes('paused')
   const last = lastRunWords(flow.last_run)
-  const line = !running ? last : paused
+  const line = starting ? { words: 'Running now', tone: 'info', icon: 'spinner' } : !running ? last : paused
     ? { words: PAUSED_WORDS, tone: 'warn', icon: 'pause' }
     : { words: 'Running now', tone: 'info', icon: 'spinner' }
+  const ran = !running && !starting && !problem && ranResult(title, run)
   const wrong = !running && (problem || runNoteWords(run, appName))
   // a chore that stopped is tried again, not run: what it is waiting for is the person's Try again
   const again = Boolean(stopped) && !stopped.rejected_by_person.length
   const why = !running && blockedWords(again && flow.blocked?.why === 'question' ? null : flow.blocked, app && appName)
-  const label = running ? 'Stop' : starting ? 'Starting…' : why ? 'Cannot run yet' : again ? 'Try again' : 'Run now'
+  const label = running ? 'Stop' : starting ? 'Running…' : why ? 'Cannot run yet' : again ? 'Try again' : 'Run now'
   const unavailable = starting || (running && !run.armed) || Boolean(why)
 
   async function press() {
+    if (why && !running) { whyLine.current?.focus(); return } // it cannot run: the press leads to the reason
     if (unavailable) return
     setProblem('')
     if (again && !running) { tryAgain(stopped); return }
@@ -99,6 +106,7 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
       }
       setStarting(true) // drawn before a second press arrives, so the server is asked once
       forget(id)
+      clearTried()
       const { run_id } = await api(`/api/flows/${encode(id)}/run`, { method: 'POST', body: { app, context: {} } })
       follow(id, run_id)
     } catch (e) {
@@ -112,8 +120,9 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
   }
 
   const { daily } = flow
-  const closeDaily = (changed) => {
+  const closeDaily = (changed, at) => {
     setSetting(false)
+    setSaved(changed ? (at ? `Saved. It runs every day at ${timeWords(at)}.` : 'Saved. It no longer runs every day.') : '')
     if (changed) reload()
     setTimeout(() => dailyButton.current?.focus(), 0) // the form is gone: the focus goes back to the button that opened it
   }
@@ -126,20 +135,22 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
         <h2><button className="chore-open" data-testid={`open-chore-${id}`} onClick={onOpen}>{title}</button></h2>
         <p className="muted">{appName}</p>
         <p className={`chore-line tone-${line.tone}`} role="status"><Icon name={line.icon} size={18} /> {line.words}{again && !running && '. See above.'}</p>
-        {why && <p className="chore-line tone-warn" id={`why-${id}`} data-testid={`chore-why-${id}`}><Icon name="alert" size={18} /> {why}</p>}
+        {ran && <p className="chore-line tone-ok" role="status" data-testid={`chore-result-${id}`}><Icon name="checkcircle" size={18} /> {ran.words}</p>}
+        {why && <p className="chore-line tone-warn" id={`why-${id}`} data-testid={`chore-why-${id}`} tabIndex={-1} ref={whyLine}><Icon name="alert" size={18} /> {why}</p>}
         {wrong && <p className="chore-line tone-bad" role="alert"><Icon name="alert" size={18} /> {wrong}</p>}
       </div>
       {/* one button that changes its words, so the keyboard focus stays on it; aria-disabled keeps it focusable */}
-      <button className={`chore-run ${running ? 'danger' : why ? 'cannot' : 'primary'}`} data-testid={`run-now-${id}`} onClick={press}
+      <button className={`chore-run ${running ? 'danger' : why ? 'cannot' : 'primary'}${starting ? ' busy' : ''}`} data-testid={`run-now-${id}`} onClick={press}
         aria-disabled={unavailable || undefined} aria-describedby={why ? `why-${id}` : undefined} aria-label={`${label}: ${title}`}>
-        <Icon name={running ? 'stop' : again && !why ? 'retry' : 'play'} size={20} /> {label}
+        <Icon name={running ? 'stop' : starting ? 'spinner' : again && !why ? 'retry' : 'play'} size={20} /> {label}
       </button>
       <button ref={dailyButton} className="chore-daily" data-testid={`daily-${id}`} onClick={() => setSetting(!setting)}
-        aria-expanded={setting} aria-label={`${daily ? `Every day at ${daily}. Change or stop` : 'Run every day'}: ${title}`}>
+        aria-expanded={setting} aria-label={`${daily ? `Every day at ${timeWords(daily)}. Change or stop` : 'Run every day'}: ${title}`}>
         <Icon name="clock" size={20} />
-        {daily ? <span>Every day at <b>{daily}</b><small>Change or stop</small></span> : 'Run every day'}
+        {daily ? <span>Every day at <b>{timeWords(daily)}</b><small>Change or stop</small></span> : 'Run every day'}
       </button>
-      <More flow={flow} title={title} reload={reload} onDeleted={onDeleted} />
+      {saved && !setting && <p className="chore-line tone-ok daily-saved" role="status" data-testid={`daily-saved-${id}`}><Icon name="checkcircle" size={18} /> {saved}</p>}
+      <More flow={flow} title={title} reload={reload} onDeleted={onDeleted} place={place} />
       {setting && <DailyForm at={daily} suffix={`-${id}`} submit={(at) => changeDaily(id, at)} onDone={closeDaily} />}
     </li>
   )

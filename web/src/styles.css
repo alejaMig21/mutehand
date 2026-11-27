@@ -65,6 +65,9 @@ summary { cursor: pointer; }
 .chore-line svg { flex: none; margin-top: 2px; }
 .home .chore-run { min-width: 180px; min-height: 56px; font-size: 18px; }
 .chore-run[aria-disabled="true"] { cursor: default; }
+.chore-line:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.daily-saved { flex: 1 1 100%; }
+.chore-run.busy svg { animation: spin 1s linear infinite; }
 .chore-run.cannot { background: transparent; border-style: dashed; color: var(--muted); }
 .chore-run.cannot:hover { border-color: var(--line); }
 
@@ -79,7 +82,7 @@ summary { cursor: pointer; }
 .more-history h3 { margin: 0 0 4px; font-size: 16px; }
 .more-history ul { margin: 0; padding-left: 20px; overflow-wrap: anywhere; }
 .more-history p { margin: 0; }
-.undo-notice { position: sticky; bottom: 12px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 16px 16px 0;
+.undo-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 0; list-style: none;
   padding: 12px 16px; background: var(--sunk); border: 1.5px solid var(--accent); border-radius: 14px; overflow-wrap: anywhere; }
 .undo-notice > span { flex: 1 1 220px; }
 
@@ -263,7 +266,7 @@ input[type="number"] { width: 70px; }
 .muted { color: var(--muted); }
 .status-running .card-mark.tone-info svg, .chore-line.tone-info svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .status-running .card-mark.tone-info svg, .chore-line.tone-info svg { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .status-running .card-mark.tone-info svg, .chore-line.tone-info svg, .chore-run.busy svg { animation: none; } }
 @media (max-width: 560px) { .home .chore-run { flex: 1 1 100%; } }
 
 /* narrow windows and 200% zoom */
@@ -311,6 +314,8 @@ input[type="number"] { width: 70px; }
 .tried.tried-ok { border-color: var(--ok); }
 .tried.tried-ok > svg { color: var(--ok); }
 .tried.tried-bad, .attention-card { border-color: var(--bad); }
+.attention-card.attention-done { border-color: var(--ok); }
+.attention-card.attention-done > svg { color: var(--ok); }
 .tried.tried-bad > svg, .attention-card > svg { color: var(--bad); }
 .tried.tried-warn { border-color: var(--warn); }
 .tried > svg, .attention-card > svg { flex: none; }
@@ -374,8 +379,13 @@ input[type="number"] { width: 70px; }
 .app-problem > svg { flex: none; color: var(--warn); }
 .app-problem > p { flex: 1 1 220px; margin: 0; }
 .app-problem .help-panel { flex: 1 1 100%; }
-.app-actions { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
-.app-actions li { padding: 10px 16px; background: var(--sunk); border-radius: 10px; overflow-wrap: anywhere; }
+/* the actions are only names to read: no fill, no border, no pointer, so none of them looks like a button */
+.app-actions { margin: 0; padding: 0 0 0 20px; columns: 220px; column-gap: 24px; list-style: disc; }
+.app-actions li { padding: 2px 0; overflow-wrap: anywhere; cursor: default; }
+.app-card-slot { grid-column: 1 / -1; list-style: none; }
+.app-allowed { border-color: var(--ok); }
+.app-allowed > svg { color: var(--ok); }
+.empty-state .first-day-teach { text-align: left; margin-top: 16px; }
 .app-permissions h3 { margin: 0 0 8px; font-size: 16px; }
 .app-permissions ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .app-permissions li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; background: var(--sunk); border-radius: 12px; }

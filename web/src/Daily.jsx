@@ -6,7 +6,7 @@ export const changeDaily = (flowId, at) => api(`/api/flows/${encode(flowId)}/dai
   at ? { method: 'PUT', body: { at } } : { method: 'DELETE' })
 
 // The form that sets, changes and stops a daily time, the same on Home and on the first box. `submit(at)` makes the change
-// (at is null to stop) and throws the reason in words when it cannot; `onDone` closes the form, with whether it changed
+// (at is null to stop) and throws the reason in words when it cannot; `onDone` closes the form, with whether it changed (and the time it was set to, null when stopped)
 // anything. `initial` is the time to offer when there is none yet. `suffix` makes the test ids of one row's form unique.
 export function DailyForm({ at, initial, suffix = '', submit, onDone }) {
   const [time, setTime] = useState(at || initial || '09:00')
@@ -21,7 +21,7 @@ export function DailyForm({ at, initial, suffix = '', submit, onDone }) {
     setProblem('')
     try {
       await submit(value)
-      onDone(true)
+      onDone(true, value)
     } catch (e) {
       setProblem(e.message)
       setBusy(false)

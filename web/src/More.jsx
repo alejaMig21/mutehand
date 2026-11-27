@@ -5,7 +5,7 @@ import { Icon } from './icons.jsx'
 
 // What a chore row offers besides Run: rename it, read its past runs, delete it. Deleting is undone from the notice that
 // `useDeleted` keeps on Home, so nothing here asks "are you sure".
-export default function More({ flow, title, reload, onDeleted }) {
+export default function More({ flow, title, reload, onDeleted, place }) {
   const { id } = flow
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState('menu') // menu | rename | history
@@ -27,7 +27,7 @@ export default function More({ flow, title, reload, onDeleted }) {
     setProblem('')
     try {
       const gone = await api(`/api/flows/${encode(id)}`, { method: 'DELETE' })
-      onDeleted(gone)
+      onDeleted(gone, place)
       reload()
     } catch (e) {
       setProblem(e.message)
@@ -134,15 +134,18 @@ function History({ id }) {
   )
 }
 
-// The notice after a delete, with Undo. Kept until it is dismissed, another flow is deleted or Home is left: there is no
+// The notice after a delete, with Undo, shown where the chore was. Kept until it is dismissed, another flow is deleted or Home is left: there is no
 // timer to race a keyboard or screen reader user. `flows` is Home's list, to give the focus back to the restored row.
 export function useDeleted(reload, flows) {
-  const [deleted, setDeleted] = useState(null) // {id, title, daily_runs} or, once undone, {back: true, lost}
+  const [deleted, setDeleted] = useState(null) // {id, title, daily_runs, at} or, once undone, {back: true, lost}; `at` is its place in the list
   const [problem, setProblem] = useState('')
   const [busy, setBusy] = useState(false)
   const undo = useRef(null)
   const restored = useRef(null)
 
+  useEffect(() => { // a chore deleted a moment ago, before this page was loaded again, can still be undone
+    api('/api/deleted').then((recent) => { if (recent[0]) setDeleted((now) => now ?? { ...recent[0], at: 0 }) }).catch(() => {})
+  }, [])
   useEffect(() => { if (deleted && !deleted.back) undo.current?.focus() }, [deleted])
   useEffect(() => {
     if (restored.current && flows.some((flow) => flow.id === restored.current)) {
@@ -178,5 +181,5 @@ export function useDeleted(reload, flows) {
       <button data-testid="dismiss-deleted" onClick={() => setDeleted(null)}>Dismiss</button>
     </div>
   )
-  return { notice, onDeleted: (gone) => { setProblem(''); setDeleted(gone) } }
+  return { notice, at: deleted?.at ?? 0, onDeleted: (gone, at) => { setProblem(''); setDeleted({ ...gone, at }) } }
 }

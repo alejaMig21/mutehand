@@ -35,7 +35,7 @@ export async function api(path, { method = 'GET', body } = {}) {
   }
   const data = await response.json().catch(() => null)
   if (response.status === 401) window.dispatchEvent(new Event(LOCKED))
-  if (!response.ok) throw Object.assign(new Error(data?.error ?? `HTTP ${response.status}`), { status: response.status })
+  if (!response.ok) throw Object.assign(new Error(data?.error ?? 'Workflow Factory could not do that. Try again in a moment.'), { status: response.status })
   return data
 }
 

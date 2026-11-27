@@ -75,7 +75,7 @@ def test_a_time_set_on_home_makes_the_windows_task_and_shows_on_the_first_box(tm
 
         set_on_home(page, "morning", "07:30")
 
-        page.get_by_test_id("daily-morning").filter(has_text="Every day at 07:30").wait_for()
+        page.get_by_test_id("daily-morning").filter(has_text="Every day at 7:30 AM").wait_for()
         assert mine(scheduler) == [TASK + "0730"] and FOREIGN in scheduler.tasks
         page.get_by_test_id("open-chore-morning").click()
         on_the_flow_screen(page, "Morning report", 3)  # the two boxes and the start box
@@ -87,12 +87,12 @@ def test_changing_the_time_on_home_leaves_one_task_and_stopping_removes_it_and_t
     with served(tmp_path) as (page, scheduler, _):
         at_home(page)
         set_on_home(page, "morning", "07:30")
-        page.get_by_test_id("daily-morning").filter(has_text="Every day at 07:30").wait_for()
+        page.get_by_test_id("daily-morning").filter(has_text="Every day at 7:30 AM").wait_for()
 
         page.get_by_test_id("daily-morning").click()
         page.get_by_test_id("daily-time-morning").fill("08:15")
         page.get_by_test_id("daily-set-morning").click()
-        page.get_by_test_id("daily-morning").filter(has_text="Every day at 08:15").wait_for()
+        page.get_by_test_id("daily-morning").filter(has_text="Every day at 8:15 AM").wait_for()
         assert mine(scheduler) == [TASK + "0815"]
 
         page.get_by_test_id("daily-morning").click()
@@ -127,7 +127,7 @@ def test_a_time_set_on_the_first_box_shows_on_home_and_can_be_changed_and_stoppe
         assert mine(scheduler) == [TASK + "0710"]
 
         page.get_by_test_id("back-home").click()
-        page.get_by_test_id("daily-morning").filter(has_text="Every day at 07:10").wait_for()
+        page.get_by_test_id("daily-morning").filter(has_text="Every day at 7:10 AM").wait_for()
         page.get_by_test_id("open-chore-morning").click()
         on_the_flow_screen(page, "Morning report", 3)
         page.get_by_test_id("daily-change").click()
@@ -166,7 +166,7 @@ def test_run_now_starts_a_chore_with_or_without_a_daily_time(tmp_path):
         assert [c.name for c in desktop.clicks] == ["Alpha", "Beta"]
 
         set_on_home(page, "morning", "07:30")
-        page.get_by_test_id("daily-morning").filter(has_text="Every day at 07:30").wait_for()
+        page.get_by_test_id("daily-morning").filter(has_text="Every day at 7:30 AM").wait_for()
         run_button(page, "morning").click()
         page.wait_for_function("() => document.querySelector('[data-testid=run-now-morning]').innerText.includes('Run now')")
         page.wait_for_timeout(300)
@@ -180,7 +180,7 @@ def test_a_schedule_made_before_shows_on_its_chore_and_on_its_first_box(tmp_path
     create_schedule("morning daily 0645", "morning", "paint.exe", "06:45", ["--user-db", str(tmp_path / "user.db")],
                     runner=scheduler)
     with served(tmp_path, scheduler=scheduler) as (page, _, _):
-        page.get_by_test_id("daily-morning").filter(has_text="Every day at 06:45").wait_for()
+        page.get_by_test_id("daily-morning").filter(has_text="Every day at 6:45 AM").wait_for()
         page.get_by_test_id("open-chore-morning").click()
         on_the_flow_screen(page, "Morning report", 3)
         start_box(page).filter(has_text="Start: every day at 06:45").wait_for()
@@ -196,7 +196,7 @@ def test_the_daily_time_works_with_the_keyboard_alone(tmp_path):
         assert page.evaluate(FOCUSED) == "daily-time-morning"  # the form opens with the time field ready
         page.get_by_test_id("daily-time-morning").fill("07:30")
         page.keyboard.press("Enter")  # sets it
-        page.get_by_test_id("daily-morning").filter(has_text="Every day at 07:30").wait_for()
+        page.get_by_test_id("daily-morning").filter(has_text="Every day at 7:30 AM").wait_for()
         assert mine(scheduler) == [TASK + "0730"]
         page.wait_for_function("() => document.activeElement.dataset.testid === 'daily-morning'")  # focus came back
         page.keyboard.press("Enter")
@@ -244,7 +244,7 @@ def test_the_daily_time_fits_a_narrow_window_and_stays_readable(tmp_path, width,
         fine()
         page.get_by_test_id("daily-time-long-1").fill("07:30")
         page.get_by_test_id("daily-set-long-1").click()
-        page.get_by_test_id("daily-long-1").filter(has_text="Every day at 07:30").wait_for()
+        page.get_by_test_id("daily-long-1").filter(has_text="Every day at 7:30 AM").wait_for()
         fine()
         page.get_by_test_id("daily-long-1").click()
         fine()

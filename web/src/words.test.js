@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { blockedWords, boxState, effectWords, flowTitle, freshTitle, lastRunWords, PAUSED_WORDS, reasonWords, runNoteWords, runWords, whenWords, whyWords } from './words.js'
+import { blockedWords, timeWords, boxState, effectWords, flowTitle, freshTitle, lastRunWords, PAUSED_WORDS, reasonWords, runNoteWords, runWords, whenWords, whyWords } from './words.js'
 
 test('a box says how far the run got with it, and nothing is left running after a run ends', () => {
   const run = (status, nodes) => ({ status, nodes })
@@ -73,7 +73,7 @@ test('why a chore cannot run is said with its actions and its app, never as a co
   for (const why of ['empty', 'no_app', 'expression', 'question', 'unreadable', 'something_new']) assert.match(words(why), /^[A-Z][^_]*\.$/, why)
   assert.equal(words('not_learned', ['a', 'b']), '“a”, “b” are not learned for Paint yet.')
   assert.equal(blockedWords({ why: 'not_learned', steps: ['a'] }, ''), '“a” is not learned yet.')
-  assert.equal(words('rejected', ['a', 'b']), '“a”, “b” are rejected. To run this chore, restore them in Steps.')
+  assert.equal(words('rejected', ['a', 'b']), '“a”, “b” are rejected. To run this chore, press “Allow again”: on Home, in “Needs your attention”, or on Apps.')
   assert.equal(words('to_revalidate', ['a', 'b']), 'Paint was updated: “a”, “b” have to be learned again.')
   assert.equal(blockedWords(null, 'Paint'), '')
 })
@@ -97,4 +97,23 @@ test('how the last run of a chore went is said with the day and the time', () =>
 test('a paused run says why: you used the mouse', () => {
   assert.match(PAUSED_WORDS, /you moved the mouse/)
   assert.match(PAUSED_WORDS, /resumes when you stop/)
+})
+
+test('a daily time is shown the way the person types it: 12 hours or 24, by their language', () => {
+  assert.equal(timeWords('19:05', 'en-US'), '7:05 PM')
+  assert.equal(timeWords('07:30', 'en-US'), '7:30 AM')
+  assert.equal(timeWords('19:05', 'en-GB'), '19:05')
+  assert.equal(timeWords('not a time', 'en-US'), 'not a time')
+})
+
+test('no screen the product no longer has is named in what a person reads', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs')
+  const gone = /\b(?:in|on|to|open|the) (?:the )?(?:Steps|Tutor queue|Schedules|Consents|Run history|Setup check)\b/
+  for (const file of readdirSync(new URL('.', import.meta.url)).filter((name) => /\.jsx?$/.test(name) && !name.includes('.test.'))) {
+    assert.doesNotMatch(readFileSync(new URL(file, import.meta.url), 'utf8'), gone, file)
+  }
+})
+
+test('a chore with nothing in it says steps, the word the screens use', () => {
+  assert.equal(blockedWords({ why: 'empty', steps: [] }, ''), 'It has no steps yet. Open it to add some.')
 })

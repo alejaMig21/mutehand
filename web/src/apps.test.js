@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { noteWords, permissionWords, takeBackWords, teachMessage, updatedMessage } from './apps.js'
+import { noteWords, permissionWords, takeBackWords, relearnMessage, teachMessage } from './apps.js'
 
 const row = (extra) => ({ app: 'paint.exe', private: false, actions: 3, problems: 0, permissions: 0, ...extra })
 const stops = (actions, flows) => ({ actions, flows: flows.map((title) => ({ id: title, title })) })
@@ -33,8 +33,7 @@ test('taking a permission back says which chores and actions stop working, by th
 
 test('the messages to send name the app and never start anything', () => {
   assert.match(teachMessage('Excel'), /^In Workflow Factory I want to teach another action in Excel\./)
-  assert.match(updatedMessage('Excel', 'Add a chart', false), /Excel was updated and “Add a chart” has to be learned again/)
-  const hidden = updatedMessage('Telegram', 'Bank 4471', true)
-  assert.doesNotMatch(hidden, /4471/)
-  assert.match(hidden, /Telegram was updated and one of its actions has to be learned again/)
+  const update = relearnMessage('Excel')
+  assert.match(update, /Excel was updated and its actions have to be learned again/)
+  assert.doesNotMatch(update, /Claude Code|folder/) // plain words for a person who does not know the vocabulary
 })

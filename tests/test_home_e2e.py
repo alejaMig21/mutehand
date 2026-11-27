@@ -224,12 +224,12 @@ def unreadable(db):
 
 
 @pytest.mark.parametrize("trouble, why", [
-    (no_boxes, "It has no boxes yet. Open it to add some."),
+    (no_boxes, "It has no steps yet. Open it to add some."),
     (no_app, "No app is chosen for it. Open it, choose one and press Save."),
     (not_learned, "“print-it” is not learned for Paint yet."),
     (learned_for_another_app, "“open-menu” is not learned for Word yet."),
     (never_learned_at_all, "“print-it” is not learned yet."),
-    (rejected, "“save-file” is rejected. To run this chore, restore it in Steps."),
+    (rejected, "“save-file” is rejected. To run this chore, press “Allow again”: on Home, in “Needs your attention”, or on Apps."),
     (app_updated, "Paint was updated: “open-menu” has to be learned again."),
     (an_expression, "It uses an expression, which cannot run yet."),
     (unreadable, "It cannot be read."),

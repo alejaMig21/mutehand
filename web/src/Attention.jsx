@@ -3,7 +3,7 @@ import { api, encode } from './api.js'
 import { appLabel } from './catalog.js'
 import ChatMessage from './ChatMessage.jsx'
 import { Icon } from './icons.jsx'
-import { helpMessage, rejectedWords, relearnWords, stoppedWords, triedResult } from './stopped.js'
+import { helpMessage, rejectedWords, relearnWords, stoppedWords, titles, triedResult } from './stopped.js'
 
 // Trying again, shared by Home and the flow screen so that a try started on one is reported on both. `tries` holds, by
 // chore, what was tried and, once the run ends, how it went. `ensure` runs first on the flow screen: what is stored
@@ -44,7 +44,9 @@ export function useTryAgain({ runs, follow, forget }) {
   }, [runs, tries])
 
   const hide = useCallback((flow) => setTries(({ [flow]: _gone, ...rest }) => rest), [])
-  return { tries, tryAgain, hide }
+  // a new run is about to answer: what an earlier try said must not stay above it
+  const clearDone = useCallback(() => setTries((all) => Object.fromEntries(Object.entries(all).filter(([, tried]) => !tried.result))), [])
+  return { tries, tryAgain, hide, clearDone }
 }
 
 // How a try went, above whatever else the screen shows. Only a finished answer is shown.
@@ -140,13 +142,13 @@ export function StoppedActions({ item, onTry, onChanged, trying, prefix, suffix 
   )
 }
 
-function Card({ id, title, detail, hint, children, below }) {
+function Card({ id, title, detail, hint, children, below, done }) {
   return (
-    <li className="attention-card" data-testid={`attention-${id}`}>
-      <Icon name="alert" size={28} />
+    <li className={`attention-card${done ? ' attention-done' : ''}`} data-testid={`attention-${id}`}>
+      <Icon name={done ? 'checkcircle' : 'alert'} size={28} />
       <div className="attention-words">
         <h3>{title}</h3>
-        <p>{detail}</p>
+        <p role={done ? 'status' : undefined}>{detail}</p>
         {hint && <p className="muted">{hint}</p>}
       </div>
       {children && <div className="attention-buttons">{children}</div>}
@@ -169,7 +171,7 @@ function Relearn({ item }) {
   )
 }
 
-function Rejected({ item, onChanged }) {
+function Rejected({ item, onAllowed }) {
   const says = rejectedWords(item)
   const [problem, setProblem] = useState('')
   const [allowing, setAllowing] = useState(false)
@@ -180,10 +182,9 @@ function Rejected({ item, onChanged }) {
     setProblem('')
     try {
       await api(`/api/steps/${encode(item.app)}/${encode(item.step)}/restore`, { method: 'POST' })
-      onChanged()
+      onAllowed(item.private ? `An action in ${appLabel(item.app)} is allowed again.` : `“${item.step}” is allowed again.`)
     } catch (e) {
       setProblem(e.message)
-    } finally {
       setAllowing(false)
     }
   }
@@ -200,16 +201,32 @@ function Setup({ item }) {
   return <Card id={`setup-${item.id}`} title={`${item.title}: missing`} detail={item.why} hint={`To fix: ${item.fix}`} />
 }
 
-// The things that need the person, first on Home. Absent when there are none.
+const rejectedKey = (item) => `rejected-${item.app}-${item.step}`
+
+// The things that need the person, first on Home. Absent when there are none. A rejected action that was just allowed again
+// stays where it was, saying so, until the person dismisses it: the list below does not jump up under the next press.
 export function Attention({ items, tries, tryAgain, onChanged, running }) {
-  if (items.length === 0) return null
+  const [kept, setKept] = useState({}) // key -> {item, at, words}
+  const list = items.map((item) => ({ item }))
+  for (const [key, one] of Object.entries(kept)) {
+    if (!items.some((item) => item.kind === 'rejected' && rejectedKey(item) === key)) list.splice(Math.min(one.at, list.length), 0, { key, ...one })
+  }
+  if (list.length === 0) return null
+  const allowed = (item, at) => (words) => { setKept((all) => ({ ...all, [rejectedKey(item)]: { item, at, words } })); onChanged() }
   return (
     <section className="attention" aria-labelledby="attention-title" data-testid="attention">
-      <h2 id="attention-title">Needs your attention ({items.length})</h2>
+      <h2 id="attention-title">{items.length ? `Needs your attention (${items.length})` : 'Done'}</h2>
       <ul>
-        {items.map((item) => {
+        {list.map(({ item, key, words }, at) => {
+          if (key) {
+            return (
+              <Card key={key} id={key} done title={words} detail={`${titles(item.flows)} can run now.`}>
+                <button autoFocus onClick={() => setKept(({ [key]: _gone, ...rest }) => rest)}>OK</button>
+              </Card>
+            )
+          }
           if (item.kind === 'relearn') return <Relearn key={`relearn-${item.app}`} item={item} />
-          if (item.kind === 'rejected') return <Rejected key={`rejected-${item.app}-${item.step}`} item={item} onChanged={onChanged} />
+          if (item.kind === 'rejected') return <Rejected key={rejectedKey(item)} item={item} onAllowed={allowed(item, at)} />
           if (item.kind === 'setup') return <Setup key={`setup-${item.id}`} item={item} />
           const says = stoppedWords(item)
           return (
