@@ -94,8 +94,8 @@ The person may only describe the flow ("every morning open the report and save i
 
 0. `list_node_kinds` lists the kinds of node, the data operations (with their fields) and how a field is written, so nodes other than steps (a wait, a loop, a data operation) are written right.
 1. `list_known_steps(technology?, tag?, query?)` shows what the apprentice already does, one entry per step with its tags and technologies; narrow it by program, tag or words (a private program is only counted). Match each part of the description to a known step by its name and action.
-2. `create_flow(title, app, nodes, edges)` saves the flow even when some steps are not taught yet. Nodes are `{id, step}`; a node may carry `inputs` (as many `[name, type]` pairs as it needs) and `fields`. The answer says `ready`, and `missing_steps` lists the lessons still to teach.
-3. For each missing step, teach it as in "A lesson, in order", with the person watching. Then `flow_status(flow_id)` says when it is ready. Never promise the flow works before it ran once with the person watching.
+2. `create_flow(title, nodes, edges)` saves the flow even when some steps are not taught yet. Nodes are `{id, step, technology}`: each step node names the program it acts on, so one flow can mix programs; a node may carry `inputs` (as many `[name, type]` pairs as it needs) and `fields`. The answer says `ready`, and `missing_lessons` lists each node `{node, step, technology}` whose step is not taught on that technology.
+3. For each missing lesson, teach that step on that technology as in "A lesson, in order", with the person watching. Then `flow_status(flow_id)` says when it is ready. Never promise the flow works before it ran once with the person watching.
 
 A flow is built from nodes: steps are the nodes, kept small (ADR 0006). If the description needs something no step or basic operation can do, say so and offer the nearest steps.
 

@@ -161,15 +161,18 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop], factory_d
         }
 
     @server.tool(name="create_flow")
-    def create_flow(title: str, app: str, nodes: list[dict], edges: list[list[str]] | None = None) -> dict:
-        """Save a flow the person described. Nodes are {id, step, kind?, fields?, inputs?}; edges are [from, to] pairs
-        (None: the nodes run in order). A step not taught yet is allowed: the answer's missing_steps lists the lessons
-        still to teach with teach_step, then flow_status says when the flow is ready."""
-        return flows.create_flow(user_db, title, app, nodes, edges, factory_db)
+    def create_flow(title: str, nodes: list[dict], edges: list[list[str]] | None = None) -> dict:
+        """Save a flow the person described. Nodes are {id, step, technology, kind?, fields?, inputs?}: a step node names
+        the technology (program) it acts on, so one flow can mix programs; edges are [from, to] pairs (None: the nodes
+        run in order). A step with no lesson for its node's technology is allowed: the answer's missing_lessons lists
+        each such node as {node, step, technology}, to teach with teach_step on that technology, then flow_status says
+        when the flow is ready."""
+        return flows.create_flow(user_db, title, nodes, edges, factory_db)
 
     @server.tool(name="flow_status")
     def flow_status(flow_id: str) -> dict:
-        """Whether a flow can run now, why not if it cannot, and which steps are still to be taught."""
+        """Whether a flow can run now, why not if it cannot, and missing_lessons: the nodes ({node, step, technology})
+        whose step is still to be taught on their technology."""
         return flows.flow_readiness(user_db, flow_id, factory_db)
 
     return server
