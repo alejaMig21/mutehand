@@ -16,6 +16,7 @@ from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
+from workflow_factory.daily import with_daily
 from workflow_factory.flows import SCHEMA as FLOW_SCHEMA
 from workflow_factory.flows import (
     check_app,
@@ -138,7 +139,8 @@ def duplicate_flow(user_db: Path, factory_db: Path | None, flow_id: str, new_id:
         new_id = new_flow_id(title or flow_id, [entry["id"] for entry in list_flows(user_db, factory_db)])
     elif new_id.casefold() in (entry["id"].casefold() for entry in list_flows(user_db, None)):
         raise ValueError(f"a flow named {new_id!r} already exists")
-    copy = replace(original, id=new_id)
+    # a daily box without its Windows task would lie: the copy starts without one, its time can be set again
+    copy, _ = with_daily(replace(original, id=new_id), None, {})
     save_flow(user_db, copy, title, info.get("app"))
     return copy
 
