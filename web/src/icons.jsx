@@ -32,6 +32,7 @@ const PATHS = {
   back: 'M10 6l-6 6 6 6M4 12h16',
   undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3',
   skip: 'M5 6l7 6-7 6zM13 6l7 6-7 6z',
+  retry: 'M20 12a8 8 0 11-2.6-5.9M20 4v5h-5',
 }
 
 export function Icon({ name, size = 18 }) {

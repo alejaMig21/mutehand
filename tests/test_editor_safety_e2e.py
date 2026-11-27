@@ -192,13 +192,13 @@ def test_a_run_that_cannot_start_says_why_and_where_to_go(app):
     open_flow(page, "weekly")
     page.get_by_test_id("run").click()
     outcome = page.get_by_test_id("run-outcome")
-    outcome.filter(has_text="open question").wait_for()
+    outcome.filter(has_text="stopped earlier").wait_for()
     assert "Starting" not in page.get_by_test_id("run-log").inner_text()
 
-    outcome.get_by_role("button", name="Open Tutor queue").click()
-    doubt = page.get_by_test_id("doubt-1")
-    doubt.wait_for()
-    assert "Close dialog" in doubt.inner_text() and "control_not_found" not in doubt.inner_text()
+    outcome.get_by_role("button", name="Show the stopped box").click()  # the strip says why, and offers Try again
+    reason = page.get_by_test_id("strip-reason")
+    reason.wait_for()
+    assert "not on the screen" in reason.inner_text() and "control_not_found" not in reason.inner_text()
 
 
 def test_the_editor_notices_what_changed_on_the_other_screens(app):

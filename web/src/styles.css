@@ -340,3 +340,40 @@ input[type="number"] { width: 70px; }
 .daily-button { min-height: 44px; border-radius: 12px; font-weight: 600; }
 .notice .daily-form { flex: 1 1 100%; }
 .start-strip { padding: 6px 16px; background: var(--sunk); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+
+/* a stopped chore: the card on Home, the result of trying again, and the same words and buttons under the canvas */
+.tried-results, .attention { display: flex; flex-direction: column; gap: 12px; max-width: 1160px; margin: 0 auto; padding: 16px 16px 0; box-sizing: border-box; font-size: 16px; }
+.attention h2 { font-size: 20px; }
+.attention ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.tried, .attention-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 16px 20px; background: var(--surface);
+  border: 2px solid var(--line); border-radius: 14px; overflow-wrap: anywhere; }
+.tried.tried-ok { border-color: var(--ok); }
+.tried.tried-ok > svg { color: var(--ok); }
+.tried.tried-bad, .attention-card { border-color: var(--bad); }
+.tried.tried-bad > svg, .attention-card > svg { color: var(--bad); }
+.tried.tried-warn { border-color: var(--warn); }
+.tried > svg, .attention-card > svg { flex: none; }
+.tried > div, .attention-words { flex: 1 1 240px; min-width: 0; }
+.tried h2, .attention-words h3 { font-size: 17px; }
+.tried p, .attention-words p { margin: 2px 0 0; }
+.attention-buttons { flex: 0 1 auto; display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
+.stopped-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.stopped-actions button { min-height: 48px; font-size: 16px; }
+.stopped-actions button[aria-disabled="true"] { opacity: .55; cursor: default; }
+.help-panel { flex: 1 1 100%; display: flex; flex-direction: column; gap: 10px; padding: 12px 0 0; }
+.help-panel label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.help-panel textarea { box-sizing: border-box; width: 100%; padding: 8px 12px; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line); resize: vertical; }
+.help-panel .chat-message { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.help-panel .chat-message p { margin: 0; overflow-wrap: anywhere; }
+.help-panel .chat-text { padding: 8px 12px; background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; }
+.stopped-problem { margin: 6px 0 0; padding: 8px 12px; border-left: 4px solid var(--bad); background: rgba(255, 122, 122, .14); overflow-wrap: anywhere; }
+.strip .stopped-actions { display: contents; } /* Try again and Ask for help share the row of the strip's other buttons */
+.strip-reason, .strip-hint { margin: 0; overflow-wrap: anywhere; }
+.strip-reason { display: flex; align-items: flex-start; gap: 6px; }
+.strip-reason svg { flex: none; margin-top: 2px; color: var(--bad); }
+.notices .tried-results { padding: 0; max-width: none; gap: 0; }
+.notices .tried { border-width: 0 0 1px 4px; border-radius: 0; padding: 8px 16px; font-size: 14px; }
+.notices .tried > svg { width: 20px; height: 20px; }
+.notices .tried h2 { font-size: 15px; }
+.notices .tried button { min-height: 44px; }
+@media (max-width: 560px) { .attention-buttons, .attention-buttons .stopped-actions, .attention-buttons .stopped-actions button { width: 100%; } }

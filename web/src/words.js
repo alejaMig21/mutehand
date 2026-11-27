@@ -68,7 +68,7 @@ const LAST_RUNS = {
 }
 
 // "today at 07:00", "yesterday at 09:00", "on 3 Nov at 23:05": the day is the person's own, not the clock's in UTC.
-function sinceWords(iso, now) {
+export function sinceWords(iso, now) {
   const when = new Date(iso)
   if (Number.isNaN(when.getTime())) return iso
   const days = (date) => Math.round(new Date(date.getFullYear(), date.getMonth(), date.getDate()) / 86_400_000)
@@ -101,7 +101,7 @@ export function runNoteWords(run, app) {
 const BLOCKED = {
   empty: 'It has no boxes yet. Open it to add some.', no_app: 'No app is chosen for it. Open it, choose one and press Save.',
   expression: 'It uses an expression, which cannot run yet.', unreadable: 'It cannot be read.',
-  question: 'It stopped earlier and left a question. Answer it in Tutor queue.',
+  question: 'It stopped earlier and is waiting for you.',
 }
 
 // Why the server says a flow cannot run, {why, steps}, or '' when it can.

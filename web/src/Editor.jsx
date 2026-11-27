@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Panel, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
+import { TriedResults } from './Attention.jsx'
 import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
 import { boxNumbers, chainLoose, fromFlowJson, joinBoxes, looseNodes, nextNodeId, toFlowJson, unfinished, withBranch } from './flowjson.js'
 import { changeDaily, DailyForm } from './Daily.jsx'
@@ -39,7 +40,7 @@ export default function Editor(props) {
   return <ReactFlowProvider><EditorScreen {...props} /></ReactFlowProvider>
 }
 
-function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
+function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried }) {
   const { fitView, screenToFlowPosition, zoomIn, zoomOut } = useReactFlow()
   const [steps, setSteps] = useState([])
   const [recipes, setRecipes] = useState([])
@@ -58,6 +59,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   const [nodeData, setNodeData] = useState({})
   const [showValues, setShowValues] = useState(false)
   const [doubts, setDoubts] = useState([]) // the open ones (the tutor answers them, not the editor)
+  const [needs, setNeeds] = useState([]) // what stopped and waits for the person, as the server lists it
   const [view, setView] = useState(0) // bumped when another flow is shown, so the canvas fits it
   const [starting, setStarting] = useState(false)
   const [opening, setOpening] = useState(false)
@@ -112,6 +114,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
       setSaved((current) => (current.title === FIRST_TITLE ? { ...current, title: fresh } : current))
     }).catch(fail)
     api('/api/doubts?status=open').then(setDoubts).catch(() => setDoubts([]))
+    api('/api/attention').then(setNeeds).catch(() => setNeeds([]))
   }, [])
 
   // what the other screens, a run or another window changed is read again when the person comes back
@@ -552,6 +555,20 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   // (a canvas that is not on screen has no size to fit into: that waits until it is shown again)
   useEffect(() => { if (active && shownRun) refit() }, [active, shownRun?.runId, shownRun?.status]) // eslint-disable-line react-hooks/exhaustive-deps
   const flowDoubts = useMemo(() => doubts.filter((d) => isStored && d.flow_id === flowId), [doubts, flowId, isStored])
+  const stoppedHere = isStored ? needs.find((item) => item.flow === flowId) : undefined
+  // a chore that stopped opens with its stopped box chosen, so that the strip says why and offers Try again; once for each stop
+  useEffect(() => {
+    if (!stoppedHere || opening || busy.current.chosen === `${view}:${stoppedHere.doubt}`) return
+    if (!nodes.some((n) => n.id === stoppedHere.node)) return
+    busy.current.chosen = `${view}:${stoppedHere.doubt}`
+    setSelectedId(stoppedHere.node)
+    setNodes((current) => current.map((n) => ({ ...n, selected: n.id === stoppedHere.node })))
+  }, [stoppedHere, opening, view, nodes, setNodes])
+  // what the stop adds (a notice's button, the reason under the canvas) takes room: the whole flow comes back into sight
+  useEffect(() => { if (active && stoppedHere) refit() }, [active, stoppedHere?.doubt]) // eslint-disable-line react-hooks/exhaustive-deps
+  const tryAgain = (item) => tried.tryAgain(item, async () => {
+    if (!(await ensureStored())) throw new Error('The chore on screen could not be kept first, so it was not tried again.')
+  })
   const doubtCounts = useMemo(() => {
     const counts = {}
     for (const d of flowDoubts) counts[d.node_id] = (counts[d.node_id] ?? 0) + 1
@@ -576,6 +593,10 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   const runKeys = useMemo(() => {
     try { return Object.keys(JSON.parse(context || '{}')) } catch { return [] }
   }, [context])
+  const choose = (id) => { // the box on the canvas and the one the strip speaks about are one
+    setSelectedId(id)
+    setNodes((current) => current.map((n) => ({ ...n, selected: n.id === id })))
+  }
   const openDetail = (id) => { setSelectedId(id); setDetailOpen(true); loadData(showValues) }
   const closeDetail = () => {
     const id = selectedId
@@ -586,14 +607,14 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   const numbers = useMemo(() => boxNumbers(nodes, edges), [nodes, edges])
   const shownNodes = useMemo(
     () => viewNodes.map((n) => {
-      const state = boxState(shownRun, n.id)
+      const state = boxState(shownRun, n.id) ?? (n.id === stoppedHere?.node ? 'blocked' : undefined) // a stop from earlier is red too
       return {
         ...n, className: `status-${state ?? 'pending'}`,
         data: { ...n.data, number: numbers[n.id], runStatus: state, doubts: doubtCounts[n.id] ?? 0, onDoubts: () => onOpen('queue'),
           onDaily: () => setSettingDaily((open) => !open), scheduled: Boolean(daily?.at) },
       }
     }),
-    [viewNodes, numbers, shownRun, doubtCounts, onOpen, daily],
+    [viewNodes, numbers, shownRun, doubtCounts, onOpen, daily, stoppedHere],
   )
   const safety = useMemo(() => safetySummary(viewNodes, doubtCounts), [viewNodes, doubtCounts])
   const blocked = whyNotRunnable(safety, appName ? appLabel(appName) : undefined)
@@ -605,7 +626,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
   const shownEdges = edges.map((e) => ({ ...e, ...EDGE_LOOK, className: went(e) ? 'on' : '',
     ariaLabel: `Wire from ${nameOf(e.source)} to ${nameOf(e.target)}` }))
   const outcome = shownRun && !running && {
-    waiting: 'This flow did not run: it still has an open question from an earlier run.',
+    waiting: 'This chore did not run: it stopped earlier and is waiting. Try again, or ask for help.',
     stopped: `Stopped at “${nameOf(shownRun.stopped)}”. ${flowDoubts.filter((d) => d.node_id === shownRun.stopped)
       .map((d) => reasonWords(d.detail ?? d.reason))[0] ?? ''}`,
     emergency: 'You stopped this run. Run it again to continue where it stopped.',
@@ -730,9 +751,12 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
         {outcome && (
           <div className={`notice notice-${shownRun.status}`} data-testid="run-outcome" role="status">
             <Icon name="alert" size={16} /> <span>{outcome}</span>
-            {['waiting', 'stopped'].includes(shownRun.status) && <button className="small" onClick={() => onOpen('queue')}>Open Tutor queue</button>}
+            {['waiting', 'stopped'].includes(shownRun.status) && stoppedHere && (
+              <button className="small" data-testid="show-stopped" onClick={() => choose(stoppedHere.node)}>Show the stopped box</button>
+            )}
           </div>
         )}
+        {tried.tries[flowId] && <TriedResults tries={{ [flowId]: tried.tries[flowId] }} hide={tried.hide} />}
         {elsewhere.map(([name, r]) => (
           <div key={name} className="notice" data-testid="running-elsewhere" role="status">
             <span><b>{flowTitle(name, flows)}</b> is running now.</span>
@@ -814,6 +838,8 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following }) {
 
       </div>
           <ExplanationStrip node={selected} meta={selected?.data.meta} nodes={viewNodes} edges={edges}
+            stopped={stoppedHere && selected?.id === stoppedHere.node ? stoppedHere : null} onTry={tryAgain} onChanged={refresh}
+            trying={running || Boolean(tried.tries[flowId] && !tried.tries[flowId].result)}
             appName={runsOn} context={context} onConnect={onConnect} onSettings={() => openDetail(selected.id)} onRemove={deleteSelected}
             onDisconnect={(edge) => { record(); setEdges((current) => current.filter((e) => e.id !== edge.id)) }}
             ensureSaved={async () => {

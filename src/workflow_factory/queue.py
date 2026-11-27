@@ -77,6 +77,7 @@ class Doubt:
     status: str
     note: str | None = None
     detail: str | None = None
+    closed_as: str | None = None  # "tried_again" when the person closed it by trying again; None for the tutor's answer
 
 
 def _connect(user_db: Path) -> sqlite3.Connection:
@@ -86,6 +87,7 @@ def _connect(user_db: Path) -> sqlite3.Connection:
     for column in ("step", "kind", "op"):
         add_text_column(db, "run_nodes", column)
     add_text_column(db, "doubts", "detail")
+    add_text_column(db, "doubts", "closed_as")
     return db
 
 
@@ -100,18 +102,19 @@ def record_doubt(user_db: Path, flow_id: str, node_id: str, step: str,
 
 
 def list_doubts(user_db: Path, status: str | None = None) -> list[Doubt]:
-    query = "SELECT id, flow_id, node_id, step, reason, capture, status, note, detail FROM doubts"
+    query = "SELECT id, flow_id, node_id, step, reason, capture, status, note, detail, closed_as FROM doubts"
     args = ()
     if status:
         query, args = query + " WHERE status = ?", (status,)
     with closing(_connect(user_db)) as db:
-        return [Doubt(i, f, n, step, Reason(r), json.loads(c), s, note, detail)
-                for i, f, n, step, r, c, s, note, detail in db.execute(query + " ORDER BY id", args)]
+        return [Doubt(i, f, n, step, Reason(r), json.loads(c), s, note, detail, closed_as)
+                for i, f, n, step, r, c, s, note, detail, closed_as in db.execute(query + " ORDER BY id", args)]
 
 
 def _close_doubt(user_db: Path, doubt_id: int, new_status: str, note: str | None = None) -> None:
     with closing(_connect(user_db)) as db, db:
-        changed = db.execute("UPDATE doubts SET status = ?, note = ? WHERE id = ? AND status = 'open'",
+        # a note the person left earlier stays unless this closing brings another
+        changed = db.execute("UPDATE doubts SET status = ?, note = COALESCE(?, note) WHERE id = ? AND status = 'open'",
                              (new_status, note, doubt_id)).rowcount
     if not changed:
         raise ValueError(f"doubt {doubt_id} is not open")
@@ -127,6 +130,22 @@ def dismiss_doubt(user_db: Path, doubt_id: int) -> None:
     with closing(_connect(user_db)) as db, db:
         db.execute("DELETE FROM checkpoints WHERE flow_id = (SELECT flow_id FROM doubts WHERE id = ?)",
                    (doubt_id,))
+
+
+def leave_note(user_db: Path, doubt_id: int, note: str) -> None:
+    """The person's own words on an open doubt, for whoever answers it. The doubt stays open."""
+    with closing(_connect(user_db)) as db, db:
+        changed = db.execute("UPDATE doubts SET note = ? WHERE id = ? AND status = 'open'", (note or None, doubt_id)).rowcount
+    if not changed:
+        raise ValueError(f"doubt {doubt_id} is not open")
+
+
+def close_as_tried_again(user_db: Path, flow_id: str) -> int:
+    """The person tried the flow again: every open doubt of it closes (parallel branches may have left several) and the
+    checkpoint stays, so the run goes on from where it stopped. How many were closed."""
+    with closing(_connect(user_db)) as db, db:
+        return db.execute("UPDATE doubts SET status = 'answered', closed_as = 'tried_again' WHERE flow_id = ? AND status = 'open'",
+                          (flow_id,)).rowcount
 
 
 def has_open_doubt(user_db: Path, flow_id: str) -> bool:

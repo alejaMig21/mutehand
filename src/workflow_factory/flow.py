@@ -254,6 +254,15 @@ class Flow:
         return repr((self.nodes, self.all_edges))
 
     @property
+    def resume_key(self) -> str:
+        """What a checkpoint is matched with: the flow without its start boxes. Giving a flow a daily time, or taking it
+        away, must not make a stopped flow start over and do again what it already did."""
+        starts = {node.id for node in self.nodes if node.kind == "trigger"}
+        if not starts:
+            return self.definition
+        return repr(([n for n in self.nodes if n.id not in starts], [e for e in self.all_edges if not starts & set(e)]))
+
+    @property
     def key(self) -> str:
         return self.trial or self.id or "flow-" + hashlib.sha1(self.definition.encode()).hexdigest()[:12]
 
@@ -455,7 +464,7 @@ class _Run:
 
     def save(self) -> None:
         with self.lock:
-            save_checkpoint(self.user_db, self.flow.key, self.state.dump(), self.flow.definition)
+            save_checkpoint(self.user_db, self.flow.key, self.state.dump(), self.flow.resume_key)
 
     def attempt(self, node: Node):
         """One replay of the node's step: (blocked reason or None, effect, step)."""
@@ -881,10 +890,13 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="ma
     key = desktop.app_key()
     revalidate_changed_versions(user_db, key.process, key.version)
     record_app_name(user_db, key)
-    saved = load_checkpoint(user_db, flow.key, flow.definition)
+    saved = load_checkpoint(user_db, flow.key, flow.resume_key)
     state = _State.load(saved) if saved else _State()
     state.context.update(context or {})
     run = _Run(flow, desktop, user_db, factory_db, state, progress)
+    for node in flow.nodes:  # a flow that goes on from where it stopped shows what it had done as done
+        if saved and node.id in state.done:
+            run.progress(node.id, "done")
     started_at = desktop.now()
     nodes = {node.id: node for node in flow.nodes}
     runners = {"step": _run_step, "loop": _run_loop, "if": _run_if, "trigger": _run_trigger, "foreach": _run_foreach,

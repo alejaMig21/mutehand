@@ -157,7 +157,7 @@ The list of doubts the apprentice leaves for the tutor.
 _Avoid_: Inbox, ticket list
 
 **Doubt**:
-One entry in the tutor queue: where the apprentice stopped, why, a structural capture, and its status (open, answered, dismissed).
+One entry in the tutor queue: where the apprentice stopped, why, a structural capture, and its status (open, answered, dismissed). A person who presses "Try again" on a stopped chore closes it as answered, marked tried again, and a person who asks for help leaves a note on it while it stays open.
 _Avoid_: Issue, error, question
 
 **Structural capture**:

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
+import { Attention, TriedResults } from './Attention.jsx'
 import { appLabel, chipFor } from './catalog.js'
 import { changeDaily, DailyForm } from './Daily.jsx'
 import { Icon } from './icons.jsx'
@@ -10,11 +11,14 @@ import { blockedWords, flowTitle, lastRunWords, runNoteWords } from './words.js'
 
 // The first screen: the person's flows ("chores" on screen), how each went, and Run now. `onOpen` shows a flow on the
 // flow screen, `onNew` an empty one; `left` holds the flow the person has just come back from, if any.
-export default function Home({ following, left, onOpen, onNew }) {
+export default function Home({ following, tried, left, onOpen, onNew }) {
   const { offline, attach, settled } = following
   const load = useLoad('/api/flow-overview', { keep: true })
   const { reload } = load
   const flows = load.data
+  const needs = useLoad('/api/attention', { keep: true }) // what stopped and waits for the person
+  const stopped = needs.data
+  const reloadNeeds = needs.reload
   const undo = useDeleted(reload, flows)
 
   // the button that led back is gone with the flow screen: the focus goes to the flow's row
@@ -27,14 +31,17 @@ export default function Home({ following, left, onOpen, onNew }) {
 
   // a run that ended, another window or a scheduled run may have changed what is true: read it again
   useEffect(() => {
-    const again = () => { reload(); attach(); loadAppNames() }
+    const again = () => { reload(); reloadNeeds(); attach(); loadAppNames() }
     again()
     window.addEventListener('focus', again)
     return () => window.removeEventListener('focus', again)
-  }, [settled, reload, attach])
+  }, [settled, reload, reloadNeeds, attach])
 
   return (
     <div className="home">
+      <TriedResults tries={tried.tries} hide={tried.hide} />
+      <Attention items={stopped} tries={tried.tries} tryAgain={tried.tryAgain} onChanged={() => { reload(); reloadNeeds() }}
+        running={(id) => following.runs[id]?.status === 'running'} />
       <Screen title="Your chores" load={load} isEmpty={flows.length === 0} emptyId="no-chores"
         empty="No chores yet. Press “New chore” to make your first one."
         above={offline && <p role="status">{UNREACHABLE} Trying again…</p>}
@@ -42,6 +49,7 @@ export default function Home({ following, left, onOpen, onNew }) {
         <ul className="chores">
           {flows.map((flow) => (
             <Chore key={flow.id} flow={flow} title={flowTitle(flow.id, flows)} following={following} reload={reload}
+              stopped={stopped.find((item) => item.flow === flow.id)} tryAgain={tried.tryAgain}
               onDeleted={undo.onDeleted} onOpen={() => onOpen(flow.id)} />
           ))}
         </ul>
@@ -51,7 +59,7 @@ export default function Home({ following, left, onOpen, onNew }) {
   )
 }
 
-function Chore({ flow, title, following: { runs, follow, attach, forget }, reload, onOpen, onDeleted }) {
+function Chore({ flow, title, following: { runs, follow, attach, forget }, reload, stopped, tryAgain, onOpen, onDeleted }) {
   const { id, app } = flow
   const run = runs[id]
   const running = run?.status === 'running'
@@ -69,13 +77,16 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
     ? { words: 'Paused: you moved the mouse. It resumes when you stop using the PC.', tone: 'warn', icon: 'pause' }
     : { words: 'Running now', tone: 'info', icon: 'spinner' }
   const wrong = !running && (problem || runNoteWords(run, appName))
-  const why = !running && blockedWords(flow.blocked, app && appName)
-  const label = running ? 'Stop' : starting ? 'Starting…' : why ? 'Cannot run yet' : 'Run now'
+  // a chore that stopped is tried again, not run: what it is waiting for is the person's Try again
+  const again = Boolean(stopped) && !stopped.rejected_by_person.length
+  const why = !running && blockedWords(again && flow.blocked?.why === 'question' ? null : flow.blocked, app && appName)
+  const label = running ? 'Stop' : starting ? 'Starting…' : why ? 'Cannot run yet' : again ? 'Try again' : 'Run now'
   const unavailable = starting || (running && !run.armed) || Boolean(why)
 
   async function press() {
     if (unavailable) return
     setProblem('')
+    if (again && !running) { tryAgain(stopped); return }
     try {
       if (running) { // one mouse and keyboard: this ends every run at once
         await api(`/api/runs/${run.runId}/stop`, { method: 'POST' })
@@ -109,14 +120,14 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
         {/* the button covers the whole row, under the row's other controls */}
         <h2><button className="chore-open" data-testid={`open-chore-${id}`} onClick={onOpen}>{title}</button></h2>
         <p className="muted">{appName}</p>
-        <p className={`chore-line tone-${line.tone}`} role="status"><Icon name={line.icon} size={18} /> {line.words}</p>
+        <p className={`chore-line tone-${line.tone}`} role="status"><Icon name={line.icon} size={18} /> {line.words}{again && !running && '. See above.'}</p>
         {why && <p className="chore-line tone-warn" id={`why-${id}`} data-testid={`chore-why-${id}`}><Icon name="alert" size={18} /> {why}</p>}
         {wrong && <p className="chore-line tone-bad" role="alert"><Icon name="alert" size={18} /> {wrong}</p>}
       </div>
       {/* one button that changes its words, so the keyboard focus stays on it; aria-disabled keeps it focusable */}
       <button className={`chore-run ${running ? 'danger' : why ? 'cannot' : 'primary'}`} data-testid={`run-now-${id}`} onClick={press}
         aria-disabled={unavailable || undefined} aria-describedby={why ? `why-${id}` : undefined} aria-label={`${label}: ${title}`}>
-        <Icon name={running ? 'stop' : 'play'} size={20} /> {label}
+        <Icon name={running ? 'stop' : again && !why ? 'retry' : 'play'} size={20} /> {label}
       </button>
       <button ref={dailyButton} className="chore-daily" data-testid={`daily-${id}`} onClick={() => setSetting(!setting)}
         aria-expanded={setting} aria-label={`${daily ? `Every day at ${daily}. Change or stop` : 'Run every day'}: ${title}`}>

@@ -22,6 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from workflow_factory import daily, schedule
+from workflow_factory.attention import attention_items, rejected_by_person
 from workflow_factory.checks import mark_seen, run_checks, seen_before
 from workflow_factory.consent import consents, covers, effective_sensitivity, revoke_consent
 from workflow_factory.desktop import Desktop, DesktopError
@@ -50,7 +51,15 @@ from workflow_factory.flows import (
 from workflow_factory.knowledge import duplicate_flow
 from workflow_factory.nodedata import present, single_node_flow, snapshot
 from workflow_factory.paths import default_user_db
-from workflow_factory.queue import answer_doubt, dismiss_doubt, list_doubts, list_runs, locked_flows
+from workflow_factory.queue import (
+    answer_doubt,
+    close_as_tried_again,
+    dismiss_doubt,
+    leave_note,
+    list_doubts,
+    list_runs,
+    locked_flows,
+)
 from workflow_factory.recipes import adaptations, recipes_overview
 from workflow_factory.steps import (
     app_names,
@@ -58,6 +67,7 @@ from workflow_factory.steps import (
     list_steps,
     reject_step,
     restore_step,
+    step_report,
     step_reports,
 )
 from workflow_factory.tutor import is_private, private_apps
@@ -140,11 +150,15 @@ class ApiServer:
         for run_id in finished[: max(0, len(finished) - self.max_kept_runs)]:
             del self._runs[run_id]
 
-    def _start_run(self, flow_id: str, app: str, context: dict) -> tuple[int, str | None]:
-        """(202, run id) when started; 404 no such flow; 409 already running; 429 too many runs."""
+    def _start_run(self, flow_id: str, app: str, context: dict, again: bool = False) -> tuple[int, str | None]:
+        """(202, run id) when started; 404 no such flow; 409 already running; 429 too many runs.
+
+        `again` is the person pressing "Try again" on a stopped flow: the flow's open doubts close, and a step a failed
+        check rejected is lifted so the run can go on from its checkpoint. A step the person rejected is never lifted."""
         flow = load_flow(self.user_db, self.factory_db, flow_id)
         if flow is None:
             return 404, None
+        process = ""
         try:
             desktop = self.desktop_for(app)
             refused = rejected_steps(flow, desktop, self.user_db, self.factory_db)
@@ -157,15 +171,30 @@ class ApiServer:
             names = ", ".join(f"'{step}'" for step in untaught)
             raise ValueError(f"This flow will not start: {names} {'has' if len(untaught) == 1 else 'have'} not been taught "
                              "for this app yet. An agent teaches it in a chat.")
+        lift = []
+        if again and refused:
+            found = {name: find_step(self.user_db, self.factory_db, process, name) for _, name in refused}
+            lift = [step for step in found.values() if not rejected_by_person(step_report(self.user_db, step))]
+            refused = tuple(r for r in refused if found[r[1]] not in lift)
         if refused:  # a rejected step is never run: name them all before anything starts
             names = ", ".join(f"'{step}'" for _, step in refused)
+            many = len(refused) > 1
+            if again:
+                raise ValueError(f"You rejected {names}, so trying again would not run {'them' if many else 'it'}. "
+                                 "Allow it again first, then try again.")
             raise ValueError(f"This flow will not start: {names} {'is' if len(refused) == 1 else 'are'} rejected. "
                              "Restore the step in the Steps screen first.")
-        return self._launch(flow, flow_id, flow_id, app, context)
 
-    def _launch(self, flow, run_key: str, data_key: str, app: str, context: dict) -> tuple[int, str | None]:
+        def prepare() -> None:  # with the run about to start and nothing else holding the flow: doubts close, rejections lift
+            for step in lift:
+                restore_step(self.user_db, step.app, step.name)
+            close_as_tried_again(self.user_db, flow_id)
+        return self._launch(flow, flow_id, flow_id, app, context, prepare if again else None)
+
+    def _launch(self, flow, run_key: str, data_key: str, app: str, context: dict, prepare=None) -> tuple[int, str | None]:
         """Run `flow` in the background. `run_key` says what may not run twice at once; `data_key` is the flow whose
-        node data this run updates (a test of one node updates the data of the flow it belongs to)."""
+        node data this run updates (a test of one node updates the data of the flow it belongs to). `prepare` is called
+        once the run is sure to start, and before it does."""
         run_id = uuid.uuid4().hex
         record = {"flow_id": run_key, "status": "running", "stopped": None,
                   "nodes": {n.id: "pending" for n in flow.nodes}, "log": []}
@@ -175,6 +204,8 @@ class ApiServer:
                 return 409, None  # two runs of one flow would race on its checkpoint
             if len(active) >= self.max_active_runs:
                 return 429, None
+            if prepare:
+                prepare()
             self._runs[run_id] = record
             self._trim_runs()
 
@@ -485,6 +516,8 @@ class ApiServer:
                     steps = list_steps(api.user_db, api.factory_db)
                     return self._send(200, [{**_step_view(step), **safety} for step, safety in
                                             zip(steps, _safety(api.user_db, steps), strict=True)])
+                if method == "GET" and path == "/api/attention":
+                    return self._send(200, attention_items(api.user_db, api.factory_db))
                 if method == "GET" and path == "/api/app-names":
                     return self._send(200, app_names(api.user_db))
                 if method == "GET" and path == "/api/checks":
@@ -545,10 +578,10 @@ class ApiServer:
                         return self._send(202, {"run_id": run_id})
                     return self._send(code, {"error": {404: "no such flow", 409: "this node is already being tested",
                                                        429: "too many runs at once"}[code]})
-                run_match = re.fullmatch(r"/api/flows/([\w.-]+)/run", path)
+                run_match = re.fullmatch(r"/api/flows/([\w.-]+)/(run|try-again)", path)
                 if run_match and method == "POST":
                     body = self._body()
-                    code, run_id = api._start_run(run_match[1], body["app"], body.get("context") or {})
+                    code, run_id = api._start_run(run_match[1], body["app"], body.get("context") or {}, run_match[2] == "try-again")
                     if code == 202:
                         return self._send(202, {"run_id": run_id})
                     return self._send(code, {"error": {404: "no such flow", 409: "this flow is already running",
@@ -575,6 +608,11 @@ class ApiServer:
                     status = (self.query.get("status") or [None])[0]
                     return self._send(200, [
                         {**asdict(doubt), "reason": str(doubt.reason)} for doubt in list_doubts(api.user_db, status)])
+                help_match = re.fullmatch(r"/api/doubts/(\d+)/help", path)
+                if help_match and method == "POST":  # the person's note stays on the doubt, which stays open
+                    note = str(self._body().get("note") or "")[:MAX_NOTE_CHARS]
+                    leave_note(api.user_db, int(help_match[1]), note)
+                    return self._send(200, {"doubt": int(help_match[1]), "note": note or None})
                 doubt = re.fullmatch(r"/api/doubts/(\d+)/(answer|dismiss)", path)
                 if doubt and method == "POST":
                     if doubt[2] == "answer":

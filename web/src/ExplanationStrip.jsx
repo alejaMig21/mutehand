@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { StoppedActions } from './Attention.jsx'
 import { api, encode } from './api.js'
 import { appLabel, titleOf } from './catalog.js'
 import { fieldsOf } from './bindings.js'
 import { Icon } from './icons.jsx'
 import { sentenceOf, workedWords } from './sentences.js'
-import { runWords } from './words.js'
+import { stoppedWords } from './stopped.js'
+import { reasonWords, runWords } from './words.js'
 
 // What a box asks before a test: the ones that move the mouse or press keys. A data box and a read touch no control.
 const touchesTheScreen = (node, meta) => (!node.kind || node.kind === 'step') && meta?.action !== 'read_value'
@@ -28,7 +30,7 @@ export default function ExplanationStrip(props) {
 }
 
 function ChosenBox({ node, meta, nodes, edges, appName, context, ensureSaved, onTested, onConnect, onDisconnect,
-  onSettings, onRemove }) {
+  onSettings, onRemove, stopped, onTry, onChanged, trying }) {
   const [asking, setAsking] = useState(false)
   const [test, setTest] = useState({ state: 'idle' })
   const box = node.data.node
@@ -74,7 +76,13 @@ function ChosenBox({ node, meta, nodes, edges, appName, context, ensureSaved, on
         {before}{name && <strong>{name}</strong>}{after}
         {worked && <> <span data-testid="strip-worked">{worked}</span></>}
       </p>
+      {stopped && (
+        <p className="strip-reason tone-bad" data-testid="strip-reason">
+          <Icon name="alert" size={18} /> <span><b>Stopped here.</b> {reasonWords(stopped.reason)} <span className="muted">{stoppedWords(stopped).hint}</span></span>
+        </p>
+      )}
       <div className="strip-actions">
+        {stopped && <StoppedActions item={stopped} prefix="strip" onTry={onTry} onChanged={onChanged} trying={trying} />}
         {testable(box) && (
           <button className="primary" data-testid="test-node" disabled={test.state === 'running' || asking}
             onClick={() => (touchesTheScreen(box, meta) ? setAsking(true) : runTest())}>

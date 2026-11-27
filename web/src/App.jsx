@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { api, loadAppNames, LOCKED } from './api.js'
+import { useTryAgain } from './Attention.jsx'
 import { getAppNames, onAppNames } from './catalog.js'
 import Checks from './Checks.jsx'
 import Consents from './Consents.jsx'
@@ -34,6 +35,7 @@ export default function App() {
   const [locked, setLocked] = useState(false)
   const [unsaved, setUnsaved] = useState(false)
   const following = useRuns() // shared by Home and the flow screen: a run stays followed across screens
+  const tried = useTryAgain(following) // so is a try again: it is reported wherever the person is when it ends
   const flowScreen = useRef(null)
   // the flow screen answers false when the person keeps what it holds instead: then Home stays
   const showFlow = (shown) => shown && setScreen('editor')
@@ -91,10 +93,10 @@ export default function App() {
         {/* the editor stays mounted so unsaved nodes, edges and run context survive a tab change */}
         <div style={{ display: screen === 'editor' ? 'block' : 'none', height: '100%' }}>
           <Editor ref={flowScreen} active={screen === 'editor'} onOpen={setScreen} onBack={goHome} onUnsaved={setUnsaved}
-            following={following} />
+            following={following} tried={tried} />
         </div>
         {screen === 'home' && (
-          <Home following={following} left={left} onOpen={(id) => showFlow(flowScreen.current.open(id))}
+          <Home following={following} tried={tried} left={left} onOpen={(id) => showFlow(flowScreen.current.open(id))}
             onNew={() => showFlow(flowScreen.current.create())} />
         )}
         {Current && <Current onStart={() => setScreen('editor')} />}

@@ -217,13 +217,6 @@ def app_updated(db):
     save_flow(db, Flow(id="stuck", nodes=[Node("a", "open-menu")]), "Stuck", "paint.exe")
 
 
-def stopped_with_a_question(db):
-    save_step(db, step("close-message", "Missing"))
-    flow = Flow(id="stuck", nodes=[Node("a", "close-message")])
-    save_flow(db, flow, "Stuck", "paint.exe")
-    run_flow(flow, desktop=FakeDesktop(controls=[]), user_db=db)
-
-
 def an_expression(db):
     node = Node("a", "open-menu", fields={"text": {"expression": "1 + 1"}})
     save_flow(db, Flow(id="stuck", nodes=[node]), "Stuck", "paint.exe")
@@ -243,7 +236,6 @@ def unreadable(db):
     (never_learned_at_all, "“print-it” is not learned yet."),
     (rejected, "“save-file” is rejected. To run this chore, restore it in Steps."),
     (app_updated, "Paint was updated: “open-menu” has to be learned again."),
-    (stopped_with_a_question, "It stopped earlier and left a question. Answer it in Tutor queue."),
     (an_expression, "It uses an expression, which cannot run yet."),
     (unreadable, "It cannot be read."),
 ], ids=lambda value: getattr(value, "__name__", ""))
@@ -274,8 +266,8 @@ def test_a_run_that_stops_leaves_the_chore_waiting_and_saying_why(tmp_path):
     with home(tmp_path, desktop) as (page, _):
         run_button(page, "morning").click()
         says(page, "morning", r"Stopped .+ at \d\d:\d\d")
-        run_button(page, "morning").filter(has_text="Cannot run yet").wait_for()
-        says(page, "morning", "left a question")
+        run_button(page, "morning").filter(has_text="Try again").wait_for()  # a stopped chore is tried again, not run
+        page.get_by_test_id("attention-morning").wait_for()
         doubt = list_doubts(tmp_path / "user.db", "open")[0]
         answer_doubt(tmp_path / "user.db", doubt.id, "done")  # in another window
         page.evaluate("() => window.dispatchEvent(new Event('focus'))")
@@ -580,9 +572,9 @@ def test_no_screen_content_of_a_private_app_reaches_home(tmp_path):
         said = []
         page.on("response", lambda r: said.append(r) if "/api/" in r.url else None)
         run_button(page, "greet").click()
-        says(page, "greet", "left a question")
+        page.get_by_test_id("attention-greet").wait_for()
         page.wait_for_timeout(300)
-        sent = [r.text() for r in said if "/api/flow-overview" in r.url or "/api/runs" in r.url]
+        sent = [r.text() for r in said if "/api/flow-overview" in r.url or "/api/runs" in r.url or "/api/attention" in r.url]
         assert any("greet" in text for text in sent)
         shown = page.content() + "".join(sent)
         assert "Ana Ruiz" not in shown and "4471" not in shown
