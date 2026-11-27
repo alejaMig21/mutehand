@@ -6,7 +6,7 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 
 **Blocked by:** 03, 10
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] With 25 apps the screen shows the first rows and "Show more"
 - [ ] Search by words finds actions across apps
@@ -16,3 +16,8 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 - [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop and scheduler, red before green
 - [ ] Everything added works from the keyboard and fits a 683 px and a 390 px wide window; button text stays readable
 - [ ] Existing tests pass; no screen content of a private app appears in any message
+
+## Answer
+
+Apps screen: one row per program with search across all apps, problems first when opened, permissions with "Take back" (asks first, says what stops) and the message to teach another action.
+Commits: 76d4feb.
