@@ -228,7 +228,6 @@ def test_run_uses_exactly_what_is_on_screen(tmp_path):
     db = seed(tmp_path)
     with editor(tmp_path) as page:
         open_flow(page, "morning", "n2")
-        page.get_by_test_id("app-name").select_option("paint.exe")
         node(page, "n2").click()
         page.get_by_test_id("delete-node").click()
         page.get_by_test_id("run").click()  # at once, before the change has had time to be stored by itself

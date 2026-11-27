@@ -6,7 +6,7 @@ import { nodeNumbers, chainLoose, fromFlowJson, joinNodes, looseNodes, nextNodeI
 import { changeDaily, DailyForm } from './Daily.jsx'
 import { Icon } from './icons.jsx'
 import { refOptions } from './bindings.js'
-import { appKey, appLabel, SYSTEM_NODES, taughtApp, titleOf } from './catalog.js'
+import { appKey, SYSTEM_NODES, technologiesOf, titleOf } from './catalog.js'
 import NodeCard from './NodeCard.jsx'
 import NodeDetail from './NodeDetail.jsx'
 import ExplanationStrip from './ExplanationStrip.jsx'
@@ -48,7 +48,6 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const [flowId, setFlowId] = useState(null) // null: a new flow, which gets its identifier when it is first saved
   const [title, setTitle] = useState(FIRST_TITLE)
   const [saved, setSaved] = useState({ json: EMPTY_FLOW, title: FIRST_TITLE })
-  const [appName, setAppName] = useState('')
   const [context, setContext] = useState('{}')
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -88,8 +87,6 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     .map((draft) => ({ ...draft, node: titleOf(n.data.node) }))), [nodes])
   const isStored = flowId !== null
   const template = flows.some((f) => f.id === flowId && f.origin === 'factory') // read-only: a copy is what is edited
-  const apps = useMemo(() => [...new Set(steps.map((s) => s.app))], [steps])
-  const runsOn = taughtApp(appName, apps)
   const dirty = JSON.stringify(body) !== saved.json || title !== saved.title || invalid.length > 0
   // changes the server has not got: a flow with no node yet is not stored, so its name alone is nothing to lose
   const unkept = dirty && (isStored || nodes.length > 0)
@@ -99,10 +96,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const refresh = useCallback(() => {
     const fail = (e) => setError(e.message)
     loadAppNames() // a run just seen may have told the name of its app
-    api('/api/steps').then((found) => {
-      setSteps(found)
-      setAppName((current) => current || found[0]?.app || '')
-    }).catch(fail)
+    api('/api/steps').then(setSteps).catch(fail)
     api('/api/recipes').then(setRecipes).catch(fail)
     api('/api/flows').then((found) => {
       setFlows(found)
@@ -140,7 +134,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     setProblem('')
     const timer = setTimeout(() => save(), 400)
     return () => clearTimeout(timer)
-  }, [unkept, held, conflict, opening, template, body, title, runsOn, retry]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [unkept, held, conflict, opening, template, body, title, retry]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { // popovers close with Escape or a click elsewhere
     if (!menu) return undefined
@@ -257,7 +251,6 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   }
 
   const addStep = (step, dropped) => {
-    if (nodes.length === 0) setAppName(step.app) // a flow runs on one app: the first step says which
     addNode({ step: step.name, technology: step.app }, dropped)
   }
 
@@ -268,15 +261,19 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     const entry = JSON.parse(raw)
     const at = screenToFlowPosition({ x: event.clientX, y: event.clientY })
     const system = SYSTEM_NODES.find((n) => n.key === entry.system)
-    const step = steps.find((s) => s.name === entry.step && s.app === entry.app)
+    const step = steps.find((s) => s.name === entry.step && appKey(s.app) === appKey(entry.app))
     if (system) addNode(structuredClone(system.node), at)
     else if (step) addStep(step, at)
   }
 
-  // Drop a recipe: one connected node per hole, each on the step that fills the hole for the app to run on.
-  // A hole nobody filled for this app gets the name its step will have, and the node says it is not filled.
+  // Drop a recipe: one connected node per hole, each on the step that fills the hole for one program: the one the flow
+  // acts on last if the recipe knows it, else the first the recipe was applied to.
+  // A hole nobody filled for this program gets the name its step will have, and the node says it is not filled.
   const addRecipe = (recipe) => {
-    const bound = Object.entries(recipe.apps).find(([app]) => appKey(app) === appKey(appName))?.[1] ?? {}
+    const known = Object.keys(recipe.apps)
+    const last = nodes.map((n) => n.data.node.technology).filter(Boolean).at(-1)
+    const runsOn = known.find((app) => last && appKey(app) === appKey(last)) ?? known[0] ?? ''
+    const bound = recipe.apps[runsOn] ?? {}
     let list = [...nodes]
     const added = recipe.holes.map((hole) => {
       const id = nextNodeId(list)
@@ -334,8 +331,6 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       setFlowId(id)
       keep(id, read.revision)
       setTitle(read.title)
-      const first = read.nodes.find((n) => n.technology)?.technology // the panel offers the program of the first node
-      if (first) setAppName(first)
       setSaved({ json: JSON.stringify(toFlowJson(loaded.nodes, loaded.edges)), title: read.title })
       setSelectedId(null)
       setNodeData({})
@@ -579,9 +574,9 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const viewNodes = useMemo(() => nodes.map((n) => {
     const node = n.data.node
     if (node.kind && node.kind !== 'step') return n
-    const step = steps.find((s) => s.name === node.step && appKey(s.app) === appKey(node.technology || appName))
+    const step = steps.find((s) => s.name === node.step && appKey(s.app) === appKey(node.technology))
     return { ...n, data: { ...n.data, meta: step ? { ...metaOf(step), hole: n.data.hole } : { missing: true, hole: n.data.hole } } }
-  }), [nodes, steps, appName])
+  }), [nodes, steps])
 
   const selected = viewNodes.find((n) => n.id === selectedId)
   const selectedNode = selected?.data.node
@@ -616,7 +611,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     [viewNodes, numbers, shownRun, daily, stoppedHere],
   )
   const safety = useMemo(() => safetySummary(viewNodes), [viewNodes])
-  const blocked = whyNotRunnable(safety, appName ? appLabel(appName) : undefined)
+  const blocked = whyNotRunnable(safety)
   const paused = running && Object.values(shownRun.nodes).includes('paused')
   const loose = looseNodes(nodes, edges)
   // the lines the run went down: out of a node that got through, into a node it reached
@@ -833,6 +828,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
             key={selected.id}
             node={selectedNode}
             meta={selected.data.meta}
+            technologies={technologiesOf(steps, selectedNode.step)}
             drafts={selected.data.drafts}
             onDraft={draftSelected}
             refs={refOptions(viewNodes, selected.id, runKeys, (n) => titleOf(n.data.node))}
@@ -848,7 +844,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
           <ExplanationStrip node={selected} meta={selected?.data.meta} nodes={viewNodes} edges={edges}
             stopped={stoppedHere && selected?.id === stoppedHere.node ? stoppedHere : null} onTry={tryAgain} onChanged={refresh}
             trying={running || Boolean(tried.tries[flowId] && !tried.tries[flowId].result)}
-            appName={runsOn} context={context} onConnect={onConnect} onSettings={() => openDetail(selected.id)} onRemove={deleteSelected}
+            appName={selectedNode?.technology} context={context} onConnect={onConnect} onSettings={() => openDetail(selected.id)} onRemove={deleteSelected}
             onDisconnect={(edge) => { record(); setEdges((current) => current.filter((e) => e.id !== edge.id)) }}
             ensureSaved={async () => {
               const id = await ensureStored()
@@ -857,7 +853,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
             }}
             onTested={() => setTested((n) => n + 1)} />
       </div>
-        <SearchPanel steps={steps} recipes={recipes} apps={apps} app={runsOn} onApp={setAppName} onAddSystem={addSystem}
+        <SearchPanel steps={steps} recipes={recipes} onAddSystem={addSystem}
           onAddStep={addStep} onAddRecipe={addRecipe} />
         {opening && <div className="opening" role="status">Opening…</div>}
       </div>

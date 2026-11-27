@@ -81,7 +81,6 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
         assert saved.nodes[1].inputs == (("value", "str"),)
 
         # run it with the typed value and watch the per-node status
-        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run-data").click()
         page.get_by_test_id("context").fill(json.dumps({"value": "hello"}))
         page.get_by_test_id("run").click()
@@ -117,7 +116,6 @@ def test_a_loaded_flow_keeps_unique_node_ids_and_drops_the_previous_run_colours(
         browser, page = open_page(playwright, server)
         page.get_by_test_id("palette-open-menu").click()  # n1 on a fresh canvas
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
-        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
         assert page.locator(".react-flow__node.status-done").count() == 1
@@ -342,7 +340,6 @@ def test_the_node_detail_shows_data_hidden_until_asked_and_never_before_a_run(ed
         assert "No data yet" in detail.inner_text()  # nothing ran
 
         page.get_by_test_id("close-detail").click()
-        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
         page.locator('.react-flow__node[data-id="c"]').dblclick()
@@ -366,7 +363,6 @@ def test_a_field_is_edited_as_a_fixed_value_or_as_a_reference_and_the_node_is_te
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         open_seeded_flow(page)
-        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
 
@@ -401,7 +397,6 @@ def test_testing_a_step_warns_about_the_mouse_and_keyboard_first_then_runs_only_
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         open_seeded_flow(page)
-        page.get_by_test_id("app-name").select_option("paint.exe")
         page.locator('.react-flow__node[data-id="p"]').click()
         page.get_by_test_id("test-node").click()
         warning = page.get_by_test_id("test-warning")
@@ -454,7 +449,6 @@ def test_stop_ends_a_run_at_once_and_the_run_button_comes_back(tmp_path):
             page.get_by_test_id("open-flows").click()
             page.get_by_test_id("flow-slow").click()
             page.locator('.react-flow__node[data-id="b"]').wait_for()
-            page.get_by_test_id("app-name").select_option("paint.exe")
             page.get_by_test_id("run").click()
             page.get_by_test_id("run-log").wait_for()
             page.get_by_test_id("stop").click()
@@ -516,7 +510,6 @@ def test_nodes_say_how_far_a_step_is_trusted_and_a_stopped_node_is_explained_not
             b = page.get_by_test_id("node-b").inner_text()
             assert "Consent given" in b and "Private app" in b and "On trial" not in b and "Trusted" not in b
 
-            page.get_by_test_id("app-name").select_option("telegram.exe")
             page.get_by_test_id("run").click()
             page.get_by_test_id("run-status").filter(has_text="stopped").wait_for(timeout=10_000)
             page.get_by_test_id("node-b").filter(has_text="Stopped here").wait_for()
@@ -534,12 +527,13 @@ HOLES = [{"hole": "open", "role": "button", "control_name": "Alpha"}, {"hole": "
          {"hole": "send", "role": "button", "control_name": "Gamma"}]
 
 
-def taught_recipe(tmp_path, second_has_compose=True):
+def taught_recipe(tmp_path, second_has_compose=True, first=True):
     from workflow_factory.recipes import apply_recipe, save_recipe
 
     save_recipe(tmp_path / "user.db", "send-message", HOLES)
-    apply_recipe(tmp_path / "user.db", FakeDesktop(controls=[button("Alpha"), button("Beta"), button("Gamma")], app="a.exe"),
-                 "send-message")
+    if first:
+        apply_recipe(tmp_path / "user.db", FakeDesktop(controls=[button("Alpha"), button("Beta"), button("Gamma")], app="a.exe"),
+                     "send-message")
     names = ["Alpha", "Gamma"] + (["Delta"] if second_has_compose else [])
     fills = {"compose": {"role": "button", "control_name": "Delta"}} if second_has_compose else {}
     apply_recipe(tmp_path / "user.db", FakeDesktop(controls=[button(n) for n in names], app="b.exe"), "send-message", fills)
@@ -556,15 +550,15 @@ def test_dropping_a_recipe_adds_its_connected_nodes_and_adapted_steps_say_where_
             entry = page.get_by_test_id("recipe-send-message")
             entry.wait_for()
             assert "3 steps" in entry.inner_text() and "A" in entry.inner_text()
-            page.get_by_test_id("app-name").select_option("b.exe")
-            entry.click()
+            entry.click()  # the nodes act on the first program the recipe was applied to
             page.locator('.react-flow__node[data-id="n3"]').wait_for()
             assert page.locator(".react-flow__node").count() == 3 and page.locator(".react-flow__edge").count() == 2
+            assert "Adapted from A" not in page.get_by_test_id("node-n2").inner_text()
+            page.get_by_test_id("node-n2").dblclick()
+            page.get_by_test_id("node-technology").select_option("b.exe")  # the node's own program is where it is changed
+            page.get_by_test_id("close-detail").click()
             assert "Adapted from A" in page.get_by_test_id("node-n2").inner_text()  # compose was taught for b on its own
             assert page.get_by_test_id("cannot-start").count() == 0 and not page.get_by_test_id("run").is_disabled()
-
-            page.get_by_test_id("app-name").select_option("a.exe")  # the panel's program: a node keeps the one it acts on
-            assert "Adapted from A" in page.get_by_test_id("node-n2").inner_text()
             browser.close()
     finally:
         server.stop()
@@ -573,12 +567,11 @@ def test_dropping_a_recipe_adds_its_connected_nodes_and_adapted_steps_say_where_
 def test_a_recipe_with_an_unfilled_hole_cannot_run_and_says_which(tmp_path):
     from playwright.sync_api import sync_playwright
 
-    taught_recipe(tmp_path, second_has_compose=False)  # on b the compose control was never found: a hole stays open
+    taught_recipe(tmp_path, second_has_compose=False, first=False)  # on b the compose control was never found: a hole stays open
     server = serve(tmp_path, FakeDesktop(controls=[]))
     try:
         with sync_playwright() as playwright:
             browser, page = open_page(playwright, server)
-            page.get_by_test_id("app-name").select_option("b.exe")
             page.get_by_test_id("recipe-send-message").click()
             page.locator('.react-flow__node[data-id="n3"]').wait_for()
             note = page.get_by_test_id("cannot-start")

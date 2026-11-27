@@ -220,27 +220,27 @@ def panel(page):
 
 
 def offered(page):
-    return panel(page).get_by_role("list", name="Steps").get_by_role("button").all_inner_texts()
+    return panel(page).get_by_role("list", name="Steps").locator("b").all_inner_texts()  # the names, not the programs beside them
 
 
-def test_the_panel_offers_only_the_chosen_apps_actions_and_finds_them_by_plain_words(tmp_path):
+def test_the_panel_offers_each_step_once_by_name_whatever_programs_it_is_learned_for_and_finds_them_by_plain_words(tmp_path):
     db = three_actions(tmp_path)
     save_step(db, step("write-text", "Alpha", app="word.exe"))
+    save_step(db, step("save-file", "Beta", app="word.exe"))
     with editor(tmp_path) as page:
         page.get_by_test_id("palette-open-menu").wait_for()
         assert panel(page).get_by_role("heading", name="Add a node").is_visible()
-        assert offered(page) == ["close-node", "open-menu", "save-file"]
+        assert page.get_by_test_id("app-name").count() == 0
+        assert offered(page) == ["close-node", "open-menu", "save-file", "write-text"]  # save-file once, for both programs
 
-        page.get_by_test_id("app-name").select_option("word.exe")
-        page.get_by_test_id("palette-write-text").wait_for()
-        assert offered(page) == ["write-text"]
-
-        page.get_by_test_id("app-name").select_option("paint.exe")
         find = page.get_by_role("searchbox", name="Find a step")
         find.fill("file save")  # plain words, in any order
         page.get_by_test_id("palette-open-menu").wait_for(state="detached")
         assert offered(page) == ["save-file"]
-        find.fill("write text")  # another app's action is not offered
+        find.fill("word")  # by the program too
+        page.get_by_test_id("palette-open-menu").wait_for(state="detached")
+        assert offered(page) == ["save-file", "write-text"]
+        find.fill("nothing like this")
         panel(page).get_by_text("Nothing matches").wait_for()
 
 
@@ -365,7 +365,7 @@ def test_a_missing_action_offers_the_message_to_send_in_a_chat_and_nothing_is_st
 
         page.get_by_test_id("search").fill("archive a chat")
         teach.press("Enter")
-        message = "I want to teach you a new step in Zzqx: archive a chat"
+        message = "I want to teach you a flow: archive a chat"
         assert page.get_by_test_id("chat-text").inner_text() == message
         assert "chat" in page.get_by_test_id("chat-message").inner_text().lower() and teach.get_attribute("aria-expanded") == "true"
 
@@ -377,7 +377,7 @@ def test_a_missing_action_offers_the_message_to_send_in_a_chat_and_nothing_is_st
         assert "Alice" not in page.get_by_test_id("chat-message").inner_text()
 
         page.get_by_test_id("search").fill("")
-        assert page.get_by_test_id("chat-text").inner_text() == "I want to teach you a new step in Zzqx: [what you want done]"
+        assert page.get_by_test_id("chat-text").inner_text() == "I want to teach you a flow: [what you want done, and in which program]"
         assert page.get_by_text("Copied. Paste it in the chat.").count() == 0  # that was another message
 
         page.evaluate("() => { window.refuseCopy = true }")

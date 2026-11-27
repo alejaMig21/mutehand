@@ -53,7 +53,6 @@ def open_flow(page, name):
     page.get_by_test_id("open-flows").click()
     page.get_by_test_id(f"flow-{name}").click()
     page.locator('.react-flow__node[data-id="n2"]').wait_for()
-    page.get_by_test_id("app-name").select_option("paint.exe")
 
 
 def wait_status(page, words):

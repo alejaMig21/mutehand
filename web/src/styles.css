@@ -8,7 +8,7 @@
 }
 html, body, #root { height: 100%; margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 14px; }
 button, input, select, textarea { font: inherit; color: inherit; accent-color: var(--accent); }
-/* every button is styled here first: none can fall back to the browser's light node under light text */
+/* every button is styled here first: none can fall back to the browser's light box under light text */
 button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; cursor: pointer;
   background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
 button:hover:not(:disabled) { border-color: var(--muted); }
@@ -31,7 +31,7 @@ summary { cursor: pointer; }
 .app-more summary { display: flex; align-items: center; min-height: 44px; padding: 6px 12px; color: var(--muted); border-radius: var(--radius); }
 .app-more summary:hover, .app-more[open] summary { color: var(--ink); }
 .app-more-menu { position: absolute; right: 0; top: 100%; z-index: 50; padding: 6px; background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius); node-shadow: 0 12px 32px rgba(0, 0, 0, .45); white-space: nowrap; }
+  border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); white-space: nowrap; }
 .app-more-menu button { color: var(--ink); }
 .tabs .brand { align-self: center; padding: 0 12px 0 4px; font-weight: 700; }
 .tabs button { min-height: 44px; }
@@ -39,14 +39,14 @@ summary { cursor: pointer; }
 .notice-page { max-width: 560px; margin: 80px auto; padding: 0 16px; }
 
 /* list screens: one centred column, one card look */
-.page { node-sizing: border-node; max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 16px; }
+.page { box-sizing: border-box; max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; display: flex; flex-direction: column; gap: 16px; }
 .page-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .page-head p { margin: 4px 0 0; max-width: 640px; }
 .page p { margin: 0; }
 /* what just happened stays in view wherever the list is scrolled */
 .page .announce { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 40; width: max-content; max-width: 90vw;
-  node-sizing: border-node; padding: 10px 16px; background: var(--surface); border: 1px solid var(--ok); border-radius: var(--radius);
-  node-shadow: 0 12px 32px rgba(0, 0, 0, .45); color: var(--ok); font-weight: 600; }
+  box-sizing: border-box; padding: 10px 16px; background: var(--surface); border: 1px solid var(--ok); border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .45); color: var(--ok); font-weight: 600; }
 .announce:empty { display: none; }
 .empty-state { padding: 32px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
 
@@ -82,7 +82,7 @@ summary { cursor: pointer; }
 .more-panel { position: relative; z-index: 1; flex: 1 1 100%; display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .more-buttons, .more-rename { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .more-rename label { font-weight: 600; }
-.more-rename input { flex: 1 1 220px; min-width: 0; min-height: 44px; node-sizing: border-node; padding: 8px 14px; border-radius: 12px; }
+.more-rename input { flex: 1 1 220px; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 8px 14px; border-radius: 12px; }
 .more-rename .flow-line { flex: 1 1 100%; }
 .more-history ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; max-height: 320px; overflow-y: auto; }
 .more-history h3 { margin: 0 0 4px; font-size: 16px; }
@@ -118,7 +118,7 @@ input, select, textarea { background: var(--sunk); border: 1px solid var(--line)
 .menu-anchor { position: relative; }
 .menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 240px; max-width: min(420px, 90vw); max-height: 60vh;
   overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 4px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); node-shadow: 0 12px 32px rgba(0, 0, 0, .45); }
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); }
 .menu > * { flex: none; } /* a long list scrolls; no row is squeezed */
 .menu.wide { right: 0; left: auto; width: min(320px, 90vw); padding: 12px; }
 .menu label { color: var(--muted); font-size: 12px; }
@@ -152,17 +152,17 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .react-flow__attribution { background: transparent; }
 .zoom { display: flex; gap: 8px; }
 .zoom button { min-width: 48px; min-height: 44px; border-radius: 12px; font-weight: 600; }
-.card { width: 260px; min-height: 76px; node-sizing: border-node; display: flex; flex-direction: column; justify-content: center; gap: 8px;
+.card { width: 260px; min-height: 76px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 8px;
   padding: 12px; background: var(--surface); border: 2px solid var(--line); border-radius: 14px; }
 .card.selected { outline: 3px solid var(--accent); outline-offset: 5px; } /* its border still says how the run went */
-.status-running .card { border-color: var(--info); node-shadow: 0 0 0 4px rgba(125, 184, 255, .25); }
+.status-running .card { border-color: var(--info); box-shadow: 0 0 0 4px rgba(125, 184, 255, .25); }
 .status-done .card, .status-continued .card { border-color: var(--ok); }
-.status-blocked .card { border-color: var(--bad); node-shadow: 0 0 0 6px rgba(255, 122, 122, .2); }
+.status-blocked .card { border-color: var(--bad); box-shadow: 0 0 0 6px rgba(255, 122, 122, .2); }
 .status-unreached .card-title { color: var(--muted); }
 .card-head { display: flex; align-items: center; gap: 10px; }
 .card-text { min-width: 0; }
 .card-title { font-weight: 700; overflow-wrap: anywhere; }
-.card-sub { color: var(--muted); font-size: 12px; }
+.card-sub { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .card-marks { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .card-mark { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; }
 .chip { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: #fff; font-weight: 700; font-size: 14px; }
@@ -178,7 +178,7 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .strip-says strong { color: var(--ink); }
 .strip-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .strip-buttons button { min-height: 44px; }
-.strip .warning { margin: 0; }
+.strip .warning { margin: 0; overflow-wrap: anywhere; }
 .strip-wires { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 .strip-wires select { min-height: 36px; max-width: 100%; }
 .wires { list-style: none; margin: 0; padding: 0; font-size: 12px; }
@@ -198,11 +198,11 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .search-panel summary::before { content: '▸' / ''; color: var(--muted); }
 .search-panel details[open] > summary::before { content: '▾' / ''; }
 .search-panel summary h3 { margin: 0; }
-.search-panel input { min-height: 44px; node-sizing: border-node; padding: 8px 14px; border-radius: 12px; }
+.search-panel input { min-height: 44px; box-sizing: border-box; padding: 8px 14px; border-radius: 12px; }
 .panel-app { display: flex; align-items: center; gap: 10px; }
 .panel-app .chip { width: 44px; height: 44px; font-size: 20px; }
 .panel-app select { min-width: 0; max-width: 100%; min-height: 44px; border-radius: 12px; font-weight: 600; } /* a long product name is cut short */
-.entry { gap: 10px; width: 100%; min-height: 44px; node-sizing: border-node; text-align: left; padding: 8px 16px; border-width: 1.5px;
+.entry { gap: 10px; width: 100%; min-height: 44px; box-sizing: border-box; text-align: left; padding: 8px 16px; border-width: 1.5px;
   border-radius: 12px; font-weight: 600; }
 .entry:hover:not(:disabled) { background: var(--sunk); }
 .entry > svg:last-child { flex: none; }
@@ -265,7 +265,7 @@ input[type="number"] { width: 70px; }
 .notice-stopped, .notice-error { border-left: 4px solid var(--bad); }
 .notice-waiting, .notice-emergency, .notice-busy { border-left: 4px solid var(--warn); }
 /* the run log floats over the corner of the canvas: it never takes the nodes' height */
-.run-log { position: absolute; right: 12px; bottom: 12px; z-index: 5; width: min(440px, calc(100% - 24px)); node-sizing: border-node; padding: 6px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; node-shadow: 0 4px 18px rgba(0, 0, 0, .35); }
+.run-log { position: absolute; right: 12px; bottom: 12px; z-index: 5; width: min(440px, calc(100% - 24px)); box-sizing: border-box; padding: 6px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 18px rgba(0, 0, 0, .35); }
 .run-log header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .run-log h2 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
 .run-progress { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; flex: 1; flex-wrap: wrap; }
@@ -308,7 +308,7 @@ input[type="number"] { width: 70px; }
 .flow-daily small { color: var(--muted); font-weight: 400; }
 .daily-form { position: relative; z-index: 1; flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
 .daily-form label { display: flex; align-items: center; gap: 8px; }
-.daily-form input { min-height: 44px; node-sizing: border-node; padding: 8px 12px; border-radius: 12px; font-size: 16px; }
+.daily-form input { min-height: 44px; box-sizing: border-box; padding: 8px 12px; border-radius: 12px; font-size: 16px; }
 .daily-form button { min-height: 44px; border-radius: 12px; font-weight: 600; }
 .daily-problem { flex: 1 1 100%; margin: 0; padding: 8px 12px; border-left: 4px solid var(--bad); background: rgba(255, 122, 122, .14); overflow-wrap: anywhere; }
 @media (max-width: 560px) { .home .flow-daily { flex: 1 1 100%; } }
@@ -317,7 +317,7 @@ input[type="number"] { width: 70px; }
 .start-strip { padding: 6px 16px; background: var(--sunk); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
 
 /* a stopped flow: the card on Home, the result of trying again, and the same words and buttons under the canvas */
-.tried-results, .attention { display: flex; flex-direction: column; gap: 12px; max-width: 1160px; margin: 0 auto; padding: 16px 16px 0; node-sizing: border-node; font-size: 16px; }
+.tried-results, .attention { display: flex; flex-direction: column; gap: 12px; max-width: 1160px; margin: 0 auto; padding: 16px 16px 0; box-sizing: border-box; font-size: 16px; }
 .attention h2 { font-size: 20px; }
 .attention ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .tried, .attention-card { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 16px 20px; background: var(--surface);
@@ -341,7 +341,7 @@ input[type="number"] { width: 70px; }
 .stopped-buttons button[aria-disabled="true"] { opacity: .55; cursor: default; }
 .help-panel { flex: 1 1 100%; display: flex; flex-direction: column; gap: 10px; padding: 12px 0 0; }
 .help-panel label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
-.help-panel textarea { node-sizing: border-node; width: 100%; padding: 8px 12px; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line); resize: vertical; }
+.help-panel textarea { box-sizing: border-box; width: 100%; padding: 8px 12px; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line); resize: vertical; }
 .help-panel .chat-message { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .help-panel .chat-message p { margin: 0; overflow-wrap: anywhere; }
 .help-panel .chat-text { padding: 8px 12px; background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; }
@@ -366,13 +366,13 @@ input[type="number"] { width: 70px; }
 .stages li { display: flex; flex-direction: column; gap: 4px; padding-top: 12px; border-top: 2px solid var(--line); overflow-wrap: anywhere; cursor: default; }
 .stages-heading { margin-bottom: 12px; font-size: 18px; }
 /* a plain number, not a button: no fill, no border, round only so that it reads as a count */
-.stage-no { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 700; node-shadow: inset 0 0 0 1.5px var(--muted); }
+.stage-no { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--muted); }
 .empty-state .primary { margin-top: 16px; }
 
 /* Apps: the search, one row per program, the opened program above the rows */
 .apps-search { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
 .apps-search > div { display: flex; gap: 12px; }
-.apps-search input { flex: 1; min-width: 0; min-height: 44px; node-sizing: border-node; padding: 8px 14px; border-radius: 12px; font-size: 16px; }
+.apps-search input { flex: 1; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 8px 14px; border-radius: 12px; font-size: 16px; }
 .apps-grid { list-style: none; margin: 16px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 860px) { .apps-grid { grid-template-columns: minmax(0, 1fr); } }
 .home .app-row { width: 100%; min-height: 64px; justify-content: flex-start; gap: 12px; padding: 10px 16px; text-align: left; border-width: 1.5px; border-radius: 14px; }

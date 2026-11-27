@@ -8,7 +8,7 @@ function describe(node, meta) {
     return { title: `Start: every day at ${node.fields.at?.value ?? '?'}`, icon: 'clock' } // the first node says when the flow runs
   }
   if (node.kind && node.kind !== 'step') return { title: titleOf(node), icon: systemEntryFor(node)?.icon ?? 'braces' }
-  const app = meta?.app
+  const app = node.technology || meta?.app
   return { title: node.step, subtitle: app ? appLabel(app) : '', chip: app ? chipFor(app) : null }
 }
 

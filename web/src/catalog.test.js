@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { appLabel, CHIP_COLOURS, chipFor, onAppNames, searchCatalog, setAppNames, taughtApp, SYSTEM_NODES } from './catalog.js'
+import { appLabel, CHIP_COLOURS, chipFor, onAppNames, groupByName, searchCatalog, setAppNames, taughtApp, technologiesOf, SYSTEM_NODES } from './catalog.js'
 
 const steps = [
   { app: 'telegram.exe', name: 'Send', origin: 'local' },
@@ -86,4 +86,18 @@ test('an app typed in any spelling is the one the steps were taught on', () => {
   assert.equal(taughtApp('PAINT.EXE', apps), 'paint')
   assert.equal(taughtApp(' unknown.exe ', apps), 'unknown.exe')
   assert.equal(taughtApp('', apps), '')
+})
+
+test('steps learned for several programs are one row by name, its programs ordered by the names on screen', () => {
+  setAppNames({})
+  const rows = [
+    { app: 'paint.exe', name: 'save' }, { app: 'excel.exe', name: 'save' }, { app: 'Paint.exe', name: 'save' },
+    { app: 'word.exe', name: 'open' },
+  ]
+  const grouped = groupByName(rows)
+  assert.deepEqual(grouped.map((g) => g.name), ['open', 'save'])
+  assert.deepEqual(grouped[1].technologies, ['excel.exe', 'paint.exe']) // Paint.exe and paint.exe are one program
+  assert.equal(grouped[1].step, rows[1]) // the row the entry adds: the first program
+  assert.deepEqual(technologiesOf(rows, 'save'), ['excel.exe', 'paint.exe'])
+  assert.deepEqual(technologiesOf(rows, 'nope'), [])
 })

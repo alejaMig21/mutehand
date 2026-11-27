@@ -70,8 +70,10 @@ def new_flow(page):
 def test_a_flow_takes_any_words_as_its_name_and_its_nodes_keep_their_app_after_a_reload_and_a_run(tmp_path):
     steps_of_two_apps(tmp_path)
     with editor(tmp_path) as (page, apps):
-        page.get_by_test_id("app-name").select_option("word.exe")  # the programs the panel offers steps of
         page.get_by_test_id("palette-open-menu").first.click()
+        page.get_by_test_id("node-n1").dblclick()
+        page.get_by_test_id("node-technology").select_option("word.exe")  # the node says which program it acts on
+        page.get_by_test_id("close-detail").click()
         assert page.get_by_test_id("flow-title").input_value() == "New flow"
         page.get_by_test_id("flow-title").fill("Morning report: ¿ventas? 50% / week #1")
         save(page)
@@ -80,7 +82,7 @@ def test_a_flow_takes_any_words_as_its_name_and_its_nodes_keep_their_app_after_a
         page.reload()
         page.locator(".react-flow__node").first.wait_for()
         assert page.get_by_test_id("flow-title").input_value() == "Morning report: ¿ventas? 50% / week #1"
-        assert page.get_by_test_id("app-name").input_value() == "word.exe"
+        assert "Word" in page.locator(".react-flow__node").first.inner_text()
         page.get_by_test_id("open-flows").click()
         entry = page.get_by_test_id("flow-morning-report-ventas-50-week-1")
         entry.filter(has_text="Morning report: ¿ventas? 50% / week #1").wait_for()
@@ -104,7 +106,7 @@ def test_a_flow_saved_before_names_opens_under_its_identifier_with_the_app_of_it
         open_flow(page, "old-one")
 
         assert page.get_by_test_id("flow-title").input_value() == "old-one"
-        assert page.get_by_test_id("app-name").input_value() == "word.exe"
+        assert "Word" in page.get_by_test_id("node-b").inner_text()
         page.get_by_test_id("run-status").filter(has_text=re.compile("^Saved$")).wait_for()
 
 
@@ -113,9 +115,11 @@ def test_an_app_remembered_in_another_spelling_is_the_taught_one_and_is_listed_o
     save_legacy_flow(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu")]), "Morning", "Word")
     with editor(tmp_path) as (page, apps):
         open_flow(page, "old-one")
-        chooser = page.get_by_test_id("app-name")
+        page.get_by_test_id("node-a").dblclick()
+        chooser = page.get_by_test_id("node-technology")
         assert chooser.input_value() == "word.exe"
         assert chooser.locator("option").all_inner_texts() == ["Paint", "Word"]
+        page.get_by_test_id("close-detail").click()
         page.get_by_test_id("run-status").filter(has_text=re.compile("^Saved$")).wait_for()
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-status").filter(has_text="Finished").wait_for()
@@ -140,7 +144,7 @@ def test_a_flow_opened_before_the_steps_arrive_has_nothing_unsaved_once_they_do(
         for route in held:
             route.continue_()
 
-        page.wait_for_function("() => document.querySelector('[data-testid=app-name]').value === 'word.exe'")
+        page.get_by_test_id("node-a").filter(has_text="Word").wait_for()
         assert page.get_by_test_id("run-status").inner_text() == "Saved"
 
 
@@ -199,7 +203,6 @@ def test_a_node_of_a_flow_never_saved_can_be_tested(tmp_path):
     steps_of_two_apps(tmp_path)
     with editor(tmp_path) as (page, apps):
         page.get_by_test_id("palette-open-menu").first.click()
-        page.get_by_test_id("app-name").select_option("paint.exe")
         page.locator('.react-flow__node[data-id="n1"]').click()
         page.get_by_test_id("test-node").click()
         page.get_by_test_id("confirm-test").click()
@@ -281,7 +284,7 @@ def test_long_names_fit_a_narrow_window_and_stay_readable(tmp_path, width, heigh
     with editor(tmp_path) as (page, _):
         page.set_viewport_size({"width": width, "height": height})
         open_flow(page, "long-1")
-        for test_id in ("flow-title", "app-name", "open-flows", "undo", "run"):
+        for test_id in ("flow-title", "open-flows", "undo", "run"):
             fits(page.get_by_test_id(test_id))
         no_sideways_scroll()
         page.get_by_test_id("open-flows").click()

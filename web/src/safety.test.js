@@ -28,6 +28,13 @@ test('a flow with a rejected step says which one will not let it start', () => {
   assert.match(whyNotRunnable({ rejected: [{ id: 'c', step: 'Old' }, { id: 'd', step: 'Odd' }], missing: [] }), /'Old', 'Odd' are rejected/)
 })
 
+test('a missing step names the program of its own node', () => {
+  const missing = [{ id: 'q', step: 'Lonely', technology: 'word.exe' }, { id: 'r', step: 'Other', technology: 'word.exe' }]
+  assert.match(whyNotRunnable({ rejected: [], missing }), /'Lonely', 'Other' has no step for Word yet/)
+  const nodes = [{ id: 'm', data: { node: { step: 'Lonely', technology: 'word.exe' }, meta: { missing: true } } }]
+  assert.equal(safetySummary(nodes).missing[0].technology, 'word.exe')
+})
+
 test('a flow with a recipe hole nobody filled says which hole and cannot start', () => {
   const missing = [{ id: 'b', step: 'send-message-compose', hole: { recipe: 'send-message', hole: 'compose' } }]
   const words = whyNotRunnable({ rejected: [], missing })
