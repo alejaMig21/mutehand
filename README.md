@@ -20,7 +20,7 @@ lesson; where teaching is needed, it shows the message to send in a chat.
 Open Claude Code in this folder (`claude`). The first time it asks you to approve the `workflow-factory` MCP
 server that this folder's `.mcp.json` declares: say yes once. Then ask the agent to study an app. The tutor tools
 are `observe_app`, `mark_app_private`, `set_study_order`, `study_status`, `list_open_doubts`, `answer_doubt`,
-`record_consent`, `list_known_steps`, `create_flow`, `flow_status` and `teach_step` (`teach_lesson` still works as its old name). Each taught step appears in the editor as a node. The agent learns how to teach from `docs/agents/tutor.md`.
+`record_consent`, `list_known_steps`, `list_node_kinds`, `create_flow`, `flow_status` and `teach_step` (`teach_lesson` still works as its old name). Each taught step appears in the editor as a node. The agent learns how to teach from `docs/agents/tutor.md`.
 Recipes (one pattern taught once, reused on another app by teaching only the controls that differ) use `save_recipe`, `list_recipes`,
 `apply_recipe` and `mark_step_known`.
 

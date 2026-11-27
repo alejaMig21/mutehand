@@ -12,7 +12,9 @@ from mcp.server.mcpserver import MCPServer
 
 from workflow_factory import flows, recipes, tutor
 from workflow_factory.agent_desktop import AgentDesktop, AgentDesktopError
+from workflow_factory.dataops import OPS
 from workflow_factory.desktop import Desktop
+from workflow_factory.flow import KINDS
 from workflow_factory.paths import default_user_db
 from workflow_factory.steps import Locator, Sensitivity, list_steps, step_reports
 
@@ -136,6 +138,21 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPSer
         known = [step for step in list_steps(user_db, None, light=True) if step.app == app]
         return [{"name": step.name, "action": step.action, "state": report["state"]}
                 for step, report in zip(known, step_reports(user_db, known), strict=True)]
+
+    @server.tool(name="list_node_kinds")
+    def list_node_kinds() -> dict:
+        """The kinds of box a chore can hold, the data operations a data box can run (with the fields each takes) and the
+        forms a box's field can be written in. Use it before writing nodes for create_flow."""
+        return {
+            "kinds": list(KINDS),
+            "data_operations": {op: {"required": list(required), "optional": list(optional)}
+                                for op, (required, optional, _) in OPS.items()},
+            "field_forms": [
+                {"form": "value", "example": {"value": "any JSON"}},
+                {"form": "ref", "example": {"ref": {"node": "id of another box", "field": "name of its output"}}},
+                {"form": "expression", "example": {"expression": "text kept for later: no run uses it yet"}},
+            ],
+        }
 
     @server.tool(name="create_flow")
     def create_flow(title: str, app: str, nodes: list[dict], edges: list[list[str]] | None = None) -> dict:

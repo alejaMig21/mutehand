@@ -13,7 +13,7 @@ EXPECTED_TOOLS = {
     "observe_app", "mark_app_private", "set_study_order", "study_status", "teach_step", "teach_lesson",  # teach_lesson: old name
     "list_open_doubts", "answer_doubt", "record_consent",
     "save_recipe", "list_recipes", "apply_recipe", "mark_step_known",
-    "list_known_steps", "create_flow", "flow_status",  # building a chore from a description
+    "list_known_steps", "create_flow", "flow_status", "list_node_kinds",  # building a chore from a description
 }
 FORBIDDEN = ("force", "trace", "screenshot", "debug")
 
@@ -183,3 +183,24 @@ def test_a_node_can_take_many_values_and_give_many_back_through_the_tutor_tool(t
 
     saved = load_flow(tmp_path / "user.db", None, made["flow_id"])
     assert saved.nodes[0].inputs == (("first", "str"), ("last", "str"), ("age", "int"))
+
+
+def test_the_tutor_can_ask_which_kinds_of_box_and_data_operations_exist_and_how_a_field_is_written(tmp_path):
+    kinds = payload(ask(server_for(tmp_path, {}), "list_node_kinds"))
+
+    assert {"step", "if", "join", "loop", "trigger", "foreach", "wait", "stop", "data"} <= set(kinds["kinds"])
+    assert kinds["data_operations"]["math"] == {"required": ["a", "b", "operation"], "optional": []}
+    assert kinds["data_operations"]["split"]["optional"] == ["trim"]
+    assert {"value", "ref", "expression"} == {form["form"] for form in kinds["field_forms"]}
+
+
+def test_a_data_box_written_from_the_listed_operations_is_saved_and_a_misspelled_one_is_refused(tmp_path):
+    taught(tmp_path, "open-menu")
+    good = {"id": "d", "kind": "data", "op": "math", "fields": {"a": {"value": 1}, "b": {"value": 2}, "operation": {"value": "add"}}}
+    bad = {"id": "d", "kind": "data", "op": "mathh", "fields": {}}
+    server = server_for(tmp_path, {})
+
+    saved = payload(ask(server, "create_flow", {"title": "Sum", "app": "paint.exe", "nodes": [good], "edges": None}))
+    refused = ask(server, "create_flow", {"title": "Typo", "app": "paint.exe", "nodes": [bad], "edges": None})
+
+    assert saved["flow_id"] == "sum" and refused.is_error

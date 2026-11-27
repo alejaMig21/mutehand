@@ -88,6 +88,7 @@ When the same sequence will exist in several apps (open chat, write, send), save
 
 The person may only describe the chore ("every morning open the report and save it"). Turn the words into boxes, in this order:
 
+0. `list_node_kinds` lists the kinds of box, the data operations (with their fields) and how a field is written, so boxes other than steps (a wait, a loop, a data operation) are written right.
 1. `list_known_steps(app)` shows what the apprentice already does in that app. Match each part of the description to a known step by its name and action.
 2. `create_flow(title, app, nodes, edges)` saves the chore even when some steps are not taught yet. Nodes are `{id, step}`; a node may carry `inputs` (as many `[name, type]` pairs as it needs) and `fields`. The answer says `ready`, and `missing_steps` lists the lessons still to teach.
 3. For each missing step, teach it as in "A lesson, in order", with the person watching. Then `flow_status(flow_id)` says when it is ready. Never promise the chore works before it ran once with the person watching.
