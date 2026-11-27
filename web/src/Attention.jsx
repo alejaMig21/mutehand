@@ -206,7 +206,21 @@ function Setup({ item }) {
   return <Card id={`setup-${item.id}`} title={`${item.title}: missing`} detail={item.why} hint={`To fix: ${item.fix}`} />
 }
 
-const rejectedKey = (item) => `rejected-${item.app}-${item.step}`
+// Told once, after an upgrade starts the person's data again: where the earlier data was kept.
+function Notice({ item, onDismissed }) {
+  const [problem, setProblem] = useState('')
+  const dismiss = () => api(`/api/notices/${encode(item.id)}/dismiss`, { method: 'POST' }).then(onDismissed, (e) => setProblem(e.message))
+  return (
+    <Card id={`notice-${item.id}`} title="A fresh start"
+      detail={`This version starts with no Steps and no Flows. Everything you had before was kept in a copy: ${item.copy}`}
+      hint="Nothing was moved into the new data. Keep that file if you want to look at the old one later.">
+      <button className="primary" data-testid={`attention-notice-dismiss-${item.id}`} onClick={dismiss}>Got it</button>
+      {problem && <p className="stopped-problem" role="alert">{problem}</p>}
+    </Card>
+  )
+}
+
+const rejectedKey =(item) => `rejected-${item.app}-${item.step}`
 
 // The things that need the person, first on Home. Absent when there are none. A rejected action that was just allowed again
 // stays where it was, saying so, until the person dismisses it: the list below does not jump up under the next press.
@@ -241,6 +255,7 @@ export function Attention({ items, tries, hide, tryAgain, onChanged, running }) 
               </Card>
             )
           }
+          if (item.kind === 'notice') return <Notice key={`notice-${item.id}`} item={item} onDismissed={onChanged} />
           if (item.kind === 'relearn') return <Relearn key={`relearn-${item.app}`} item={item} />
           if (item.kind === 'rejected') return <Rejected key={rejectedKey(item)} item={item} onAllowed={allowed(item, at)} />
           if (item.kind === 'setup') return <Setup key={`setup-${item.id}`} item={item} />

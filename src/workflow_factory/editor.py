@@ -15,6 +15,7 @@ from workflow_factory.api import ApiServer
 from workflow_factory.flow import clear_emergency_stop, emergency_stop
 from workflow_factory.hotkey import EmergencyHotkey
 from workflow_factory.paths import default_user_db
+from workflow_factory.upgrade import start_user_db
 
 DEFAULT_WEB_DIR = Path(__file__).resolve().parent / "web"  # built by `npm run build` in web/, shipped inside the package
 
@@ -27,6 +28,7 @@ def main(argv: list[str] | None = None) -> None:
 
     user_db = default_user_db()
     user_db.parent.mkdir(parents=True, exist_ok=True)
+    start_user_db(user_db)
     factory = os.environ.get("WORKFLOW_FACTORY_FACTORY_DB")
     web_dir = Path(os.environ.get("WORKFLOW_FACTORY_WEB_DIR", DEFAULT_WEB_DIR))
 

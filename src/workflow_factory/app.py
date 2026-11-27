@@ -17,6 +17,7 @@ from workflow_factory.editor import DEFAULT_WEB_DIR
 from workflow_factory.flow import clear_emergency_stop, emergency_stop
 from workflow_factory.hotkey import EmergencyHotkey
 from workflow_factory.paths import default_user_db
+from workflow_factory.upgrade import start_user_db
 
 STATE_FILE = "app.json"
 LOG_FILE = "app.log"
@@ -53,6 +54,7 @@ def run(data_dir: Path | None = None, open_browser: Callable[[str], object] = we
         open_browser(running)
         return
 
+    start_user_db(user_db)
     clear_emergency_stop()  # a new session starts with no stop pending
     key = None
     if hotkey:
