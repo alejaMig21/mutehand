@@ -166,7 +166,7 @@ def test_two_flows_with_the_same_name_stay_two_flows_and_can_be_told_apart(tmp_p
         page.get_by_test_id("palette-save-file").click()
         save(page)
         page.get_by_test_id("open-flows").click()
-        page.get_by_test_id("flow-my-flow").wait_for()  # the list is read again after a save
+        page.get_by_test_id("flow-new-chore").wait_for()  # the list is read again after a save
         page.get_by_test_id("new-flow").click()
         assert page.get_by_test_id("flow-title").input_value() == "New chore 2"  # a new flow starts with a free name
 
@@ -203,7 +203,7 @@ def test_a_box_of_a_flow_never_saved_can_be_tested(tmp_path):
         page.get_by_test_id("confirm-test").click()
         page.get_by_test_id("test-result").filter(has_text=re.compile("worked|passed|finished", re.IGNORECASE)).wait_for()
 
-        assert list(flows(tmp_path)) == ["my-flow"] and set(apps) == {"paint.exe"}
+        assert list(flows(tmp_path)) == ["new-chore"] and set(apps) == {"paint.exe"}
 
 
 def stopped_flow(tmp_path, flow_id="m-1", title="Morning sales report"):
