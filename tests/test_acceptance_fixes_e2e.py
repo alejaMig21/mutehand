@@ -217,7 +217,8 @@ def test_a_daily_time_is_shown_in_the_clock_the_person_typed_it_in_and_saved_is_
         saved = page.get_by_test_id("daily-saved-morning")
         saved.wait_for()
         assert "Saved" in saved.inner_text() and "7:05 PM" in saved.inner_text()
-        assert "7:05 PM" in page.get_by_test_id("daily-morning").inner_text()
+        # the row re-reads the schedule after the save, so wait for it instead of reading it at once
+        page.get_by_test_id("daily-morning").filter(has_text="7:05 PM").wait_for()
         assert "19:05" not in row(page, "morning").inner_text()
 
 
