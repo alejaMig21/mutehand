@@ -21,8 +21,8 @@ A teaching session in which the tutor teaches the apprentice steps and recipes a
 _Avoid_: Skill, macro
 
 **Step**:
-One learned action on one control of an app, with its precondition, the action itself and the effect measured when it was taught. A step that writes text or selects keeps no effect, so runs neither trust nor reject it. It is a node of a flow and is reusable.
-_Avoid_: Action, task
+One learned action on one control of an app, with its precondition, the action itself and the effect measured when it was taught. A step that writes text or selects keeps no effect, so runs neither trust nor reject it. It is a node of a flow and is reusable. On screen it is called an **action**.
+_Avoid_: Task
 
 **Basic operation**:
 A generic kind of action the system provides (write text in a field, press a button, read text, wait for a control, paste). A step is a basic operation bound to one app's control.
@@ -100,6 +100,10 @@ _Avoid_: Job, batch
 A graph of nodes, with triggers, branching, conditions, joins and capped loops, that describes a workday.
 _Avoid_: Workflow, pipeline, script
 
+**On-screen words**:
+What the screens say instead of the domain terms: **chore** is a Flow, **box** is a Node, **action** is a Step. The domain terms do not change in code, the API or these definitions.
+_Avoid_: Mixing the two sets in one sentence
+
 **Title**:
 The free text a person calls a flow, shown on screen. The flow's identifier, made from its first title, never changes and is what checkpoints, history and Windows tasks use.
 _Avoid_: Showing the identifier as the name
@@ -153,7 +157,7 @@ _Avoid_: Password field, stored credential
 ### Communication
 
 **Tutor queue**:
-The list of doubts the apprentice leaves for the tutor.
+The list of doubts the apprentice leaves for the tutor. The person sees it as cards that need attention on Home and as the reason under a stopped box, not as a screen of its own.
 _Avoid_: Inbox, ticket list
 
 **Doubt**:
