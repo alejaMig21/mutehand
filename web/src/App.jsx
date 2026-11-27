@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { api, loadAppNames, LOCKED } from './api.js'
+import Apps from './Apps.jsx'
 import { useTryAgain } from './Attention.jsx'
 import { getAppNames, onAppNames } from './catalog.js'
 import Checks from './Checks.jsx'
@@ -14,6 +15,7 @@ import { useRuns } from './useRuns.js'
 
 const SCREENS = [
   ['home', 'Home', null],
+  ['apps', 'Apps', Apps],
   ['editor', 'Flow editor', null],
   ['library', 'Steps', Library],
   ['queue', 'Tutor queue', Queue],

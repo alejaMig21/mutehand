@@ -64,6 +64,9 @@ COLUMNS = (
     " effect, origin, status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref, derived, template, drag_to"
 )
 PLACEHOLDERS = ", ".join("?" * (COLUMNS.count(",") + 1))
+# what a listing that only names and counts steps reads: everything but the pixels and the frame, which are the heavy part
+LIGHT_COLUMNS = ", ".join("NULL" if column.strip() in ("frame", "mask", "capture", "derived", "template", "drag_to") else column.strip()
+                          for column in COLUMNS.split(","))
 # Below REJECTED_BELOW a step is rejected; everything else that is not trusted is suspect.
 TRUSTED_AT, REJECTED_BELOW, OWN_SUCCESSES_TO_TRUST = 0.80, 0.30, 2
 
@@ -448,18 +451,20 @@ def restore_step(user_db: Path, app: str, name: str) -> None:
         )
 
 
-def list_steps(user_db: Path, factory_db: Path | None) -> list[Step]:
-    """Every step the apprentice could use: the user's, plus factory ones they do not shadow."""
+def list_steps(user_db: Path, factory_db: Path | None, light: bool = False) -> list[Step]:
+    """Every step the apprentice could use: the user's, plus factory ones they do not shadow. `light` leaves out the pixels
+    and the frame (the steps are for naming and counting, not for replaying), which keeps a long list quick."""
+    columns = LIGHT_COLUMNS if light else COLUMNS
     found: dict[tuple[str, str], Step] = {}
     if factory_db is not None and factory_db.exists():
         with closing(sqlite3.connect(f"{factory_db.resolve().as_uri()}?mode=ro", uri=True)) as db:
             table = readable_table(db, "steps")
-            for row in db.execute(f"SELECT {COLUMNS} FROM {table}") if table else []:
+            for row in db.execute(f"SELECT {columns} FROM {table}") if table else []:
                 step = _row_to_step(row)
                 found[(step.app, step.name)] = step
     with closing(sqlite3.connect(user_db)) as db, db:
         _prepare(db, SCHEMA)
-        for row in db.execute(f"SELECT {COLUMNS} FROM steps"):
+        for row in db.execute(f"SELECT {columns} FROM steps"):
             step = _row_to_step(row)
             found[(step.app, step.name)] = step  # the user's step shadows the factory's
     return sorted(found.values(), key=lambda step: (step.app, step.name))

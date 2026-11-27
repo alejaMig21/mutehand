@@ -22,6 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from workflow_factory import daily, schedule
+from workflow_factory.apps import app_detail, app_rows
 from workflow_factory.attention import attention_items, rejected_by_person
 from workflow_factory.checks import mark_seen, run_checks, seen_before
 from workflow_factory.consent import consents, covers, effective_sensitivity, revoke_consent
@@ -518,6 +519,12 @@ class ApiServer:
                                             zip(steps, _safety(api.user_db, steps), strict=True)])
                 if method == "GET" and path == "/api/attention":
                     return self._send(200, attention_items(api.user_db, api.factory_db, api.user_db.parent))
+                if method == "GET" and path == "/api/apps":
+                    return self._send(200, app_rows(api.user_db, api.factory_db, (self.query.get("q") or [""])[0]))
+                app_match = re.fullmatch(r"/api/apps/([^/]+)", path)
+                if app_match and method == "GET":
+                    app = app_detail(api.user_db, api.factory_db, urllib.parse.unquote(app_match[1]))
+                    return self._send(200, app) if app else self._send(404, {"error": "no such app"})
                 if method == "GET" and path == "/api/app-names":
                     return self._send(200, app_names(api.user_db))
                 if method == "GET" and path == "/api/checks":

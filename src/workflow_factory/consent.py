@@ -79,8 +79,12 @@ def covers(granted: list[Consent], step: Step) -> bool:
     return any(c.app == scope.app and c.control in (scope.control, "*") and c.action == scope.action for c in granted)
 
 
+def needs_consent(user_db: Path, step: Step) -> bool:
+    return effective_sensitivity(step) is not None or _reads_private_app(user_db, step)
+
+
 def is_permitted(user_db: Path, step: Step) -> bool:
     """No consent record means blocked. Sensitivity is decided here, not trusted from the label."""
-    if effective_sensitivity(step) is None and not _reads_private_app(user_db, step):
+    if not needs_consent(user_db, step):
         return True
     return covers(consents(user_db), step)

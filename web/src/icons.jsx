@@ -33,6 +33,8 @@ const PATHS = {
   undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3',
   skip: 'M5 6l7 6-7 6zM13 6l7 6-7 6z',
   retry: 'M20 12a8 8 0 11-2.6-5.9M20 4v5h-5',
+  chevron: 'M9 6l6 6-6 6',
+  chevronup: 'M6 15l6-6 6 6',
 }
 
 export function Icon({ name, size = 18 }) {
