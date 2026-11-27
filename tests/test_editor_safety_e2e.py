@@ -528,3 +528,12 @@ def test_a_test_of_one_node_shows_the_servers_words_untouched_and_says_when_it_c
     page.get_by_test_id("test-node").click()
     page.get_by_test_id("confirm-test").click()
     page.get_by_test_id("test-result").filter(has_text="still trying").wait_for()
+
+
+def test_the_run_data_box_says_in_plain_words_that_empty_braces_mean_no_values(app):
+    page, _, _ = app
+    open_flow(page, "morning")
+    page.get_by_test_id("run-data").click()
+
+    hint = page.get_by_test_id("context-hint").inner_text()
+    assert "nothing" in hint and "{}" in hint and "JSON" not in hint

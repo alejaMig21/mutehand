@@ -688,7 +688,8 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
           </button>
           {menu === 'data' && (
             <div className="menu wide">
-              <label htmlFor="run-context">Starting values, optional (JSON). Only nodes that read “Run data” use them.</label>
+              <label htmlFor="run-context">Starting values for this run, optional. Only boxes that read “Run data” use them.</label>
+              <small data-testid="context-hint">{'{}'} means nothing: leave it so if the chore needs no starting values.</small>
               <textarea id="run-context" data-testid="context" value={context} rows={4} onChange={(e) => setContext(e.target.value)} />
             </div>
           )}
