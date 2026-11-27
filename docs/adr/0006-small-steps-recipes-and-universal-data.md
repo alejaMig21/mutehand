@@ -7,8 +7,8 @@ status: accepted
 The product is a mini n8n whose building blocks are taught by an agent. We decided that a **step** (one action on one
 control of an app) is the node, kept small so steps can be reused; that a **lesson** is the teaching session that leaves
 steps and **recipes** (ordered patterns of steps with holes for each app's controls); and that every node takes in and
-gives out one format, **Data**. The editor only lists what was already taught and never starts a lesson: teaching
-happens only through the tutor tools, in a chat with an agent. The person's own example: once the apprentice knows how
+gives out one format, **Data**. Nothing in the editor starts a lesson: it may show words for the person to send in a chat (and a button that copies
+them), but teaching happens only through the tutor tools, in that chat. The person's own example: once the apprentice knows how
 to send a message in Telegram, a recipe lets the agent teach only the controls that differ for WhatsApp.
 
 ## Considered options

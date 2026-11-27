@@ -338,3 +338,12 @@ input[type="number"] { width: 70px; }
 .daily-button { min-height: 44px; border-radius: 12px; font-weight: 600; }
 .notice .daily-form { flex: 1 1 100%; }
 .start-strip { padding: 6px 16px; background: var(--sunk); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+
+/* Home on the first day: the message to send, and the three stages */
+.home:has(.first-day) h1 { font-size: 28px; line-height: 1.25; }
+.first-day { display: flex; flex-direction: column; gap: 24px; }
+.first-day-teach { padding: 20px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; gap: 12px; }
+.first-day-teach h2 { font-size: 18px; }
+.stages { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 16px; }
+.stages li { display: flex; flex-direction: column; gap: 4px; padding-top: 12px; border-top: 2px solid var(--line); overflow-wrap: anywhere; }
+.empty-state .primary { margin-top: 16px; }
