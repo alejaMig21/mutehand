@@ -1,6 +1,7 @@
 import json
 import time
 
+import pytest
 from test_api import call, make_server
 
 from workflow_factory import (
@@ -8,11 +9,14 @@ from workflow_factory import (
     Node,
     Sensitivity,
     grant_consent,
+    list_doubts,
     list_runs,
     run_flow,
     save_flow,
     save_step,
 )
+from workflow_factory.queue import answer_doubt, dismiss_doubt
+from workflow_factory.steps import list_steps, step_report
 
 from fake_desktop import FakeDesktop, button, step
 
@@ -26,23 +30,22 @@ def run_and_wait(server, flow_id, context=None):
         time.sleep(0.05)
 
 
-# --- step library ----------------------------------------------------------------------------
+# --- step states: the numbers behind them, and Reject / Restore -----------------------------------
 
-def test_the_library_shows_origin_state_and_the_numbers_behind_the_confidence(tmp_path):
+def states(server, app="paint.exe"):
+    return {action["name"]: action["state"] for action in call(server, f"/api/apps/{app}")[1]["actions"]}
+
+
+def test_a_step_report_shows_the_numbers_behind_the_confidence(tmp_path):
     save_step(tmp_path / "factory.db", step("open-menu", "Menu", origin="factory", factory_successes=50))
     save_step(tmp_path / "user.db", step("save-file", "Save"))
-    server = make_server(tmp_path)
-    try:
-        status, library, _ = call(server, "/api/library")
-    finally:
-        server.stop()
+    steps = {s.name: s for s in list_steps(tmp_path / "user.db", tmp_path / "factory.db")}
 
-    by_name = {item["name"]: item for item in library}
-    assert status == 200
-    assert by_name["open-menu"]["origin"] == "factory" and by_name["open-menu"]["state"] == "suspect"
-    assert (by_name["open-menu"]["successes"], by_name["open-menu"]["failures"]) == (50, 0)
-    assert by_name["open-menu"]["confidence"] == 0.98  # 51 / 52: high, but not trusted until it has own successes
-    assert by_name["save-file"]["origin"] == "local" and by_name["save-file"]["confidence"] == 0.5
+    menu, save = (step_report(tmp_path / "user.db", steps[name]) for name in ("open-menu", "save-file"))
+
+    assert menu["state"] == "suspect" and (menu["successes"], menu["failures"]) == (50, 0)
+    assert menu["confidence"] == 0.98  # 51 / 52: high, but not trusted until it has own successes
+    assert steps["open-menu"].origin == "factory" and steps["save-file"].origin == "local" and save["confidence"] == 0.5
 
 
 def test_a_person_can_reject_a_step_and_restore_it_even_a_factory_one(tmp_path):
@@ -50,9 +53,9 @@ def test_a_person_can_reject_a_step_and_restore_it_even_a_factory_one(tmp_path):
     server = make_server(tmp_path)
     try:
         rejected = call(server, "/api/steps/paint.exe/open-menu/reject", "POST", {})
-        after_reject = {i["name"]: i["state"] for i in call(server, "/api/library")[1]}
+        after_reject = states(server)
         restored = call(server, "/api/steps/paint.exe/open-menu/restore", "POST", {})
-        after_restore = {i["name"]: i["state"] for i in call(server, "/api/library")[1]}
+        after_restore = states(server)
     finally:
         server.stop()
 
@@ -66,7 +69,7 @@ def test_a_step_whose_name_has_spaces_can_be_rejected_and_restored_as_the_browse
     try:  # the browser percent-encodes the path; the playbook names steps "Verb object", with spaces
         rejected = call(server, "/api/steps/paint.exe/Select%20cell%20A1/reject", "POST", {})
         restored = call(server, "/api/steps/paint.exe/Select%20cell%20A1/restore", "POST", {})
-        state = {i["name"]: i["state"] for i in call(server, "/api/library")[1]}
+        state = states(server)
     finally:
         server.stop()
 
@@ -76,42 +79,44 @@ def test_a_step_whose_name_has_spaces_can_be_rejected_and_restored_as_the_browse
 
 # --- consents: revoke only ---------------------------------------------------------------------
 
-def test_the_consents_screen_lists_scopes_and_can_revoke_but_never_grant(tmp_path):
+def test_a_consent_can_be_revoked_over_the_api_but_never_granted(tmp_path):
     grant_consent(tmp_path / "user.db", app="paint.exe", control="Send", action="click")
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
     server = make_server(tmp_path)
     scope = {"app": "paint.exe", "control": "Send", "action": "click"}
     try:
-        listed = call(server, "/api/consents")
+        listed = call(server, "/api/apps/paint.exe")[1]["permissions"]
         granted = call(server, "/api/consents", "POST", scope)  # there is no grant route
         revoked = call(server, "/api/consents", "DELETE", scope)
-        after = call(server, "/api/consents")
+        after = call(server, "/api/apps/paint.exe")[1]["permissions"]
     finally:
         server.stop()
 
-    assert listed[1] == [scope]
+    assert [{k: p[k] for k in scope} for p in listed] == [scope]
     assert granted[0] == 404
-    assert revoked[0] == 200 and after[1] == []
+    assert revoked[0] == 200 and after == []
 
 
-# --- tutor queue ---------------------------------------------------------------------------------
+# --- doubts: left by runs, answered by the tutor, listed for the editor -----------------------------
 
-def test_the_queue_screen_lists_open_doubts_and_records_a_human_answer(tmp_path):
+def test_open_doubts_are_listed_with_their_reason_and_an_answer_closes_one_with_its_note(tmp_path):
     save_step(tmp_path / "user.db", step("open-menu", "Missing"))
     run_flow(Flow(id="morning", nodes=[Node("a", "open-menu")]), desktop=FakeDesktop(controls=[button("Other")]),
              user_db=tmp_path / "user.db")
     server = make_server(tmp_path)
     try:
         _, open_doubts, _ = call(server, "/api/doubts?status=open")
-        answered = call(server, f"/api/doubts/{open_doubts[0]['id']}/answer", "POST", {})
+        answer_doubt(tmp_path / "user.db", open_doubts[0]["id"], "the button is now called Main menu")
         after = call(server, "/api/doubts?status=open")[1]
         everything = call(server, "/api/doubts")[1]
-        unknown = call(server, "/api/doubts/999/answer", "POST", {})
     finally:
         server.stop()
 
     assert open_doubts[0]["reason"] == "control_not_found" and open_doubts[0]["capture"] == {"button": 1}
-    assert answered[0] == 200 and after == [] and everything[0]["status"] == "answered"
-    assert unknown[0] == 400
+    assert after == [] and everything[0]["status"] == "answered"
+    assert everything[0]["note"] == "the button is now called Main menu"
+    with pytest.raises(ValueError):
+        answer_doubt(tmp_path / "user.db", 999)
 
 
 # --- run history ---------------------------------------------------------------------------------
@@ -151,7 +156,8 @@ def test_the_engine_records_one_history_row_per_executed_run(tmp_path):
     (run,) = list_runs(tmp_path / "user.db")
 
     assert run["status"] == "finished" and run["started_at"] <= run["finished_at"]
-    assert run["nodes"] == [{"node_id": "a", "status": "done", "reason": None, "effect": "no_change", "step": "open-menu"}]
+    assert run["nodes"] == [{"node_id": "a", "status": "done", "reason": None, "effect": "no_change",
+                              "step": "open-menu", "kind": "step", "op": None}]
 
 
 def test_rejecting_an_unknown_step_is_a_404(tmp_path):
@@ -164,18 +170,14 @@ def test_rejecting_an_unknown_step_is_a_404(tmp_path):
     assert status == 404 and "no such step" in body["error"]
 
 
-def test_a_doubt_can_be_dismissed_from_the_queue_screen(tmp_path):
+def test_a_dismissed_doubt_abandons_the_stopped_run_and_is_not_open_any_more(tmp_path):
     save_step(tmp_path / "user.db", step("open-menu", "Missing"))
     run_flow(Flow(id="f", nodes=[Node("a", "open-menu")]), desktop=FakeDesktop(controls=[]),
              user_db=tmp_path / "user.db")
-    server = make_server(tmp_path)
-    try:
-        dismissed = call(server, "/api/doubts/1/dismiss", "POST", {})
-        statuses = [d["status"] for d in call(server, "/api/doubts")[1]]
-    finally:
-        server.stop()
 
-    assert dismissed[0] == 200 and statuses == ["dismissed"]
+    dismiss_doubt(tmp_path / "user.db", 1)
+
+    assert [d.status for d in list_doubts(tmp_path / "user.db")] == ["dismissed"]
 
 
 def test_revoking_with_an_incomplete_body_is_a_400_not_a_crash(tmp_path):
@@ -188,7 +190,7 @@ def test_revoking_with_an_incomplete_body_is_a_400_not_a_crash(tmp_path):
     assert status == 400
 
 
-def test_the_library_shows_to_revalidate_for_every_step_once_a_run_saw_a_newer_app_version(tmp_path):
+def test_every_step_of_an_app_needs_a_recheck_once_a_run_saw_a_newer_app_version(tmp_path):
     save_step(tmp_path / "factory.db", step("open-menu", "Menu", origin="factory", version="1.0"))
     save_step(tmp_path / "user.db", step("save-file", "Save", version="1.0"))
     save_step(tmp_path / "user.db", step("other", "Other", version="2.0"))
@@ -196,30 +198,14 @@ def test_the_library_shows_to_revalidate_for_every_step_once_a_run_saw_a_newer_a
              desktop=FakeDesktop(controls=[button("Other")], version="2.0"), user_db=tmp_path / "user.db")
     server = make_server(tmp_path)
     try:
-        library = {item["name"]: item["state"] for item in call(server, "/api/library")[1]}
+        library = states(server)
     finally:
         server.stop()
 
     assert library == {"open-menu": "to_revalidate", "save-file": "to_revalidate", "other": "suspect"}
 
 
-def test_a_human_answer_keeps_the_note_the_person_wrote(tmp_path):
-    save_step(tmp_path / "user.db", step("open-menu", "Missing"))
-    run_flow(Flow(id="f", nodes=[Node("a", "open-menu")]), desktop=FakeDesktop(controls=[]),
-             user_db=tmp_path / "user.db")
-    server = make_server(tmp_path)
-    try:
-        call(server, "/api/doubts/1/answer", "POST", {"note": "the button is now called Main menu"})
-        doubts = call(server, "/api/doubts?status=answered")[1]
-    finally:
-        server.stop()
-
-    assert doubts[0]["note"] == "the button is now called Main menu"
-
-
 def test_an_unexpected_failure_still_leaves_a_run_in_the_history_as_an_error(tmp_path):
-    import pytest
-
     save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
 
     class Broken(FakeDesktop):

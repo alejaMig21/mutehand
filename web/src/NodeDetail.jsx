@@ -1,25 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
-import { api, encode } from './api.js'
+import { useEffect, useRef } from 'react'
 import { fieldsOf, showValue } from './bindings.js'
 import { appLabel, chipFor, systemEntryFor, titleOf } from './catalog.js'
 import FieldEditor from './FieldEditor.jsx'
 import { Icon } from './icons.jsx'
-import { runWords } from './words.js'
 
 const INPUT_TYPES = ['str', 'int', 'float', 'bool']
 const POLICIES = [['stop', 'Stop and ask the tutor'], ['retry', 'Retry'], ['continue', 'Carry on without it']]
 
 // The window over the dimmed canvas: what went in (Data in), the settings, what came out (Data out).
-export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, showValues, onShowValues, onChange, onClose, onDelete, flowId, appName, context, ensureSaved, onTested }) {
+export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, showValues, onShowValues, onChange, onClose }) {
   const system = node.kind && node.kind !== 'step'
   const entry = system && systemEntryFor(node)
   const chip = !system && meta?.app ? chipFor(meta.app) : null
   const title = titleOf(node)
   const subtitle = system ? entry?.hint ?? '' : meta?.app ? appLabel(meta.app) : ''
-  const testable = node.kind === 'data' || !node.kind || node.kind === 'step'
-  const physical = (!node.kind || node.kind === 'step') && meta?.action !== 'read_value'
-  const [asking, setAsking] = useState(false)
-  const [test, setTest] = useState({ state: 'idle' })
   const dialog = useRef(null)
 
   useEffect(() => { dialog.current?.focus() }, [])
@@ -36,31 +30,6 @@ export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, sh
     const at = document.activeElement
     if (event.shiftKey && (at === first || at === dialog.current)) { event.preventDefault(); last.focus() }
     else if (!event.shiftKey && at === last) { event.preventDefault(); first.focus() }
-  }
-
-  async function runTest() {
-    setAsking(false)
-    setTest({ state: 'running' })
-    try {
-      const values = JSON.parse(context || '{}')
-      await ensureSaved()
-      const { run_id } = await api(`/api/flows/${encode(flowId)}/nodes/${node.id}/test`, { method: 'POST', body: { app: appName, context: values } })
-      for (;;) {
-        const view = await api(`/api/runs/${run_id}`).catch((e) => {
-          if (e.status) throw e
-          return { status: 'running', lost: true } // a lost request: ask again
-        })
-        if (view.status === 'running') setTest({ state: 'running', lost: view.lost })
-        if (view.status !== 'running') {
-          setTest({ state: view.status === 'finished' ? 'ok' : 'failed', status: view.status })
-          break
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250))
-      }
-      onTested()
-    } catch (e) {
-      setTest({ state: 'failed', error: e.message })
-    }
   }
 
   const fields = fieldsOf(node, meta)
@@ -144,28 +113,7 @@ export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, sh
             <input type="checkbox" data-testid="show-values" checked={showValues} onChange={(e) => onShowValues(e.target.checked)} />
             Show values
           </label>
-          <span className="test-result" role="status" data-testid="test-result">
-            {test.state === 'running' && (test.lost ? 'Testing… the editor cannot reach the server, still trying.' : 'Testing…')}
-            {test.state === 'ok' && 'Test finished'}
-            {test.state === 'failed' && `Test did not finish: ${test.error ?? runWords(test.status)}`}
-          </span>
-          <button className="ghost small quiet-danger" data-testid="detail-delete" onClick={onDelete}><Icon name="trash" size={15} /> Delete node</button>
-          <button className="primary small" data-testid="test-node" disabled={!testable || test.state === 'running'}
-            title={testable ? '' : 'This kind of node is tested by running the flow'}
-            onClick={() => (physical ? setAsking(true) : runTest())}>
-            <Icon name="flask" size={15} /> Test this node
-          </button>
         </footer>
-
-        {asking && (
-          <div className="warning" role="alertdialog" aria-label="Before the test" aria-describedby="test-warning-words" data-testid="test-warning">
-            <p id="test-warning-words"><b>This will use your mouse and keyboard</b> on {meta?.app ? appLabel(meta.app) : 'the app'}. Keep your hands off them until the test ends.</p>
-            <div className="row">
-              <button className="ghost small" onClick={() => { setAsking(false); dialog.current?.focus() }}>Cancel</button>
-              <button className="primary small" data-testid="confirm-test" autoFocus onClick={runTest}>Start the test</button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )
@@ -173,7 +121,7 @@ export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, sh
 
 function DataRows({ rows, showValues }) {
   const entries = Object.entries(rows ?? {})
-  if (entries.length === 0) return <p className="empty">No data yet. Run the flow or test this node.</p>
+  if (entries.length === 0) return <p className="empty">No data yet. Run the chore or test this box.</p>
   return (
     <dl className="data-rows">
       {entries.map(([name, value]) => (

@@ -1,7 +1,7 @@
 # Tutor playbook
 
 You are the tutor: an agent in a chat that teaches the apprentice (the engine that replays steps) what the person's apps
-can do. This file is the only place that says how to teach. The editor never starts a lesson; lessons start here.
+can do. This file is the only place that says how to teach. Nothing in the editor starts a lesson (it only shows text to send in a chat); lessons start here.
 Vocabulary: `GLOSSARY.md` (Step, Lesson, Recipe, Hole, Doubt, Consent). Safety rules: `docs/adr/0002-*.md`.
 
 ## Setup
@@ -31,7 +31,7 @@ There is no `force`, no screenshot and no way to read a secret: do not look for 
    - `secure_field_requires_type_secret`: a password box takes `action="type_secret"` with a `secret_ref` the person gave you (a name,
      never the secret itself).
 6. **Check before moving on** (below). Then the next step.
-7. **Close**: tell the person the steps now exist and show up as nodes in the editor (`uv run workflow-factory`), grouped by app.
+7. **Close**: tell the person the steps now exist and show up as nodes in the editor (`uv run mutehand`), grouped by app.
 
 ## Names, inputs and outputs
 
@@ -84,12 +84,24 @@ When the same sequence will exist in several apps (open chat, write, send), save
    are not repeated.
 4. A sensitive hole returns `consent_required`: ask, record, apply again.
 
+## Build a chore from what the person describes
+
+The person may only describe the chore ("every morning open the report and save it"). Turn the words into boxes, in this order:
+
+0. `list_node_kinds` lists the kinds of box, the data operations (with their fields) and how a field is written, so boxes other than steps (a wait, a loop, a data operation) are written right.
+1. `list_known_steps(app)` shows what the apprentice already does in that app. Match each part of the description to a known step by its name and action.
+2. `create_flow(title, app, nodes, edges)` saves the chore even when some steps are not taught yet. Nodes are `{id, step}`; a node may carry `inputs` (as many `[name, type]` pairs as it needs) and `fields`. The answer says `ready`, and `missing_steps` lists the lessons still to teach.
+3. For each missing step, teach it as in "A lesson, in order", with the person watching. Then `flow_status(flow_id)` says when it is ready. Never promise the chore works before it ran once with the person watching.
+
+A chore is not a new kind of box: steps are the boxes, kept small (ADR 0006). If the description needs something no step or basic operation can do, say so and offer the nearest steps.
+
 ## Doubts
 
-The apprentice leaves a doubt when a step fails during a run. `list_open_doubts` shows them (flow, node, step, reason, and roles-and-counts of
-the screen). Answer one by teaching or fixing its step with `answer_doubt` (the same fields as `teach_step`); the doubt closes only
-once the step is saved. Do not dismiss doubts for the person: the editor shows them as a count and only you and the Tutor queue screen can
-answer.
+The apprentice leaves a doubt when a step fails during a run. `list_open_doubts` shows them (flow, node, step, reason, detail, and
+roles-and-counts of the screen). `reason` is the broad kind; `detail` is the exact cause. With `detail` `effect_mismatch`
+the action already happened and changed the screen differently than taught: tell the person before anything runs it again. Answer one by teaching or fixing its step with `answer_doubt` (the same fields as `teach_step`); the doubt closes only
+once the step is saved. A doubt may carry `note`: words the person wrote when asking for help, so read them. A person can also close a doubt by trying the flow again; you will not see it open any more. Do not dismiss doubts for the person: the editor lists a stopped chore on Home with a way to try it again, and only you can
+answer a doubt.
 
 ## What not to do
 

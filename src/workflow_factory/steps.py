@@ -5,6 +5,7 @@ import io
 import json
 import math
 import sqlite3
+from collections import Counter
 from contextlib import closing
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
@@ -12,8 +13,8 @@ from pathlib import Path
 
 import numpy as np
 
-from workflow_factory.desktop import FRAME_FIELDS, Frame
-from workflow_factory.legacy import migrate_names, readable_table
+from workflow_factory.desktop import FRAME_FIELDS, AppKey, Frame, plain_app
+from workflow_factory.legacy import add_text_column, migrate_names, readable_table
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS steps (
@@ -54,13 +55,18 @@ CREATE TABLE IF NOT EXISTS step_state (
     PRIMARY KEY (app, name)
 )
 """
-# the newest version of each app a run has seen: lets the library show to_revalidate before any lookup
+# the newest version of each app a run has seen: lets the Apps screen show to_revalidate before any lookup
 SEEN_SCHEMA = "CREATE TABLE IF NOT EXISTS app_seen (app TEXT PRIMARY KEY, version TEXT NOT NULL)"
+# the product name each app's executable declared when it was last seen: what screens call it once it is closed
+NAMES_SCHEMA = "CREATE TABLE IF NOT EXISTS app_names (app TEXT PRIMARY KEY, name TEXT NOT NULL)"
 COLUMNS = (
     "app, version, name, precondition, action, role, control_name, automation_id,"
     " effect, origin, status, factory_successes, factory_failures, frame, mask, capture, sensitive, secret_ref, derived, template, drag_to"
 )
 PLACEHOLDERS = ", ".join("?" * (COLUMNS.count(",") + 1))
+# what a listing that only names and counts steps reads: everything but the pixels and the frame, which are the heavy part
+LIGHT_COLUMNS = ", ".join("NULL" if column.strip() in ("frame", "mask", "capture", "derived", "template", "drag_to") else column.strip()
+                          for column in COLUMNS.split(","))
 # Below REJECTED_BELOW a step is rejected; everything else that is not trusted is suspect.
 TRUSTED_AT, REJECTED_BELOW, OWN_SUCCESSES_TO_TRUST = 0.80, 0.30, 2
 
@@ -286,8 +292,8 @@ def _prepare(db: sqlite3.Connection, *schemas: str) -> None:
     migrate_names(db)
     for schema in schemas:
         db.execute(schema)
-    if STATE_SCHEMA in schemas and "why" not in {row[1] for row in db.execute("PRAGMA table_info(step_state)")}:
-        db.execute("ALTER TABLE step_state ADD COLUMN why TEXT")
+    if STATE_SCHEMA in schemas:
+        add_text_column(db, "step_state", "why")
 
 
 def save_step(db_path: Path, step: Step) -> None:
@@ -338,6 +344,34 @@ def revalidate_changed_versions(user_db: Path, app: str, current_version: str) -
             "UPDATE steps SET status = ? WHERE app = ? AND version != ? AND status != ?",
             (str(Status.TO_REVALIDATE), app, current_version, str(Status.REJECTED)),
         )
+
+
+def seen_versions(user_db: Path) -> dict[str, str]:
+    """The newest version of each app that a run has met."""
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute(SEEN_SCHEMA)
+        return dict(db.execute("SELECT app, version FROM app_seen"))
+
+
+def record_app_name(user_db: Path, key: AppKey) -> None:
+    """Call whenever an app is seen: keeps the name it declares, under the plain name of the app."""
+    name = key.name.strip()
+    if name.lower().endswith(".exe"):  # no screen shows an extension, whoever wrote it
+        name = name[:-4]
+    if name:
+        with closing(sqlite3.connect(user_db)) as db, db:
+            db.execute(NAMES_SCHEMA)
+            db.execute("INSERT OR REPLACE INTO app_names (app, name) VALUES (?, ?)", (plain_app(key.process), name))
+
+
+def app_names(user_db: Path) -> dict[str, str]:
+    """Plain app name -> what to call it, for every app seen that declares a product name. Apps that declare the same
+    one (parts of one suite) carry their file name too, so the person can tell them apart."""
+    with closing(sqlite3.connect(user_db)) as db, db:
+        db.execute(NAMES_SCHEMA)
+        names = dict(db.execute("SELECT app, name FROM app_names"))
+    shared = Counter(name.casefold() for name in names.values())
+    return {app: f"{name} ({app.capitalize()})" if shared[name.casefold()] > 1 else name for app, name in names.items()}
 
 
 def confidence(successes: int, failures: int) -> float:
@@ -417,25 +451,27 @@ def restore_step(user_db: Path, app: str, name: str) -> None:
         )
 
 
-def list_steps(user_db: Path, factory_db: Path | None) -> list[Step]:
-    """Every step the apprentice could use: the user's, plus factory ones they do not shadow."""
+def list_steps(user_db: Path, factory_db: Path | None, light: bool = False) -> list[Step]:
+    """Every step the apprentice could use: the user's, plus factory ones they do not shadow. `light` leaves out the pixels
+    and the frame (the steps are for naming and counting, not for replaying), which keeps a long list quick."""
+    columns = LIGHT_COLUMNS if light else COLUMNS
     found: dict[tuple[str, str], Step] = {}
     if factory_db is not None and factory_db.exists():
         with closing(sqlite3.connect(f"{factory_db.resolve().as_uri()}?mode=ro", uri=True)) as db:
             table = readable_table(db, "steps")
-            for row in db.execute(f"SELECT {COLUMNS} FROM {table}") if table else []:
+            for row in db.execute(f"SELECT {columns} FROM {table}") if table else []:
                 step = _row_to_step(row)
                 found[(step.app, step.name)] = step
     with closing(sqlite3.connect(user_db)) as db, db:
         _prepare(db, SCHEMA)
-        for row in db.execute(f"SELECT {COLUMNS} FROM steps"):
+        for row in db.execute(f"SELECT {columns} FROM steps"):
             step = _row_to_step(row)
             found[(step.app, step.name)] = step  # the user's step shadows the factory's
     return sorted(found.values(), key=lambda step: (step.app, step.name))
 
 
 def step_reports(user_db: Path, steps: list[Step]) -> list[dict]:
-    """The numbers behind each step's state, for the library screen. One read, however many steps."""
+    """The numbers behind each step's state, for an app's actions. One read, however many steps."""
     with closing(sqlite3.connect(user_db)) as db, db:
         _prepare(db, STATE_SCHEMA)
         db.execute(SEEN_SCHEMA)

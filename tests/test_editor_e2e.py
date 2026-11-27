@@ -1,6 +1,6 @@
 """The built editor in a headless browser, against the real local API. Opt-in: `pytest -m web`.
 
-Needs web/dist (cd web && npm install && npm run build). The browser is this test's own headless
+Needs src/workflow_factory/web (cd web && npm install && npm run build). The browser is this test's own headless
 instance: it never opens a window or touches the person's mouse and keyboard.
 """
 
@@ -21,11 +21,7 @@ pytestmark = pytest.mark.web
 SAVED = re.compile("^Saved$")  # "Unsaved changes" holds the word too: match the whole badge
 
 
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    """Every screen test starts as a later run, so the editor is what shows; the first-run test turns this off."""
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
-DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
+DIST = Path(__file__).resolve().parent.parent / "src" / "workflow_factory" / "web"
 HEADLESS_SHELL = glob.glob(os.path.expanduser(
     "~/AppData/Local/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell.exe"))
 
@@ -33,7 +29,7 @@ HEADLESS_SHELL = glob.glob(os.path.expanduser(
 @pytest.fixture
 def editor(tmp_path):
     if not (DIST / "index.html").exists():
-        pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
+        pytest.fail("src/workflow_factory/web is missing: run `npm install && npm run build` in web/")
     save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
     save_step(tmp_path / "user.db", step("save-file", "Beta"))
     save_step(tmp_path / "factory.db", step("factory-only", "Gamma", origin="factory"))
@@ -59,10 +55,8 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
 
     server, tmp_path = editor
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
-        page = browser.new_page()
-        page.goto(f"{server.url}/#token=e2e-token")
+        browser, page = open_page(playwright, server)
+        page.get_by_test_id("flow-title").fill("e2e-flow")  # a chore is kept as soon as it has a box, under its name then
 
         # palette: steps from the user and factory layers
         for name in ("open-menu", "save-file", "factory-only"):
@@ -79,8 +73,6 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
         page.get_by_test_id("open-detail").click()
         page.get_by_test_id("add-input").click()
         page.get_by_test_id("close-detail").click()
-        page.get_by_test_id("flow-id").fill("e2e-flow")
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
 
         saved = load_flow(tmp_path / "user.db", None, "e2e-flow")
@@ -89,7 +81,7 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
         assert saved.nodes[1].inputs == (("value", "str"),)
 
         # run it with the typed value and watch the per-node status
-        page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run-data").click()
         page.get_by_test_id("context").fill(json.dumps({"value": "hello"}))
         page.get_by_test_id("run").click()
@@ -122,14 +114,10 @@ def test_a_loaded_flow_keeps_unique_node_ids_and_drops_the_previous_run_colours(
     save_flow(tmp_path / "user.db", Flow(id="gappy", nodes=[Node("n1", "open-menu"), Node("n3", "save-file")],
                                          edges=[]))
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
-        page = browser.new_page()
-        page.goto(f"{server.url}/#token=e2e-token")
+        browser, page = open_page(playwright, server)
         page.get_by_test_id("palette-open-menu").click()  # n1 on a fresh canvas
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
-        page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
         assert page.locator(".react-flow__node.status-done").count() == 1
@@ -166,10 +154,7 @@ def test_a_sensitive_step_is_marked_in_words_in_the_palette_not_only_by_colour(e
     server, folder = editor
     save_step(folder / "user.db", step("send-message", "Send", sensitive=Sensitivity.OUTWARD_ACTION))
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
-        page = browser.new_page()
-        page.goto(f"{server.url}/#token=e2e-token")
+        browser, page = open_page(playwright, server)
         marked = page.get_by_test_id("palette-send-message")
         marked.wait_for()
         assert "needs consent" in marked.inner_text().lower()
@@ -177,68 +162,18 @@ def test_a_sensitive_step_is_marked_in_words_in_the_palette_not_only_by_colour(e
         browser.close()
 
 
-def open_page(playwright, server):
+def open_page(playwright, server, screen="editor"):
+    """A new headless page. "editor" opens an empty chore from Home, the way a person reaches the flow screen; "apps" the Apps
+    tab; None leaves it where a person first lands (Home)."""
     browser = playwright.chromium.launch(
         headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
     page = browser.new_page()
     page.goto(f"{server.url}/#token=e2e-token")
+    if screen == "editor":
+        page.get_by_test_id("new-chore").click()
+    elif screen:
+        page.get_by_test_id(f"tab-{screen}").click()
     return browser, page
-
-
-def test_the_four_other_screens_show_their_data_and_their_actions_work(tmp_path):
-    from playwright.sync_api import sync_playwright
-
-    from workflow_factory import grant_consent, run_flow
-
-    if not (DIST / "index.html").exists():
-        pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
-    user_db, factory_db = tmp_path / "user.db", tmp_path / "factory.db"
-    save_step(factory_db, step("open-menu", "Menu", origin="factory", factory_successes=50))
-    save_step(user_db, step("save-file", "Save"))
-    grant_consent(user_db, app="paint.exe", control="Send", action="click")
-    flow = Flow(id="morning", nodes=[Node("a", "save-file"), Node("b", "open-menu")])
-    # Menu is missing on screen: the flow stops at b, leaving a doubt and a history row
-    run_flow(flow, desktop=FakeDesktop(controls=[button("Save")]), user_db=user_db, factory_db=factory_db)
-    server = ApiServer(user_db, factory_db, lambda app: FakeDesktop(controls=[]), token="e2e-token", web_dir=DIST)
-    server.start()
-    try:
-        with sync_playwright() as playwright:
-            browser, page = open_page(playwright, server)
-            page.on("dialog", lambda dialog: dialog.accept())  # revoking asks first
-
-            page.get_by_test_id("tab-library").click()
-            row = page.get_by_test_id("step-row-open-menu")
-            row.wait_for()
-            assert "factory" in row.inner_text() and page.get_by_test_id("state-open-menu").inner_text() == "On trial"
-            page.get_by_test_id("reject-open-menu").click()
-            page.get_by_test_id("restore-open-menu").wait_for()
-            assert page.get_by_test_id("state-open-menu").inner_text() == "Rejected"
-            page.get_by_test_id("restore-open-menu").click()
-            page.get_by_test_id("reject-open-menu").wait_for()
-
-            page.get_by_test_id("tab-consents").click()
-            page.get_by_test_id("consent").wait_for()
-            assert page.get_by_role("button", name="Grant").count() == 0  # revoke only
-            page.get_by_test_id("revoke-Send").click()
-            page.get_by_test_id("no-consents").wait_for()
-
-            page.get_by_test_id("tab-queue").click()
-            page.get_by_test_id("doubt-1").wait_for()
-            assert "not on the screen" in page.get_by_test_id("doubt-1").inner_text()
-            page.get_by_test_id("note-1").fill("the button is called Main menu now")
-            page.get_by_test_id("answer-1").click()
-            page.get_by_test_id("no-doubts").wait_for()
-            page.get_by_test_id("doubt-filter").select_option("answered")
-            page.get_by_test_id("doubt-1").wait_for()
-            assert "answer: the button is called Main menu now" in page.get_by_test_id("doubt-1").inner_text()
-
-            page.get_by_test_id("tab-history").click()
-            page.get_by_test_id("run-1").wait_for()
-            text = page.get_by_test_id("run-1").inner_text()
-            assert "Stopped" in text and "save-file: done" in text and "open-menu: stopped — The button or field" in text
-            browser.close()
-    finally:
-        server.stop()
 
 
 def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editable_copy(tmp_path):
@@ -247,7 +182,7 @@ def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editab
     from workflow_factory import build_factory
 
     if not (DIST / "index.html").exists():
-        pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
+        pytest.fail("src/workflow_factory/web is missing: run `npm install && npm run build` in web/")
     build_factory(tmp_path / "factory.db", {"version": 1, "steps": [], "flows": [
         {"id": "morning-template", "nodes": [{"id": "n1", "step": "open-menu"}], "edges": None}]})
     server = ApiServer(tmp_path / "user.db", tmp_path / "factory.db", lambda app: None, token="e2e-token", web_dir=DIST)
@@ -258,7 +193,7 @@ def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editab
             page.get_by_test_id("open-flows").click()
             page.get_by_test_id("duplicate-morning-template").click()
             page.locator('.react-flow__node[data-id="n1"]').wait_for()
-            assert page.get_by_test_id("flow-id").input_value() == "morning-template-copy"
+            assert page.get_by_test_id("flow-title").input_value() == "morning-template copy"
             page.get_by_test_id("open-flows").click()
             assert "local" in page.get_by_test_id("flow-morning-template-copy").inner_text()
             assert page.get_by_test_id("duplicate-morning-template-copy").count() == 0  # a copy is not a template
@@ -267,36 +202,14 @@ def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editab
         server.stop()
 
 
-def test_the_quit_button_asks_first_then_ends_the_server_and_says_so_on_screen(editor):
-    from playwright.sync_api import sync_playwright
-
-    server, _ = editor
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
-        page = browser.new_page()
-        asked, accept = [], {"now": False}
-        page.on("dialog", lambda dialog: (asked.append(dialog.message), dialog.accept() if accept["now"] else dialog.dismiss()))
-        page.goto(server.url + "/#token=e2e-token")
-
-        page.get_by_test_id("quit").click()
-        page.wait_for_timeout(500)
-        assert len(asked) == 1 and not server.quit_requested.is_set()  # asked, and "cancel" changed nothing
-
-        accept["now"] = True
-        page.get_by_test_id("quit").click()
-        page.get_by_test_id("closed").wait_for()
-        assert server.quit_requested.is_set()
-        assert "closed" in page.get_by_test_id("closed").inner_text().lower()
-        browser.close()
-
-
 def test_system_nodes_and_steps_are_added_wired_deleted_saved_and_reopened(editor):
     from playwright.sync_api import sync_playwright
 
     server, tmp_path = editor
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
+        page.get_by_test_id("flow-title").fill("built")
+        page.get_by_text("Other boxes").click()
         page.get_by_test_id("system-manual-trigger").click()  # n1
         page.get_by_test_id("palette-open-menu").click()  # n2
         page.get_by_test_id("system-daily-trigger").click()  # n3, deleted again below
@@ -309,8 +222,6 @@ def test_system_nodes_and_steps_are_added_wired_deleted_saved_and_reopened(edito
         page.locator('.react-flow__node[data-id="n3"]').click()
         page.get_by_test_id("delete-node").click()
         assert page.locator('.react-flow__node[data-id="n3"]').count() == 0
-        page.get_by_test_id("flow-id").fill("built")
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
 
         saved = load_flow(tmp_path / "user.db", None, "built")
@@ -358,6 +269,7 @@ def test_a_flow_with_an_if_and_a_for_each_keeps_what_the_wires_mean_after_saving
     server, tmp_path = editor
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
+        page.get_by_test_id("flow-title").fill("looped")
         page.get_by_test_id("system-foreach").click()  # n1
         page.get_by_test_id("palette-open-menu").click()  # n2: the body
         page.get_by_test_id("palette-save-file").click()  # n3: after the loop
@@ -365,8 +277,6 @@ def test_a_flow_with_an_if_and_a_for_each_keeps_what_the_wires_mean_after_saving
         for a, b in (("n1", "n2"), ("n1", "n3")):
             drag_between(page, page.locator(f'.react-flow__node[data-id="{a}"] .react-flow__handle.source'),
                          page.locator(f'.react-flow__node[data-id="{b}"] .react-flow__handle.target'))
-        page.get_by_test_id("flow-id").fill("looped")
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
 
         saved = load_flow(tmp_path / "user.db", None, "looped")
@@ -375,20 +285,25 @@ def test_a_flow_with_an_if_and_a_for_each_keeps_what_the_wires_mean_after_saving
 
 
 def test_nothing_in_the_editor_starts_a_lesson(editor):
-    import re
-
     from playwright.sync_api import sync_playwright
 
     server, _ = editor
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
-        page.get_by_test_id("palette-open-menu").wait_for()
+        sent = []
+        # the chore itself is kept by itself once it has a box: that is the only thing the editor may write
+        page.on("request", lambda request: sent.append(request.method) if "/api/flows" not in request.url else None)
         page.get_by_test_id("palette-open-menu").click()
         page.get_by_test_id("open-flows").click()
         page.locator(".react-flow__node").first.click()
-        words = page.locator("body").inner_text() + " ".join(
-            b.get_attribute("aria-label") or "" for b in page.get_by_role("button").all())
-        assert not re.search(r"lesson|teach|learn|study", words, re.IGNORECASE)
+        # whatever offers teaching, whatever its words, only shows text to send in a chat: it starts nothing
+        teaching = page.get_by_role("button", name=re.compile(r"lesson|teach|learn|study", re.IGNORECASE))
+        assert teaching.count() >= 1
+        teaching.first.click()
+
+        page.get_by_test_id("chat-text").wait_for()
+        page.wait_for_timeout(500)
+        assert set(sent) <= {"GET"} and server._runs == {}
         browser.close()
 
 
@@ -427,7 +342,7 @@ def test_the_node_detail_shows_data_hidden_until_asked_and_never_before_a_run(ed
         assert "No data yet" in detail.inner_text()  # nothing ran
 
         page.get_by_test_id("close-detail").click()
-        page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
         page.locator('.react-flow__node[data-id="c"]').dblclick()
@@ -451,7 +366,7 @@ def test_a_field_is_edited_as_a_fixed_value_or_as_a_reference_and_the_node_is_te
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         open_seeded_flow(page)
-        page.get_by_test_id("app-name").fill("paint.exe")
+        page.get_by_test_id("app-name").select_option("paint.exe")
         page.get_by_test_id("run").click()
         page.get_by_test_id("run-status").filter(has_text="finished").wait_for(timeout=10_000)
 
@@ -463,13 +378,14 @@ def test_a_field_is_edited_as_a_fixed_value_or_as_a_reference_and_the_node_is_te
         detail.get_by_test_id("mode-b").select_option("value")
         detail.get_by_test_id("value-b").fill("5")
 
-        detail.get_by_test_id("test-node").click()  # a data node touches no control: no warning first
-        detail.get_by_test_id("test-result").filter(has_text="Test finished").wait_for(timeout=10_000)
+        detail.get_by_test_id("close-detail").click()
+        page.get_by_test_id("test-node").click()  # a data node touches no control: no warning first
+        page.get_by_test_id("test-result").filter(has_text="Test finished").wait_for(timeout=10_000)
+        page.get_by_test_id("open-detail").click()
         detail.get_by_test_id("show-values").check()
         detail.get_by_text("15").first.wait_for()
 
         detail.get_by_test_id("close-detail").click()
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
         saved = load_flow(tmp_path / "user.db", None, "datas")
         math = next(n for n in saved.nodes if n.id == "m")
@@ -485,16 +401,15 @@ def test_testing_a_step_warns_about_the_mouse_and_keyboard_first_then_runs_only_
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         open_seeded_flow(page)
-        page.get_by_test_id("app-name").fill("paint.exe")
-        page.locator('.react-flow__node[data-id="p"]').dblclick()
-        detail = page.get_by_test_id("detail")
-        detail.get_by_test_id("test-node").click()
+        page.get_by_test_id("app-name").select_option("paint.exe")
+        page.locator('.react-flow__node[data-id="p"]').click()
+        page.get_by_test_id("test-node").click()
         warning = page.get_by_test_id("test-warning")
         warning.wait_for()
         assert "mouse and keyboard" in warning.inner_text()
         assert page.locator(".react-flow__node.status-done").count() == 0  # nothing ran yet
         page.get_by_test_id("confirm-test").click()
-        detail.get_by_test_id("test-result").filter(has_text="Test finished").wait_for(timeout=10_000)
+        page.get_by_test_id("test-result").filter(has_text="Test finished").wait_for(timeout=10_000)
         browser.close()
 
 
@@ -510,7 +425,6 @@ def test_a_node_takes_a_failure_policy_in_its_settings(editor):
         page.get_by_test_id("on-failure").select_option("retry")
         page.get_by_test_id("retries").fill("4")
         page.get_by_test_id("close-detail").click()
-        page.get_by_test_id("save").click()
         page.get_by_test_id("run-status").filter(has_text=SAVED).wait_for()
         node = next(n for n in load_flow(tmp_path / "user.db", None, "datas").nodes if n.id == "p")
         assert (node.on_failure, node.retries) == ("retry", 4)
@@ -540,13 +454,14 @@ def test_stop_ends_a_run_at_once_and_the_run_button_comes_back(tmp_path):
             page.get_by_test_id("open-flows").click()
             page.get_by_test_id("flow-slow").click()
             page.locator('.react-flow__node[data-id="b"]').wait_for()
-            page.get_by_test_id("app-name").fill("paint.exe")
+            page.get_by_test_id("app-name").select_option("paint.exe")
             page.get_by_test_id("run").click()
             page.get_by_test_id("run-log").wait_for()
             page.get_by_test_id("stop").click()
             page.get_by_test_id("run-status").filter(has_text="Stopped by you").wait_for(timeout=10_000)
             page.get_by_test_id("run").wait_for()
             assert [c.name for c in desktop.clicks] == ["Alpha"]
+            page.get_by_role("button", name="Show details").click()
             assert "open-menu started" in page.get_by_test_id("run-log").inner_text()
             browser.close()
     finally:
@@ -580,7 +495,7 @@ def test_a_flow_with_a_rejected_step_says_which_one_and_cannot_be_started(tmp_pa
         server.stop()
 
 
-def test_cards_say_how_far_a_step_is_trusted_and_doubts_are_counted_but_cannot_be_answered_here(tmp_path):
+def test_boxes_say_how_far_a_step_is_trusted_and_a_stopped_box_is_explained_not_counted_as_a_doubt(tmp_path):
     from playwright.sync_api import sync_playwright
 
     from workflow_factory import Sensitivity, grant_consent, save_flow
@@ -599,14 +514,15 @@ def test_cards_say_how_far_a_step_is_trusted_and_doubts_are_counted_but_cannot_b
             page.get_by_test_id("flow-chat").click()
             page.locator('.react-flow__node[data-id="b"]').wait_for()
             b = page.get_by_test_id("node-b").inner_text()
-            assert "On trial" in b and "Consent given" in b and "Private app" in b
+            assert "Consent given" in b and "Private app" in b and "On trial" not in b and "Trusted" not in b
 
-            page.get_by_test_id("app-name").fill("telegram.exe")
+            page.get_by_test_id("app-name").select_option("telegram.exe")
             page.get_by_test_id("run").click()
             page.get_by_test_id("run-status").filter(has_text="stopped").wait_for(timeout=10_000)
-            page.get_by_text("1 doubt").first.wait_for()
-            assert "1 doubt" in page.get_by_test_id("node-b").inner_text()
-            assert "1 doubt" in page.get_by_test_id("safety-summary").inner_text()
+            page.get_by_test_id("node-b").filter(has_text="Stopped here").wait_for()
+            assert "doubt" not in page.get_by_test_id("node-b").inner_text().lower()  # no mark that points to a screen that is gone
+            assert "doubt" not in page.get_by_test_id("safety-summary").inner_text().lower()
+            page.get_by_test_id("strip-reason").wait_for()
             words = " ".join(button_.inner_text() for button_ in page.get_by_role("button").all())
             assert not any(word in words.lower() for word in ("answer", "dismiss", "resolve"))
             browser.close()
@@ -640,14 +556,14 @@ def test_dropping_a_recipe_adds_its_connected_nodes_and_adapted_steps_say_where_
             entry = page.get_by_test_id("recipe-send-message")
             entry.wait_for()
             assert "3 steps" in entry.inner_text() and "A" in entry.inner_text()
-            page.get_by_test_id("app-name").fill("b.exe")
+            page.get_by_test_id("app-name").select_option("b.exe")
             entry.click()
             page.locator('.react-flow__node[data-id="n3"]').wait_for()
             assert page.locator(".react-flow__node").count() == 3 and page.locator(".react-flow__edge").count() == 2
             assert "Adapted from A" in page.get_by_test_id("node-n2").inner_text()  # compose was taught for b on its own
             assert page.get_by_test_id("cannot-start").count() == 0 and not page.get_by_test_id("run").is_disabled()
 
-            page.get_by_test_id("app-name").fill("a.exe")  # the original app: nothing is adapted
+            page.get_by_test_id("app-name").select_option("a.exe")  # the original app: nothing is adapted
             assert "Adapted" not in page.get_by_test_id("node-n2").inner_text()
             browser.close()
     finally:
@@ -662,7 +578,7 @@ def test_a_recipe_with_an_unfilled_hole_cannot_run_and_says_which(tmp_path):
     try:
         with sync_playwright() as playwright:
             browser, page = open_page(playwright, server)
-            page.get_by_test_id("app-name").fill("b.exe")
+            page.get_by_test_id("app-name").select_option("b.exe")
             page.get_by_test_id("recipe-send-message").click()
             page.locator('.react-flow__node[data-id="n3"]').wait_for()
             note = page.get_by_test_id("cannot-start")
@@ -671,66 +587,6 @@ def test_a_recipe_with_an_unfilled_hole_cannot_run_and_says_which(tmp_path):
             assert "the hole 'send'" in note.inner_text()
             assert "Hole not filled: compose" in page.get_by_test_id("node-n2").inner_text()
             assert page.get_by_test_id("run").is_disabled()
-            browser.close()
-    finally:
-        server.stop()
-
-
-def test_a_schedule_is_added_listed_and_removed_from_the_screen_and_other_tasks_stay_hidden(tmp_path):
-    from fake_scheduler import FOREIGN, FakeScheduler
-    from playwright.sync_api import sync_playwright
-
-    from workflow_factory import save_flow
-
-    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=[Node("a", "open-menu")]))
-    scheduler = FakeScheduler()
-    server = ApiServer(tmp_path / "user.db", None, lambda app: None, token="e2e-token", web_dir=DIST, schedule_runner=scheduler)
-    server.start()
-    try:
-        with sync_playwright() as playwright:
-            browser, page = open_page(playwright, server)
-            page.on("dialog", lambda dialog: dialog.accept())  # removing asks first
-            page.get_by_test_id("tab-schedules").click()
-            page.get_by_test_id("no-schedules").wait_for()  # the foreign task is not shown
-            assert page.get_by_test_id("schedule-add").is_disabled()  # no flow is chosen for the person
-            page.get_by_test_id("schedule-flow").select_option("morning")
-            page.get_by_test_id("schedule-app").fill("mspaint.exe")
-            page.get_by_test_id("schedule-time").fill("07:45")
-            page.get_by_test_id("schedule-add").click()
-            row = page.get_by_test_id("schedule-row-morning daily 0745")
-            row.wait_for()
-            assert "morning" in row.inner_text() and "mspaint.exe" in row.inner_text() and "07:45" in row.inner_text()
-            page.get_by_test_id("schedule-remove-morning daily 0745").click()
-            page.get_by_test_id("no-schedules").wait_for()
-            assert list(scheduler.tasks) == [FOREIGN]
-            browser.close()
-    finally:
-        server.stop()
-
-
-def test_the_first_run_opens_on_the_setup_check_and_it_can_be_reopened_later(tmp_path, monkeypatch):
-    from playwright.sync_api import sync_playwright
-
-    from workflow_factory.checks import seen_before
-
-    monkeypatch.setattr("workflow_factory.api.seen_before", seen_before)  # the real one: this is a first run
-    server = serve(tmp_path, FakeDesktop(controls=[]))
-    try:
-        with sync_playwright() as playwright:
-            browser, page = open_page(playwright, server)
-            summary = page.get_by_test_id("checks-summary")
-            summary.wait_for()
-            page.get_by_test_id("check-agent-desktop").wait_for()
-            text = page.get_by_test_id("check-data-folder").inner_text()
-            assert "Ready" in text or "Missing" in text  # always a word, never colour alone
-            assert page.get_by_test_id("palette-open-menu").count() == 0  # the editor is behind it on a first run
-
-            page.reload()  # it was shown once: the next visit opens the editor
-            page.get_by_test_id("tab-editor").wait_for()
-            page.wait_for_timeout(500)
-            assert page.get_by_test_id("checks-summary").count() == 0
-            page.get_by_test_id("tab-checks").click()
-            page.get_by_test_id("checks-summary").wait_for()
             browser.close()
     finally:
         server.stop()

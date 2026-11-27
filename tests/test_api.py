@@ -59,6 +59,27 @@ def test_the_server_only_binds_to_the_loopback_interface(tmp_path):
         server.stop()
 
 
+def test_the_editor_never_opens_on_a_port_a_browser_refuses(tmp_path, monkeypatch):
+    handed_out, closed = iter([1719, 6667, 50123]), []
+
+    class SystemThatHandsOutBlockedPorts:
+        def __init__(self, address, handler):
+            self.server_address = (address[0], next(handed_out))
+
+        def server_close(self):
+            closed.append(self.server_address[1])
+
+        def serve_forever(self):
+            pass
+
+    monkeypatch.setattr("workflow_factory.api.ThreadingHTTPServer", SystemThatHandsOutBlockedPorts)
+
+    server = ApiServer(tmp_path / "u.db", None, lambda app: None)
+
+    assert server.address == ("127.0.0.1", 50123)
+    assert closed == [1719, 6667]  # the refused ones are given back
+
+
 def test_a_request_whose_host_header_is_not_loopback_is_refused_against_dns_rebinding(server):
     status, _, _ = call(server, "/api/steps", host="evil.example.com")
 
@@ -97,7 +118,7 @@ def test_a_flow_built_in_the_editor_is_saved_to_sqlite_and_listed(server, tmp_pa
     _, listing, _ = call(server, "/api/flows")
 
     assert status == 200 and [n["id"] for n in flow["nodes"]] == ["a", "b"] and flow["edges"] == [["a", "b"]]
-    assert {"id": "morning", "origin": "local"} in listing
+    assert {"id": "morning", "origin": "local", "title": "morning", "app": ""} in listing
 
 
 def test_an_invalid_flow_is_refused_with_a_message(server):
@@ -151,6 +172,18 @@ def test_an_unexpected_failure_is_a_json_500_without_details(tmp_path):
         server.stop()
 
     assert status == 500 and body == {"error": "internal error"}
+
+
+def test_an_unexpected_failure_is_written_with_its_traceback_to_the_console_but_not_to_the_browser(tmp_path, capsys):
+    (tmp_path / "factory.db").write_bytes(b"this is not a sqlite file at all, just text" * 10)
+    server = make_server(tmp_path)
+    try:
+        status, body, _ = call(server, "/api/flows")
+    finally:
+        server.stop()
+
+    assert status == 500 and body == {"error": "internal error"}
+    assert "Traceback" in capsys.readouterr().err  # so a person can tell a lost data folder from a bug
 
 
 def test_a_negative_content_length_is_refused_instead_of_blocking_a_thread(server):
@@ -253,7 +286,7 @@ def test_a_factory_template_can_be_duplicated_into_the_user_layer_through_the_ap
 
     assert created[0] == 201 and created[1]["id"] == "mine"
     assert again[0] == 400 and "already exists" in again[1]["error"]
-    assert listing == [{"id": "mine", "origin": "local"}, {"id": "morning-template", "origin": "factory"}]
+    assert [(f["id"], f["origin"]) for f in listing] == [("mine", "local"), ("morning-template", "factory")]
 
 
 def test_quit_needs_the_token_and_then_flags_the_server_to_stop(server):

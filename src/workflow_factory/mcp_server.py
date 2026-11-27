@@ -5,16 +5,19 @@ no screenshot or trace option, and no tool that returns a secret value (ADR 0002
 """
 
 import functools
+import os
 from collections.abc import Callable
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 
-from workflow_factory import recipes, tutor
+from workflow_factory import flows, recipes, tutor
 from workflow_factory.agent_desktop import AgentDesktop, AgentDesktopError
+from workflow_factory.dataops import OPS
 from workflow_factory.desktop import Desktop
+from workflow_factory.flow import KINDS
 from workflow_factory.paths import default_user_db
-from workflow_factory.steps import Locator, Sensitivity
+from workflow_factory.steps import Locator, Sensitivity, list_steps, step_reports
 
 
 def _code_only(tool):
@@ -30,8 +33,8 @@ def _code_only(tool):
     return guarded
 
 
-def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPServer:
-    server = MCPServer("workflow-factory-tutor")
+def build_server(user_db: Path, desktop_for: Callable[[str], Desktop], factory_db: Path | None = None) -> MCPServer:
+    server = MCPServer("mutehand-tutor")
 
     @server.tool(name="observe_app")
     @_code_only
@@ -130,13 +133,50 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPSer
             raise ValueError("a broad consent can only be granted by the user, not through the tutor tools")
         tutor.record_consent(user_db, app, control, action)
 
+    @server.tool(name="list_known_steps")
+    def list_known_steps(app: str) -> list[dict]:
+        """What the apprentice already knows how to do in an app: each step's name, action and state."""
+        known = [step for step in list_steps(user_db, factory_db, light=True) if step.app == app]
+        if tutor.is_private(user_db, app):  # the names of a private app's actions stay out, like what observe_app shows
+            return [{"private": True, "count": len(known)}] if known else []
+        return [{"name": step.name, "action": step.action, "state": report["state"]}
+                for step, report in zip(known, step_reports(user_db, known), strict=True)]
+
+    @server.tool(name="list_node_kinds")
+    def list_node_kinds() -> dict:
+        """The kinds of box a chore can hold, the data operations a data box can run (with the fields each takes) and the
+        forms a box's field can be written in. Use it before writing nodes for create_flow."""
+        return {
+            "kinds": list(KINDS),
+            "data_operations": {op: {"required": list(required), "optional": list(optional)}
+                                for op, (required, optional, _) in OPS.items()},
+            "field_forms": [
+                {"form": "value", "example": {"value": "any JSON"}},
+                {"form": "ref", "example": {"ref": {"node": "id of another box", "field": "name of its output"}}},
+                {"form": "expression", "example": {"expression": "text kept for later: no run uses it yet"}},
+            ],
+        }
+
+    @server.tool(name="create_flow")
+    def create_flow(title: str, app: str, nodes: list[dict], edges: list[list[str]] | None = None) -> dict:
+        """Save a chore the person described. Nodes are {id, step, kind?, fields?, inputs?}; edges are [from, to] pairs
+        (None: the nodes run in order). A step not taught yet is allowed: the answer's missing_steps lists the lessons
+        still to teach with teach_step, then flow_status says when the chore is ready."""
+        return flows.create_flow(user_db, title, app, nodes, edges, factory_db)
+
+    @server.tool(name="flow_status")
+    def flow_status(flow_id: str) -> dict:
+        """Whether a chore can run now, why not if it cannot, and which steps are still to be taught."""
+        return flows.flow_readiness(user_db, flow_id, factory_db)
+
     return server
 
 
 def main() -> None:
     user_db = default_user_db()
     user_db.parent.mkdir(parents=True, exist_ok=True)
-    build_server(user_db, AgentDesktop).run()
+    factory = os.environ.get("WORKFLOW_FACTORY_FACTORY_DB")
+    build_server(user_db, AgentDesktop, Path(factory) if factory else None).run()
 
 
 if __name__ == "__main__":

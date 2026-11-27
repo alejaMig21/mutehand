@@ -17,7 +17,7 @@ def clicked(desktop):
 
 def teach(user_db):
     for name, control in (("a", "Alpha"), ("b", "Beta"), ("scroll", "Down")):
-        save_step(user_db, step(name, control, effect="no_change"))
+        save_step(user_db, step(name, control))  # no taught effect: nothing to differ from
     save_step(user_db, step("typer", "Notes", action="type_value"))
 
 

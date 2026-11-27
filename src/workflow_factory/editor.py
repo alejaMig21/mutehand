@@ -16,7 +16,7 @@ from workflow_factory.flow import clear_emergency_stop, emergency_stop
 from workflow_factory.hotkey import EmergencyHotkey
 from workflow_factory.paths import default_user_db
 
-DEFAULT_WEB_DIR = Path(__file__).resolve().parents[2] / "web" / "dist"
+DEFAULT_WEB_DIR = Path(__file__).resolve().parent / "web"  # built by `npm run build` in web/, shipped inside the package
 
 
 def main(argv: list[str] | None = None) -> None:

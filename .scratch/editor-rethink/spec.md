@@ -117,6 +117,7 @@ What needs the person
 - The server gives one list of attention items, so that Home, Apps and tests agree. Kinds: a flow stopped with an open doubt; actions to revalidate (grouped by app, with the flows they block); a rejected step that blocks a flow; a required setup check that fails. Steps that block no flow appear only inside their app.
 - Trusted and suspect are never shown as labels. The explanation strip may say how many times a box has worked.
 - "Try again" is a person's action: it closes the flow's open doubt as tried again, lifts the rejection of a step the same run needs when a failed check rejected it, and runs the flow, which resumes from its checkpoint. A step the person rejected themselves offers "Allow again" instead and is never lifted by "Try again". The result is reported as fixed, or as the same or a new problem.
+- A step whose effect differs from the taught one stops the flow with a doubt, like any other failed box, and the box's failure setting applies. The action has already happened, so "Try again" performs it again, and so does a "retry" setting while that failure has not rejected the step.
 - "Ask for help" shows a ready message naming the flow, the box and the plain reason, and keeps the person's optional note on the doubt. The doubt stays open. Dismissing a doubt is no longer offered on screen.
 - The editor never starts a lesson. It only shows text for the person to send in a chat. This clarifies ADR 0006; the existing rule that the editor shows no lesson wording is replaced by "nothing in the editor starts a lesson".
 
@@ -157,7 +158,6 @@ Interfaces
 - Telling the person which file or document a flow produced: the apprentice does not know it.
 - Flows that span several apps.
 - A teach button that starts a lesson.
-- Whether a plain step whose effect differs should stop the flow (open question; today the node finishes and the step may be rejected for next time).
 - Translating the interface; on-screen text stays English.
 - A light theme.
 

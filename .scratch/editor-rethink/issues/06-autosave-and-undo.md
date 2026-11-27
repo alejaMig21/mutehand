@@ -6,7 +6,7 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Every canvas or settings change is stored without a button; a reload shows it
 - [ ] A change made elsewhere is shown and the person chooses; nothing is replaced silently
@@ -16,3 +16,8 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 - [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop and scheduler, red before green
 - [ ] Everything added works from the keyboard and fits a 683 px and a 390 px wide window; button text stays readable
 - [ ] Existing tests pass; no screen content of a private app appears in any message
+
+## Answer
+
+Flow changes are kept as they are made (pill: Saved, Saving, Not saved, Changed elsewhere), Undo takes back any change, removing a box offers Undo; the Save button is gone.
+Commits: ed39f1a, f32b428, dec41ff.

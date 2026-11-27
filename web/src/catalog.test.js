@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { appLabel, CHIP_COLOURS, chipFor, guessApp, searchCatalog, SYSTEM_NODES } from './catalog.js'
+import { appLabel, CHIP_COLOURS, chipFor, onAppNames, searchCatalog, setAppNames, taughtApp, SYSTEM_NODES } from './catalog.js'
 
 const steps = [
   { app: 'telegram.exe', name: 'Send', origin: 'local' },
@@ -16,11 +16,19 @@ test('an empty search shows everything, steps ordered by app then name', () => {
 })
 
 test('a search finds system nodes by name and steps by name and by app', () => {
-  assert.deepEqual(searchCatalog('wait', steps).system.map((n) => n.title), ['Wait', 'Join']) // by name, then by hint
+  assert.deepEqual(searchCatalog('wait', steps).system.map((n) => n.title), ['Wait a while', 'Join']) // by name, then by hint
   assert.deepEqual(searchCatalog('telegram', steps).apps.map((s) => s.name), ['Send', 'Write message'])
   assert.deepEqual(searchCatalog('READ', steps).apps.map((s) => s.name), ['Read page'])
   assert.equal(searchCatalog('READ', steps).system.some((n) => n.title === 'Read a field'), true)
   assert.deepEqual(searchCatalog('zzz', steps), { system: [], apps: [], recipes: [] })
+})
+
+test('a search takes plain words, in any order, whatever separates them in the name', () => {
+  const found = (query) => searchCatalog(query, [{ app: 'paint.exe', name: 'save_the-picture', origin: 'local' }]).apps.length
+
+  assert.equal(found('picture save'), 1)
+  assert.equal(found('save-the picture'), 1)
+  assert.equal(found('save report'), 0)
 })
 
 test('every system node can be stored as it is: a kind, and its operation when it is a data node', () => {
@@ -51,11 +59,31 @@ test('app names read like names and every chip has readable text', () => {
   for (const colour of CHIP_COLOURS) assert.ok(1.05 / (luminance(colour) + 0.05) >= 4.5, colour)
 })
 
-test('a flow runs on the app that has most of its steps', () => {
-  const all = [{ app: 'telegram.exe', name: 'Send' }, { app: 'telegram.exe', name: 'Write' }, { app: 'whatsapp.exe', name: 'Write' }]
+test('an app is called by its product name once it is known, and keeps its chip colour', () => {
+  const before = chipFor('zzqx.exe')
+  let heard = 0
+  const stop = onAppNames(() => { heard += 1 })
+  try {
+    setAppNames({ zzqx: 'Quill Ledger', vvrt: 'Atlas' })
+    setAppNames({ zzqx: 'Quill Ledger', vvrt: 'Atlas' }) // the same names again: nothing to redraw
 
-  assert.equal(guessApp(['Send', 'Write'], all), 'telegram.exe')
-  assert.equal(guessApp(['Write'], all), 'telegram.exe') // a tie: the first
-  assert.equal(guessApp(['Nothing'], all), null)
-  assert.equal(guessApp([], all), null)
+    assert.equal(heard, 1)
+    assert.equal(appLabel('ZZQX.EXE'), 'Quill Ledger')
+    assert.equal(appLabel('other.exe'), 'Other')
+    assert.deepEqual(chipFor('zzqx.exe'), { letter: 'Q', colour: before.colour })
+    const found = searchCatalog('', [{ app: 'zzqx.exe', name: 'a', origin: 'local' }, { app: 'vvrt.exe', name: 'b', origin: 'local' }])
+    assert.deepEqual(found.apps.map((s) => s.name), ['b', 'a']) // Atlas before Quill Ledger
+  } finally {
+    stop()
+    setAppNames({})
+  }
+})
+
+test('an app typed in any spelling is the one the steps were taught on', () => {
+  const apps = ['Telegram.exe', 'paint']
+
+  assert.equal(taughtApp(' telegram ', apps), 'Telegram.exe')
+  assert.equal(taughtApp('PAINT.EXE', apps), 'paint')
+  assert.equal(taughtApp(' unknown.exe ', apps), 'unknown.exe')
+  assert.equal(taughtApp('', apps), '')
 })

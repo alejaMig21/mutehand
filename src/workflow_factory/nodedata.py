@@ -64,4 +64,4 @@ def single_node_flow(flow: Flow, node_id: str, outputs: dict) -> Flow:
             fields[name] = {"value": resolve(node.fields[name], outputs, {})}
         except MissingData:
             raise ValueError(f"node {target!r} has no data yet: run the flow first so this node has something to work on") from None
-    return Flow(id=None, nodes=[Node(**{**node.__dict__, "fields": fields})], edges=[])
+    return Flow(trial=f"{flow.id}#test:{node_id}", nodes=[Node(**{**node.__dict__, "fields": fields})], edges=[])

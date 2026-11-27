@@ -1,3 +1,5 @@
+import { setAppNames } from './catalog.js'
+
 // The server prints a URL like http://127.0.0.1:PORT/#token=XXXX. The token lives in the fragment, so
 // it is never sent to the server in a request line or logged; it is kept for this tab only.
 function readToken() {
@@ -14,7 +16,7 @@ const token = readToken()
 window.addEventListener('hashchange', () => { if (location.hash.includes('token=')) location.reload() })
 
 export const LOCKED = 'wf-locked' // the event for "this token is no longer accepted"
-export const UNREACHABLE = 'Cannot reach Workflow Factory. Is it still running?'
+export const UNREACHABLE = 'Cannot reach Mutehand. Is it still running?'
 
 // An error with a `status` is the server's answer; one without it means no answer arrived.
 export async function api(path, { method = 'GET', body } = {}) {
@@ -33,8 +35,11 @@ export async function api(path, { method = 'GET', body } = {}) {
   }
   const data = await response.json().catch(() => null)
   if (response.status === 401) window.dispatchEvent(new Event(LOCKED))
-  if (!response.ok) throw Object.assign(new Error(data?.error ?? `HTTP ${response.status}`), { status: response.status })
+  if (!response.ok) throw Object.assign(new Error(data?.error ?? 'Mutehand could not do that. Try again in a moment.'), { status: response.status })
   return data
 }
+
+// A name that cannot be read now leaves the screen with the file names it can work out itself.
+export const loadAppNames = () => api('/api/app-names').then(setAppNames).catch(() => {})
 
 export const encode = encodeURIComponent

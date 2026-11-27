@@ -1,4 +1,4 @@
-"""The one command: `uv run workflow-factory [command]`. With no command it opens the editor."""
+"""The one command: `uv run mutehand [command]`. With no command it opens the editor."""
 
 import sys
 from collections.abc import Callable, Mapping, Sequence
@@ -25,7 +25,7 @@ def _commands() -> Mapping[str, Handler]:
 def _usage() -> str:
     width = max(map(len, DESCRIPTIONS))
     lines = [f"  {name:<{width}}  {text}" for name, text in DESCRIPTIONS.items()]
-    return "usage: workflow-factory [command] [arguments]\n\ncommands:\n" + "\n".join(lines)
+    return "usage: mutehand [command] [arguments]\n\ncommands:\n" + "\n".join(lines)
 
 
 def main(argv: Sequence[str] | None = None, commands: Mapping[str, Handler] | None = None) -> int:

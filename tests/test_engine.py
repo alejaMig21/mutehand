@@ -16,7 +16,7 @@ from fake_desktop import FakeDesktop, button, step
 def teach(user_db, **controls):
     """teach(db, a="Alpha") saves step 'a' that clicks the control named Alpha."""
     for name, control in controls.items():
-        save_step(user_db, step(name, control, effect="revealed"))
+        save_step(user_db, step(name, control))  # no taught effect: nothing to differ from
 
 
 def desktop_with(*names, **kw):

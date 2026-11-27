@@ -11,6 +11,9 @@ const PATHS = {
   search: 'M11 4a7 7 0 100 14 7 7 0 000-14zM16 16l5 5',
   flask: 'M9 3h6M10 3v6l-5 9a2 2 0 002 3h10a2 2 0 002-3l-5-9V3',
   plus: 'M12 5v14M5 12h14',
+  minus: 'M5 12h14',
+  chat: 'M4 5h16v11H9l-5 4z',
+  copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
   close: 'M6 6l12 12M18 6L6 18',
   check: 'M5 12.5l4.5 4.5L19 7',
   trash: 'M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13',
@@ -26,7 +29,12 @@ const PATHS = {
   help: 'M12 3a9 9 0 100 18 9 9 0 000-18zM9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1-1.5 2M12 17v.01',
   spinner: 'M12 3a9 9 0 019 9',
   arrow: 'M7 17L17 7M9 7h8v8',
+  back: 'M10 6l-6 6 6 6M4 12h16',
+  undo: 'M9 14L4 9l5-5M4 9h10a6 6 0 010 12h-3',
   skip: 'M5 6l7 6-7 6zM13 6l7 6-7 6z',
+  retry: 'M20 12a8 8 0 11-2.6-5.9M20 4v5h-5',
+  chevron: 'M9 6l6 6-6 6',
+  chevronup: 'M6 15l6-6 6 6',
 }
 
 export function Icon({ name, size = 18 }) {

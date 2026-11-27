@@ -1,5 +1,5 @@
 [project]
-name = "workflow-factory"
+name = "mutehand"
 version = "0.1.0"
 description = "Deterministic apprentice that replays taught lessons across Windows desktop apps"
 authors = [
@@ -12,7 +12,11 @@ dependencies = [
 ]
 
 [project.scripts]
-workflow-factory = "workflow_factory.cli:main"
+mutehand = "workflow_factory.cli:main"
+workflow-factory = "workflow_factory.cli:main"  # the old name keeps working
+
+[tool.uv.build-backend]
+module-name = "workflow_factory"  # the import name stays; only the installed name is mutehand
 
 [build-system]
 requires = ["uv_build>=0.9.17,<0.10.0"]

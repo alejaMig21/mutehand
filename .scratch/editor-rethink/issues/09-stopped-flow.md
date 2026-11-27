@@ -6,7 +6,7 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 
 **Blocked by:** 02, 08
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] One server list of attention items feeds Home and the flow screen
 - [ ] Home lists stopped flows first with a count, flow, box and plain reason; the section is absent when empty
@@ -17,3 +17,8 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 - [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop and scheduler, red before green
 - [ ] Everything added works from the keyboard and fits a 683 px and a 390 px wide window; button text stays readable
 - [ ] Existing tests pass; no screen content of a private app appears in any message
+
+## Answer
+
+A stopped chore comes first on Home with "Try again" and "Ask for help"; its red box says why on the flow screen. Daily-time edits no longer reset the checkpoint.
+Commits: 90e5507, 2857332.

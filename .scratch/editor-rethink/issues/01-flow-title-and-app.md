@@ -6,7 +6,7 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] The flow name field accepts free text; the flows menu, run history and schedules show the title
 - [ ] A flow keeps its app after reload, and Run uses it
@@ -15,3 +15,9 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 - [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop and scheduler, red before green
 - [ ] Everything added works from the keyboard and fits a 683 px and a 390 px wide window; button text stays readable
 - [ ] Existing tests pass; no screen content of a private app appears in any message
+
+## Answer
+
+A flow has a free-text title apart from its identifier and remembers its app; every screen shows the title.
+Flows saved earlier take their identifier as title and the app most of their steps belong to.
+Commits: 453cf6d, cc5cc81, 66ccde0; merged with ticket 03 in f1b6d48.

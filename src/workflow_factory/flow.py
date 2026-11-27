@@ -45,6 +45,7 @@ from workflow_factory.steps import (
     Status,
     current_status,
     find_step,
+    record_app_name,
     record_outcome,
     refused_write,
     revalidate_changed_versions,
@@ -193,6 +194,7 @@ class Flow:
     nodes: list[Node]
     id: str | None = None  # None: derived from the definition, so unrelated flows never share state
     edges: list[tuple[str, str]] | None = None  # None: the nodes run one after another
+    trial: str | None = None  # a test of part of a flow: the name its doubts, history and checkpoint go under
 
     def __post_init__(self):
         if self.id is not None and not re.fullmatch(r"[\w.-]+", self.id):
@@ -252,8 +254,17 @@ class Flow:
         return repr((self.nodes, self.all_edges))
 
     @property
+    def resume_key(self) -> str:
+        """What a checkpoint is matched with: the flow without its start boxes. Giving a flow a daily time, or taking it
+        away, must not make a stopped flow start over and do again what it already did."""
+        starts = {node.id for node in self.nodes if node.kind == "trigger"}
+        if not starts:
+            return self.definition
+        return repr(([n for n in self.nodes if n.id not in starts], [e for e in self.all_edges if not starts & set(e)]))
+
+    @property
     def key(self) -> str:
-        return self.id or "flow-" + hashlib.sha1(self.definition.encode()).hexdigest()[:12]
+        return self.trial or self.id or "flow-" + hashlib.sha1(self.definition.encode()).hexdigest()[:12]
 
 
 @dataclass(frozen=True)
@@ -453,7 +464,7 @@ class _Run:
 
     def save(self) -> None:
         with self.lock:
-            save_checkpoint(self.user_db, self.flow.key, self.state.dump(), self.flow.definition)
+            save_checkpoint(self.user_db, self.flow.key, self.state.dump(), self.flow.resume_key)
 
     def attempt(self, node: Node):
         """One replay of the node's step: (blocked reason or None, effect, step)."""
@@ -580,8 +591,10 @@ class _Run:
 
         `owner` is the node whose policy applies when `node` is only its body (for each)."""
         policy = owner or node
+        ran = reason == "effect_mismatch"  # the action happened: what it measured is real
+        spent = ran and self.statuses.get(node.id) == Status.REJECTED  # a retry could only be refused, hiding the cause
         with self.lock:
-            if policy.on_failure == "retry" and self.attempts.get(policy.id, 0) < policy.retries:
+            if policy.on_failure == "retry" and not spent and self.attempts.get(policy.id, 0) < policy.retries:
                 self.attempts[policy.id] = self.attempts.get(policy.id, 0) + 1
                 self.retrying.add(policy.id)
                 return "retry"
@@ -589,7 +602,8 @@ class _Run:
                 self.continued[policy.id] = reason
                 self.node_status[policy.id] = ("continued", reason)
                 if owner is None:
-                    self.state.outputs[node.id] = {}  # an empty result: whoever needs a field of it stops instead of guessing
+                    if not ran:  # an empty result: whoever needs a field of it stops instead of guessing
+                        self.state.outputs[node.id] = {}
                     self.state.done.add(node.id)
                     self.progress(node.id, "continued")
                     self.save()
@@ -602,7 +616,7 @@ class _Run:
             self.blocked[node.id] = reason
             self.node_status[node.id] = ("blocked", reason)
             self.progress(node.id, "blocked")
-            record_doubt(self.user_db, self.flow.key, node.id, node.step, DOUBT_REASON[reason], capture)
+            record_doubt(self.user_db, self.flow.key, node.id, node.step, DOUBT_REASON[reason], capture, reason)
             self.save()
         return "stop"
 
@@ -614,18 +628,22 @@ class _Run:
             self.save()
 
 
+def _record_effect(run: _Run, node_id: str, effect: Effect) -> None:
+    with run.lock:
+        run.state.effects[node_id] = str(effect)
+        run.state.outputs[node_id] = {**run.state.outputs.get(node_id, {}), "effect": str(effect)}
+
+
 def _run_step(run: _Run, node: Node) -> None:
     reason, effect, step = run.attempt(node)
     if reason:
         run.block(node, reason)
         return
-    with run.lock:
-        run.state.effects[node.id] = str(effect)
-        run.state.outputs[node.id] = {**run.state.outputs.get(node.id, {}), "effect": str(effect)}
+    _record_effect(run, node.id, effect)  # even on a mismatch: whoever goes on can read it
+    if _differs(step, effect):  # later steps would work on a wrong result
+        run.block(node, "effect_mismatch")
+        return
     run.finish(node)
-    if _differs(step, effect):  # it counted against the step: the history has to say so
-        with run.lock:
-            run.node_status[node.id] = ("done", "effect_mismatch")
 
 
 def _run_trigger(run: _Run, node: Node) -> None:
@@ -673,6 +691,10 @@ def _run_foreach(run: _Run, node: Node) -> None:
             run.state.outputs[node.id] = {"item": items[index], "index": index, "count": len(items)}
         run.progress(body.id, "running")
         reason, effect, step = run.attempt(body)  # consent, the input lock and the user pause apply to every item
+        if reason is None:
+            _record_effect(run, body.id, effect)
+            if _differs(step, effect):
+                reason = "effect_mismatch"
         if reason:
             verdict = run.block(body, reason, owner=node)  # a stop leaves the doubt on the body's step
             if verdict == "retry":
@@ -680,6 +702,8 @@ def _run_foreach(run: _Run, node: Node) -> None:
             if verdict == "continue":  # this item is given up, the next one goes on
                 with run.lock:
                     progress["iteration"] += 1
+                    if reason == "effect_mismatch":
+                        progress["mismatch"] = True  # gone on past it: the history still has to say so
                 run.attempts.pop(node.id, None)
                 run.save()
                 continue
@@ -690,10 +714,7 @@ def _run_foreach(run: _Run, node: Node) -> None:
             return
         with run.lock:
             progress["iteration"] += 1
-            progress["mismatch"] = progress.get("mismatch", False) or _differs(step, effect)
             run.attempts.pop(node.id, None)  # the retries are per item
-            run.state.effects[body.id] = str(effect)
-            run.state.outputs[body.id] = {"effect": str(effect)}
         run.save()  # a checkpoint per item
     with run.lock:
         run.state.outputs[node.id] = {"count": len(items)}
@@ -841,6 +862,11 @@ def rejected_steps(flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path
     return tuple(found)
 
 
+def _named(node: Node) -> dict:
+    """What the history keeps to say which box this was: node ids are reused when a flow is rebuilt."""
+    return {"step": node.step or None, "kind": node.kind, "op": node.op}
+
+
 def run_flow(
     flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path | None = None,
     context: dict | None = None, progress=None, fired: str = "manual",
@@ -863,10 +889,14 @@ def run_flow(
 def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="manual") -> RunResult:
     key = desktop.app_key()
     revalidate_changed_versions(user_db, key.process, key.version)
-    saved = load_checkpoint(user_db, flow.key, flow.definition)
+    record_app_name(user_db, key)
+    saved = load_checkpoint(user_db, flow.key, flow.resume_key)
     state = _State.load(saved) if saved else _State()
     state.context.update(context or {})
     run = _Run(flow, desktop, user_db, factory_db, state, progress)
+    for node in flow.nodes:  # a flow that goes on from where it stopped shows what it had done as done
+        if saved and node.id in state.done:
+            run.progress(node.id, "done")
     started_at = desktop.now()
     nodes = {node.id: node for node in flow.nodes}
     runners = {"step": _run_step, "loop": _run_loop, "if": _run_if, "trigger": _run_trigger, "foreach": _run_foreach,
@@ -906,7 +936,7 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="ma
     except Exception:
         # a bug or a failure we do not handle: the run still leaves a trace, then the error goes on
         record_run(user_db, flow.key, started_at, desktop.now(), "error", None, [
-            {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1]}
+            {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1], **_named(node)}
             for node in flow.nodes if node.id in run.node_status])
         raise
     effects = {node_id: Effect(effect) for node_id, effect in run.effects.items()}
@@ -920,6 +950,6 @@ def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="ma
         result = RunResult(effects, {}, run.statuses, halted_by=run.halted, outputs=run.state.outputs, continued=run.continued)
     run_id = record_run(user_db, flow.key, started_at, desktop.now(), result.status, result.stopped, [
         {"node_id": node.id, "status": run.node_status[node.id][0], "reason": run.node_status[node.id][1],
-         "effect": str(effects[node.id]) if node.id in effects else None, "step": node.step or None}
+         "effect": str(effects[node.id]) if node.id in effects else None, **_named(node)}
         for node in flow.nodes if node.id in run.node_status])
     return replace(result, run_id=run_id)

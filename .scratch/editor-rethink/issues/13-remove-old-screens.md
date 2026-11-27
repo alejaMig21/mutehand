@@ -6,7 +6,7 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 
 **Blocked by:** 04, 05, 09, 10, 11, 12
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Only Home, Apps and the flow screen remain; no ability listed in the spec is lost
 - [ ] Tests of removed screens are rewritten to the new places and keep what they protected
@@ -16,3 +16,8 @@ Spec: `../spec.md`. Mockups: `../mockups/`.
 - [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop and scheduler, red before green
 - [ ] Everything added works from the keyboard and fits a 683 px and a 390 px wide window; button text stays readable
 - [ ] Existing tests pass; no screen content of a private app appears in any message
+
+## Answer
+
+Navigation is Home, Apps and "Close the program"; the six old screens and their dead endpoints are gone, each ability proven on its new place. Not placed: a person rejecting an action, and removing a daily run whose chore no longer exists.
+Commits: 44c2c33, 4db0181.

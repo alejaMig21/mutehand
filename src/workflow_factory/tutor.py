@@ -5,6 +5,10 @@ doubts. There is no force option and no screenshot tracing here, and secrets onl
 as references.
 """
 
+import hashlib
+import hmac
+import json
+import secrets
 import sqlite3
 from collections import Counter
 from contextlib import closing
@@ -12,7 +16,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from workflow_factory.consent import Consent, effective_sensitivity, grant_consent, is_permitted, scope_of
-from workflow_factory.desktop import Desktop
+from workflow_factory.desktop import Desktop, plain_app
 from workflow_factory.flow import TEXT_ACTIONS, effect_of, select
 from workflow_factory.queue import answer_doubt, list_doubts
 from workflow_factory.steps import (
@@ -21,6 +25,7 @@ from workflow_factory.steps import (
     Status,
     Step,
     find_step,
+    record_app_name,
     refused_write,
     save_step,
     validate_step,
@@ -57,14 +62,9 @@ def _connect(user_db: Path) -> sqlite3.Connection:
     return db
 
 
-def _app_name(app: str) -> str:
-    """'Telegram', 'TELEGRAM.EXE' and 'telegram.exe' are one app."""
-    return app.lower().removesuffix(".exe")
-
-
 def mark_private(user_db: Path, app: str) -> None:
     with closing(_connect(user_db)) as db, db:
-        db.execute("INSERT OR IGNORE INTO private_apps VALUES (?)", (_app_name(app),))
+        db.execute("INSERT OR IGNORE INTO private_apps VALUES (?)", (plain_app(app),))
 
 
 def private_apps(user_db: Path) -> frozenset[str]:
@@ -73,13 +73,24 @@ def private_apps(user_db: Path) -> frozenset[str]:
         return DEFAULT_PRIVATE_APPS | {row[0] for row in db.execute("SELECT app FROM private_apps")}
 
 
+_HANDLE_KEY = secrets.token_bytes(16)  # lives as long as the process: a handle is only good for the page that asked for it
+
+
+def handle(*names: str) -> str:
+    """An opaque stand-in for names the browser must not see (an action or control of a private app). The same names give the
+    same handle in this process, so a button can send it back; nothing about the names can be read from it."""
+    return "h" + hmac.new(_HANDLE_KEY, json.dumps(names).encode(), hashlib.sha256).hexdigest()[:16]
+
+
 def is_private(user_db: Path, app: str, known: frozenset[str] | None = None) -> bool:
-    return _app_name(app) in (known if known is not None else private_apps(user_db))
+    return plain_app(app) in (known if known is not None else private_apps(user_db))
 
 
 def observe(user_db: Path, desktop: Desktop) -> dict:
     """A summarised snapshot. Private apps are reduced to roles and counts: no names at all."""
-    app = desktop.app_key().process
+    key = desktop.app_key()
+    record_app_name(user_db, key)
+    app = key.process
     controls = desktop.snapshot()
     summary = {
         "app": app,
@@ -143,6 +154,7 @@ def teach_step(
 ) -> dict:
     """Perform the action once, measure its effect and save the step at once (autosave)."""
     key = desktop.app_key()
+    record_app_name(user_db, key)
     candidate = Step(app=key.process, version=key.version, name=name, locator=locator,
                        action=action, sensitive=sensitive, secret_ref=secret_ref)
     category = effective_sensitivity(candidate)  # declared, or implied by the action or the control name
@@ -184,7 +196,8 @@ def teach_step(
 def list_open_doubts(user_db: Path) -> list[dict]:
     return [
         {"id": d.id, "flow_id": d.flow_id, "node_id": d.node_id, "step": d.step,
-         "reason": str(d.reason), "capture": d.capture, "status": d.status}
+         "reason": str(d.reason), "detail": d.detail, "capture": d.capture, "status": d.status,
+         "note": d.note}  # what the person wrote when asking for help
         for d in list_doubts(user_db, status="open")
     ]
 

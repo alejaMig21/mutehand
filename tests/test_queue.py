@@ -33,7 +33,7 @@ def test_a_stop_writes_one_open_doubt_with_a_structural_capture(tmp_path):
     assert result.stopped == "n1"
     assert list_doubts(user_db) == [Doubt(
         id=1, flow_id="morning", node_id="n1", step="open-menu", reason="control_not_found",
-        capture={"button": 2, "textfield": 1}, status="open")]
+        capture={"button": 2, "textfield": 1}, status="open", detail="control_not_found")]
 
 
 def test_the_structural_capture_holds_no_text_content(tmp_path):
@@ -169,3 +169,71 @@ def test_flows_built_without_an_id_do_not_share_doubts_or_checkpoints(tmp_path):
     result = run_flow(other, desktop=desktop, user_db=user_db)
 
     assert result.waiting is False and [c.name for c in desktop.clicks] == ["Save"]
+
+
+def test_giving_a_stopped_flow_a_daily_time_does_not_make_it_start_over(tmp_path):
+    from workflow_factory.daily import with_daily
+
+    user_db = tmp_path / "user.db"
+    save_step(user_db, step("open-menu", "Menu"))
+    save_step(user_db, step("save-file", "Save"))
+    stopped = flow("a", "open-menu", "save-file")
+    run_flow(stopped, desktop=FakeDesktop(controls=[button("Menu")]), user_db=user_db)  # stops at n2
+    answer_doubt(user_db, 1)
+
+    with_time, _ = with_daily(stopped, "07:30", {})
+    desktop = FakeDesktop(controls=[button("Menu"), button("Save")])
+    result = run_flow(with_time, desktop=desktop, user_db=user_db)
+
+    assert [c.name for c in desktop.clicks] == ["Save"]  # the first box was not done twice
+    assert result.stopped is None
+
+
+def test_taking_the_daily_time_away_from_a_stopped_flow_does_not_make_it_start_over(tmp_path):
+    from workflow_factory.daily import with_daily
+
+    user_db = tmp_path / "user.db"
+    save_step(user_db, step("open-menu", "Menu"))
+    save_step(user_db, step("save-file", "Save"))
+    scheduled, _ = with_daily(flow("a", "open-menu", "save-file"), "07:30", {})
+    run_flow(scheduled, desktop=FakeDesktop(controls=[button("Menu")]), user_db=user_db)
+    answer_doubt(user_db, 1)
+
+    plain, _ = with_daily(scheduled, None, {})
+    desktop = FakeDesktop(controls=[button("Menu"), button("Save")])
+    run_flow(plain, desktop=desktop, user_db=user_db)
+
+    assert [c.name for c in desktop.clicks] == ["Save"]
+
+
+def test_trying_again_closes_every_open_doubt_of_the_flow_and_keeps_what_the_person_wrote(tmp_path):
+    from workflow_factory.queue import close_as_tried_again, leave_note
+
+    user_db = tmp_path / "user.db"
+    save_step(user_db, step("open-menu", "Menu"))
+    for flow_id in ("a", "b"):
+        run_flow(flow(flow_id, "open-menu"), desktop=FakeDesktop(controls=[]), user_db=user_db)
+    leave_note(user_db, 1, "It happens when Paint is minimised")
+
+    assert close_as_tried_again(user_db, "a") == 1
+
+    first, second = list_doubts(user_db)
+    assert (first.status, first.closed_as, first.note) == ("answered", "tried_again", "It happens when Paint is minimised")
+    assert second.status == "open"  # another flow's doubt is not touched
+
+
+def test_a_note_can_only_be_left_on_an_open_doubt_and_leaves_it_open(tmp_path):
+    from workflow_factory.queue import leave_note
+
+    user_db = tmp_path / "user.db"
+    save_step(user_db, step("open-menu", "Menu"))
+    run_flow(flow("a", "open-menu"), desktop=FakeDesktop(controls=[]), user_db=user_db)
+
+    leave_note(user_db, 1, "first")
+    leave_note(user_db, 1, "second")
+    assert [(d.status, d.note) for d in list_doubts(user_db)] == [("open", "second")]
+
+    answer_doubt(user_db, 1)  # answering without a note does not wipe the one the person left
+    assert list_doubts(user_db)[0].note == "second"
+    with pytest.raises(ValueError):
+        leave_note(user_db, 1, "too late")

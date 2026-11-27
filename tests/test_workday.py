@@ -64,8 +64,9 @@ def test_a_workday_that_stops_exits_one_and_says_what_stopped_and_why(tmp_path):
     assert code == EXIT_STOPPED == 1
     assert report["status"] == "stopped" and report["stopped_node"] == "b"
     assert report["nodes"][1] == {"node_id": "b", "status": "blocked", "reason": "control_not_found", "effect": None,
-                                  "step": "save-file"}
-    assert [(d["node_id"], d["reason"]) for d in report["open_doubts"]] == [("b", "control_not_found")]
+                                  "step": "save-file", "kind": "step", "op": None}
+    assert [(d["node_id"], d["reason"], d["detail"]) for d in report["open_doubts"]] == [
+        ("b", "control_not_found", "control_not_found")]
 
 
 def test_a_flow_waiting_for_the_tutor_exits_two_without_acting(tmp_path):

@@ -143,10 +143,10 @@ def test_listing_many_steps_does_not_open_the_database_once_per_step(tmp_path, m
     monkeypatch.setattr(sqlite3, "connect", lambda *a, **kw: (opened.append(1), real(*a, **kw))[1])
     try:
         counts = []
-        for path in ("/api/steps", "/api/library"):
+        for path in ("/api/steps", "/api/apps/paint.exe"):
             opened.clear()
             status, listed, _ = call(server, path)
-            counts.append((status, len(listed), len(opened) < 12))
+            counts.append((status, len(listed if isinstance(listed, list) else listed["actions"]), len(opened) < 12))
     finally:
         server.stop()
 

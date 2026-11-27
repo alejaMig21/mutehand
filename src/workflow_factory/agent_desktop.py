@@ -7,6 +7,7 @@ gate, see ADR-0002). Text goes through stdin so it never lands in process args.
 import contextlib
 import ctypes
 import json
+import os
 import random
 import shutil
 import subprocess
@@ -70,17 +71,61 @@ def _image_path(pid: int) -> str:
         kernel.CloseHandle(ctypes.c_void_p(handle))
 
 
-def version_of_pid(pid: int) -> str:
-    """Executable file version (a.b.c.d) of a running process, via the Windows version resource."""
-    version, path = ctypes.windll.version, _image_path(pid)
+def _version_resource(path: str) -> ctypes.Array | None:
+    """The version resource of an executable file; None when it has none."""
+    version = ctypes.windll.version
     length = version.GetFileVersionInfoSizeW(path, None)
     block = ctypes.create_string_buffer(length)
-    if not length or not version.GetFileVersionInfoW(path, 0, length, block):
+    return block if length and version.GetFileVersionInfoW(path, 0, length, block) else None
+
+
+def _version_value(block: ctypes.Array, key: str) -> tuple[int | None, int]:
+    """Where one value of a version resource is and how long (bytes, or characters for text)."""
+    value, length = ctypes.c_void_p(), ctypes.c_uint()
+    found = ctypes.windll.version.VerQueryValueW(block, key, ctypes.byref(value), ctypes.byref(length))
+    return (value.value, length.value) if found else (None, 0)
+
+
+def version_of_pid(pid: int) -> str:
+    """Executable file version (a.b.c.d) of a running process, via the Windows version resource."""
+    path = _image_path(pid)
+    block = _version_resource(path)
+    if block is None:
         raise AgentDesktopError("VERSION_UNAVAILABLE", f"no version resource in {path}")
-    info, info_len = ctypes.c_void_p(), ctypes.c_uint()
-    version.VerQueryValueW(block, "\\", ctypes.byref(info), ctypes.byref(info_len))
-    ms, ls = ctypes.cast(info.value + 8, ctypes.POINTER(ctypes.c_uint * 2)).contents
+    info, _ = _version_value(block, "\\")
+    ms, ls = ctypes.cast(info + 8, ctypes.POINTER(ctypes.c_uint * 2)).contents
     return f"{ms >> 16}.{ms & 0xFFFF}.{ls >> 16}.{ls & 0xFFFF}"
+
+
+def product_name(path: str) -> str:
+    """The product name an executable file declares for itself; "" when it declares none.
+
+    Components of Windows all declare the name of Windows, which says which system they belong to, not what they are."""
+    name = _declared_product_name(path)
+    system = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "kernel32.dll"
+    return "" if name == _declared_product_name(str(system)) else name
+
+
+def _declared_product_name(path: str) -> str:
+    block = _version_resource(path)
+    if block is None:
+        return ""
+    at, size = _version_value(block, "\\VarFileInfo\\Translation")  # pairs of (language, code page)
+    pairs = (ctypes.c_ushort * (size // 2)).from_address(at)[:] if at else []
+    for language, codepage in zip(pairs[::2], pairs[1::2], strict=False):
+        at, length = _version_value(block, f"\\StringFileInfo\\{language:04x}{codepage:04x}\\ProductName")
+        name = ctypes.wstring_at(at, length).split("\0")[0].strip() if length else ""
+        if name:
+            return name
+    return ""
+
+
+def product_name_of_pid(pid: int) -> str:
+    """The name the executable of a running process declares. It is only a label: not reading it stops nothing."""
+    try:
+        return product_name(_image_path(pid))
+    except AgentDesktopError:
+        return ""
 
 
 @contextlib.contextmanager
@@ -232,10 +277,11 @@ class AgentDesktop:
         self, app: str, runner: Runner = _run_cli, settle_seconds: float = 0.5,
         version_of=version_of_pid, system_frame_fields=system_frame_fields,
         read_secret=read_secret, move_cursor=None, cursor_position=None,
-        glide_pause=time.sleep, rng=random,
+        glide_pause=time.sleep, rng=random, name_of=product_name_of_pid,
     ):
         self._app = app
         self._version_of = version_of
+        self._name_of = name_of
         self._system_frame_fields = system_frame_fields
         self._read_secret = read_secret
         self._move_cursor = move_cursor  # None: the real cursor (looked up at call time)
@@ -420,7 +466,7 @@ class AgentDesktop:
     def app_key(self) -> AppKey:
         for app in self._call(["list-apps"]).get("apps", []):
             if app.get("name", "").lower() == self._app.lower():  # Windows process names ignore case
-                return AppKey(self._app.lower(), self._version_of(app["pid"]))
+                return AppKey(self._app.lower(), self._version_of(app["pid"]), self._name_of(app["pid"]))
         raise AgentDesktopError("APP_NOT_FOUND", self._app)
 
     def frame(self) -> Frame:

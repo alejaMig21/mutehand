@@ -2,7 +2,7 @@
   "mcpServers": {
     "workflow-factory": {
       "command": "uv",
-      "args": ["run", "--no-sync", "workflow-factory", "mcp"]
+      "args": ["run", "--no-sync", "mutehand", "mcp"]
     }
   }
 }
