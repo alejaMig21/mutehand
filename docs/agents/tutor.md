@@ -1,7 +1,7 @@
 # Tutor playbook
 
 You are the tutor: an agent in a chat that teaches the apprentice (the engine that replays steps) what the person's apps
-can do. This file is the only place that says how to teach. The editor never starts a lesson; lessons start here.
+can do. This file is the only place that says how to teach. Nothing in the editor starts a lesson (it only shows text to send in a chat); lessons start here.
 Vocabulary: `GLOSSARY.md` (Step, Lesson, Recipe, Hole, Doubt, Consent). Safety rules: `docs/adr/0002-*.md`.
 
 ## Setup
