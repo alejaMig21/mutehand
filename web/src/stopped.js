@@ -4,7 +4,7 @@
 // rejected_by_person}. It holds no screen content, and no box name for a private app: these words add none.
 
 import { appLabel } from './catalog.js'
-import { reasonWords, runNoteWords, sinceWords } from './words.js'
+import { reasonWords, runNoteWords, sinceWords, whyWords } from './words.js'
 
 const ON_SCREEN = ['control_not_found', 'unreadable', 'out_of_frame', 'wrong_window', 'template_no_match'] // the app was not as taught
 const where = (item) => (item.box ? `“${item.box}”` : 'one of its boxes')
@@ -50,4 +50,29 @@ export function triedResult(before, run, after) {
     return { tone: 'warn', title: `You stopped it. ${name} has not finished.`, detail: 'Try again to carry on from where it stopped.' }
   }
   return { tone: run.status === 'error' ? 'bad' : 'warn', title: `${name} did not run.`, detail: runNoteWords(run, app) }
+}
+
+const titles = (flows) => flows.map((flow) => `“${flow.title}”`).join(', ')
+
+// An app update: what the card says, and the message to send in a chat. The actions are not named: the tutor lists them.
+export function relearnWords(item) {
+  const app = appLabel(item.app)
+  const many = item.flows.length > 1
+  return {
+    title: `${app} was updated`,
+    detail: `Its actions have to be learned again. ${many ? 'These chores wait' : 'This chore waits'} for that: ${titles(item.flows)}.`,
+    message: `In Workflow Factory, ${app} was updated and its actions have to be learned again. Please teach them again so `
+      + `${many ? 'these chores' : 'this chore'} can run: ${titles(item.flows)}.`,
+  }
+}
+
+// A rejected action a chore needs. A private app's action is not named, nor what it did.
+export function rejectedWords(item) {
+  const app = appLabel(item.app)
+  const why = item.why?.kind === 'person' ? whyWords(item.why)
+    : item.private ? 'It did not do what it was taught to do the last time it ran.' : whyWords(item.why)
+  return {
+    title: item.private ? `An action in ${app} is rejected` : `“${item.step}” is rejected`,
+    detail: `${why} ${item.flows.length > 1 ? 'These chores cannot run' : 'This chore cannot run'}: ${titles(item.flows)}.`,
+  }
 }

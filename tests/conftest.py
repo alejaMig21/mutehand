@@ -48,3 +48,9 @@ def _editor_server_never_reads_the_real_scheduler(request, monkeypatch):
     from fake_scheduler import FakeScheduler
 
     monkeypatch.setattr("workflow_factory.api._real_scheduler", FakeScheduler())
+
+
+@pytest.fixture(autouse=True)
+def _a_working_setup(monkeypatch):
+    """Home lists a missing required program as needing the person: what this PC has installed must not decide a test."""
+    monkeypatch.setattr("workflow_factory.attention.run_checks", lambda data_dir: [])

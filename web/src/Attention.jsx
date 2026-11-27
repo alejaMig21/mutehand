@@ -3,7 +3,7 @@ import { api, encode } from './api.js'
 import { appLabel } from './catalog.js'
 import ChatMessage from './ChatMessage.jsx'
 import { Icon } from './icons.jsx'
-import { helpMessage, stoppedWords, triedResult } from './stopped.js'
+import { helpMessage, rejectedWords, relearnWords, stoppedWords, triedResult } from './stopped.js'
 
 // Trying again, shared by Home and the flow screen so that a try started on one is reported on both. `tries` holds, by
 // chore, what was tried and, once the run ends, how it went. `ensure` runs first on the flow screen: what is stored
@@ -127,6 +127,66 @@ export function StoppedActions({ item, onTry, onChanged, trying, prefix, suffix 
   )
 }
 
+function Card({ id, title, detail, hint, children, below }) {
+  return (
+    <li className="attention-card" data-testid={`attention-${id}`}>
+      <Icon name="alert" size={28} />
+      <div className="attention-words">
+        <h3>{title}</h3>
+        <p>{detail}</p>
+        {hint && <p className="muted">{hint}</p>}
+      </div>
+      {children && <div className="attention-buttons">{children}</div>}
+      {below}
+    </li>
+  )
+}
+
+// The message to send is folded behind a button: the card stays short.
+function Relearn({ item }) {
+  const says = relearnWords(item)
+  const [shown, setShown] = useState(false)
+  return (
+    <Card id={`relearn-${item.app}`} title={says.title} detail={says.detail}
+      below={shown && <div className="help-panel"><ChatMessage message={says.message} /></div>}>
+      <button data-testid={`attention-message-relearn-${item.app}`} aria-expanded={shown} onClick={() => setShown(!shown)}>
+        <Icon name="chat" size={20} /> {shown ? 'Hide the message' : 'Show the message to send'}
+      </button>
+    </Card>
+  )
+}
+
+function Rejected({ item, onChanged }) {
+  const says = rejectedWords(item)
+  const [problem, setProblem] = useState('')
+  const [allowing, setAllowing] = useState(false)
+  const id = `${item.app}-${item.step}`
+  async function allow() {
+    if (allowing) return
+    setAllowing(true)
+    setProblem('')
+    try {
+      await api(`/api/steps/${encode(item.app)}/${encode(item.step)}/restore`, { method: 'POST' })
+      onChanged()
+    } catch (e) {
+      setProblem(e.message)
+    } finally {
+      setAllowing(false)
+    }
+  }
+  return (
+    <Card id={`rejected-${id}`} title={says.title} detail={says.detail}>
+      <button className="primary" data-testid={`attention-allow-again-${id}`} aria-disabled={allowing || undefined}
+        aria-label={`Allow again: ${item.private ? appLabel(item.app) : item.step}`} onClick={allow}>Allow again</button>
+      {problem && <p className="stopped-problem" role="alert">{problem}</p>}
+    </Card>
+  )
+}
+
+function Setup({ item }) {
+  return <Card id={`setup-${item.id}`} title={`${item.title}: missing`} detail={item.why} hint={`To fix: ${item.fix}`} />
+}
+
 // The things that need the person, first on Home. Absent when there are none.
 export function Attention({ items, tries, tryAgain, onChanged, running }) {
   if (items.length === 0) return null
@@ -135,21 +195,16 @@ export function Attention({ items, tries, tryAgain, onChanged, running }) {
       <h2 id="attention-title">Needs your attention ({items.length})</h2>
       <ul>
         {items.map((item) => {
+          if (item.kind === 'relearn') return <Relearn key={`relearn-${item.app}`} item={item} />
+          if (item.kind === 'rejected') return <Rejected key={`rejected-${item.app}-${item.step}`} item={item} onChanged={onChanged} />
+          if (item.kind === 'setup') return <Setup key={`setup-${item.id}`} item={item} />
           const says = stoppedWords(item)
           return (
-            <li key={item.flow} className="attention-card" data-testid={`attention-${item.flow}`}>
-              <Icon name="alert" size={28} />
-              <div className="attention-words">
-                <h3>{says.title}</h3>
-                <p>{says.detail}</p>
-                <p className="muted">{says.hint}</p>
-              </div>
-              <div className="attention-buttons">
-                <StoppedActions item={item} prefix="attention" suffix={`-${item.flow}`} onChanged={onChanged}
-                  trying={running(item.flow) || Boolean(tries[item.flow] && !tries[item.flow].result)}
-                  onTry={tryAgain} />
-              </div>
-            </li>
+            <Card key={item.flow} id={item.flow} title={says.title} detail={says.detail} hint={says.hint}>
+              <StoppedActions item={item} prefix="attention" suffix={`-${item.flow}`} onChanged={onChanged}
+                trying={running(item.flow) || Boolean(tries[item.flow] && !tries[item.flow].result)}
+                onTry={tryAgain} />
+            </Card>
           )
         })}
       </ul>

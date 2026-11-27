@@ -517,7 +517,7 @@ class ApiServer:
                     return self._send(200, [{**_step_view(step), **safety} for step, safety in
                                             zip(steps, _safety(api.user_db, steps), strict=True)])
                 if method == "GET" and path == "/api/attention":
-                    return self._send(200, attention_items(api.user_db, api.factory_db))
+                    return self._send(200, attention_items(api.user_db, api.factory_db, api.user_db.parent))
                 if method == "GET" and path == "/api/app-names":
                     return self._send(200, app_names(api.user_db))
                 if method == "GET" and path == "/api/checks":

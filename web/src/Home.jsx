@@ -18,7 +18,7 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
   const { reload } = load
   const flows = load.data
   const needs = useLoad('/api/attention', { keep: true }) // what stopped and waits for the person
-  const stopped = needs.data
+  const stopped = needs.data.filter((item) => item.kind === 'stopped')
   const reloadNeeds = needs.reload
   const undo = useDeleted(reload, flows)
   const [bare, setBare] = useState(false) // nothing is learned yet: Home says what the product is for
@@ -43,7 +43,7 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
   return (
     <div className="home">
       <TriedResults tries={tried.tries} hide={tried.hide} />
-      <Attention items={stopped} tries={tried.tries} tryAgain={tried.tryAgain} onChanged={() => { reload(); reloadNeeds() }}
+      <Attention items={needs.data} tries={tried.tries} tryAgain={tried.tryAgain} onChanged={() => { reload(); reloadNeeds() }}
         running={(id) => following.runs[id]?.status === 'running'} />
       <Screen title={none && bare ? FIRST_DAY_TITLE : 'Your chores'} load={load} isEmpty={false}
         help={none && bare ? 'When you press a button, or by itself every morning.' : undefined}

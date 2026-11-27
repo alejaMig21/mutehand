@@ -555,7 +555,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   // (a canvas that is not on screen has no size to fit into: that waits until it is shown again)
   useEffect(() => { if (active && shownRun) refit() }, [active, shownRun?.runId, shownRun?.status]) // eslint-disable-line react-hooks/exhaustive-deps
   const flowDoubts = useMemo(() => doubts.filter((d) => isStored && d.flow_id === flowId), [doubts, flowId, isStored])
-  const stoppedHere = isStored ? needs.find((item) => item.flow === flowId) : undefined
+  const stoppedHere = isStored ? needs.find((item) => item.kind === 'stopped' && item.flow === flowId) : undefined
   // a chore that stopped opens with its stopped box chosen, so that the strip says why and offers Try again; once for each stop
   useEffect(() => {
     if (!stoppedHere || opening || busy.current.chosen === `${view}:${stoppedHere.doubt}`) return

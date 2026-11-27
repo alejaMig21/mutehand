@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { helpMessage, stoppedWords, triedResult } from './stopped.js'
+import { helpMessage, rejectedWords, relearnWords, stoppedWords, triedResult } from './stopped.js'
 
 const item = { flow: 'weekly', title: 'Weekly export', app: 'paint.exe', private: false, node: 'n2', box: 'Close message',
   reason: 'control_not_found', doubt: 12, note: null, at: new Date(2026, 10, 25, 9, 0).toISOString(), rejected_by_person: [] }
@@ -82,4 +82,23 @@ test('a try that ended some other way says so', () => {
   assert.match(triedResult(item, run('error', {}, { error: 'APP_NOT_FOUND' }), null).detail, /Check that Paint is open/)
   assert.equal(triedResult(item, run('waiting'), null).tone, 'warn')
   assert.equal(triedResult(item, run('error', {}, { error: 'INTERNAL' }), null).tone, 'bad')
+})
+
+const flows = [{ id: 'a', title: 'Morning report' }, { id: 'b', title: 'Evening report' }]
+
+test('an app update names the app and the chores it blocks, never a file name', () => {
+  const says = relearnWords({ app: 'paint.exe', flows })
+
+  assert.equal(says.title, 'Paint was updated')
+  assert.match(says.detail, /These chores wait for that: “Morning report”, “Evening report”\./)
+  assert.match(says.message, /Paint was updated .* learned again/)
+  assert.doesNotMatch(says.message, /\.exe/)
+})
+
+test('a rejected action says who rejected it, and a private app is not named', () => {
+  assert.equal(rejectedWords({ app: 'paint.exe', step: 'save-file', private: false, why: { kind: 'person' }, flows }).title, '“save-file” is rejected')
+  const hidden = rejectedWords({ app: 'vault.exe', step: 'secret-step', private: true, why: { kind: 'different_effect' }, flows })
+
+  assert.doesNotMatch(JSON.stringify(hidden), /secret-step/)
+  assert.match(hidden.detail, /did not do what it was taught/)
 })

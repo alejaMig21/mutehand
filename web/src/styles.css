@@ -357,6 +357,7 @@ input[type="number"] { width: 70px; }
 .tried h2, .attention-words h3 { font-size: 17px; }
 .tried p, .attention-words p { margin: 2px 0 0; }
 .attention-buttons { flex: 0 1 auto; display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
+.attention-buttons > button { min-height: 48px; font-size: 16px; }
 .stopped-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .stopped-actions button { min-height: 48px; font-size: 16px; }
 .stopped-actions button[aria-disabled="true"] { opacity: .55; cursor: default; }
@@ -376,7 +377,7 @@ input[type="number"] { width: 70px; }
 .notices .tried > svg { width: 20px; height: 20px; }
 .notices .tried h2 { font-size: 15px; }
 .notices .tried button { min-height: 44px; }
-@media (max-width: 560px) { .attention-buttons, .attention-buttons .stopped-actions, .attention-buttons .stopped-actions button { width: 100%; } }
+@media (max-width: 560px) { .attention-buttons, .attention-buttons > button, .attention-buttons .stopped-actions, .attention-buttons .stopped-actions button { width: 100%; } }
 
 /* Home on the first day: the message to send, and the three stages */
 .home:has(.first-day) h1 { font-size: 28px; line-height: 1.25; }
