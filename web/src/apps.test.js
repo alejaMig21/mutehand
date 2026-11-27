@@ -39,7 +39,7 @@ test('taking a permission back says how to give it again in words nobody needs t
 })
 
 test('the messages to send name the app and never start anything', () => {
-  assert.match(teachMessage('Excel'), /^In Workflow Factory I want to teach another action in Excel\./)
+  assert.match(teachMessage('Excel'), /^In Mutehand I want to teach another action in Excel\./)
   const update = relearnMessage('Excel')
   assert.match(update, /Excel was updated and its actions have to be learned again/)
   assert.doesNotMatch(update, /Claude Code|folder/) // plain words for a person who does not know the vocabulary

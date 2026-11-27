@@ -32,7 +32,7 @@ def test_a_missing_piece_says_what_it_is_for_and_gives_one_plain_fix(tmp_path):
         check = checks[check_id]
         assert not check["ok"] and check["fix"] and check["why"] and check["title"]
     assert "npm install -g agent-desktop" in checks["agent-desktop"]["fix"]
-    assert "uv run workflow-factory" in checks["data-folder"]["fix"]
+    assert "uv run mutehand" in checks["data-folder"]["fix"]
 
 
 def test_a_second_monitor_is_wanted_not_required(tmp_path):

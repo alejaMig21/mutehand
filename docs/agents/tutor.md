@@ -31,7 +31,7 @@ There is no `force`, no screenshot and no way to read a secret: do not look for 
    - `secure_field_requires_type_secret`: a password box takes `action="type_secret"` with a `secret_ref` the person gave you (a name,
      never the secret itself).
 6. **Check before moving on** (below). Then the next step.
-7. **Close**: tell the person the steps now exist and show up as nodes in the editor (`uv run workflow-factory`), grouped by app.
+7. **Close**: tell the person the steps now exist and show up as nodes in the editor (`uv run mutehand`), grouped by app.
 
 ## Names, inputs and outputs
 

@@ -39,7 +39,7 @@ def test_with_25_apps_the_first_rows_show_and_show_more_adds_the_rest(tmp_path):
     twenty_five(tmp_path / "user.db")
     with home(tmp_path) as (page, _):
         apps_screen(page)
-        assert page.title() == "Apps · Workflow Factory"
+        assert page.title() == "Apps · Mutehand"
         app_row(page, "program00.exe").wait_for()
         assert page.locator("[data-testid^=app-row-]").count() == 14
         assert "1 action" in app_row(page, "program00.exe").inner_text()

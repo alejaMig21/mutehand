@@ -1,4 +1,4 @@
-# Workflow factory
+# Mutehand
 
 A mini n8n for Windows desktop apps whose building blocks are taught by an agent. A tutor (an agent in Claude Code,
 through MCP) teaches a deterministic apprentice **lessons** about an app; each lesson becomes a **node** in the
@@ -9,10 +9,10 @@ model involved. Terms are in `GLOSSARY.md`, decisions in `docs/adr/`, research n
 
 ```text
 uv sync                    # once
-uv run workflow-factory    # opens the editor in your browser; Ctrl+C here or “Close the program” in the editor stops it
+uv run mutehand    # opens the editor in your browser; Ctrl+C here or “Close the program” in the editor stops it
 ```
 
-A second `uv run workflow-factory` while one is running opens the same editor. Nothing in the editor starts a
+A second `uv run mutehand` while one is running opens the same editor. Nothing in the editor starts a
 lesson; where teaching is needed, it shows the message to send in a chat.
 
 ## Package it
@@ -37,9 +37,9 @@ Recipes (one pattern taught once, reused on another app by teaching only the con
 
 | Command | What it does |
 |---|---|
-| `uv run workflow-factory run --flow <id> --app <process, e.g. mspaint.exe>` | run a flow now, without the editor (exit codes 0 to 5, a report in the data folder; `--help` lists the options) |
-| `uv run workflow-factory schedule create ...` | run a flow every day with Windows Task Scheduler (`create`, `list`, `delete`) |
-| `uv run workflow-factory knowledge export` | move lessons and flows between machines (`export`, `import`, `build-factory`) |
+| `uv run mutehand run --flow <id> --app <process, e.g. mspaint.exe>` | run a flow now, without the editor (exit codes 0 to 5, a report in the data folder; `--help` lists the options) |
+| `uv run mutehand schedule create ...` | run a flow every day with Windows Task Scheduler (`create`, `list`, `delete`) |
+| `uv run mutehand knowledge export` | move lessons and flows between machines (`export`, `import`, `build-factory`) |
 
 Your data lives in `%LOCALAPPDATA%\workflow-factory` (`user.db`, `reports\`); set `WORKFLOW_FACTORY_USER_DB` or
 `WORKFLOW_FACTORY_REPORT_DIR` to move it. It needs the `agent-desktop` command line tool (the adapter looks for the

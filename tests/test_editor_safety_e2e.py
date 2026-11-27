@@ -510,7 +510,7 @@ def test_the_closed_page_says_how_to_open_it_again(app):
     page.get_by_test_id("app-more-toggle").click()
     page.get_by_test_id("quit").click()
 
-    assert "uv run workflow-factory" in page.get_by_test_id("closed").inner_text()
+    assert "uv run mutehand" in page.get_by_test_id("closed").inner_text()
 
 
 def test_a_test_of_one_node_shows_the_servers_words_untouched_and_says_when_it_cannot_reach_it(app):

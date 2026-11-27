@@ -34,7 +34,7 @@ def run_checks(data_dir: Path, which: Callable[[str], str | None] = shutil.which
                bool(which("claude")), "Install Claude Code from claude.com/claude-code, then open it in this folder."),
         _check("data-folder", "Data folder", "Your steps, flows, consents and history are kept there.",
                data_dir.is_dir() and os.access(data_dir, os.W_OK),
-               "Run uv run workflow-factory once in the project folder; it creates the data folder."),
+               "Run uv run mutehand once in the project folder; it creates the data folder."),
         _check("tutor-connection", "Teaching connection", "The project file that lets Claude Code find the teaching tools.",
                (project / ".mcp.json").is_file(),
                "Open the terminal in the project folder (the one with .mcp.json) before you start Claude Code."),

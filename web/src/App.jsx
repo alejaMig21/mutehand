@@ -21,7 +21,7 @@ const remembered = () => {
   return SCREENS.some(([known]) => known === id) ? id : 'home'
 }
 
-const OPEN_AGAIN = 'To open it again, run “uv run workflow-factory” in the project folder.'
+const OPEN_AGAIN = 'To open it again, run “uv run mutehand” in the project folder.'
 
 export default function App() {
   const [screen, setScreen] = useState(remembered)
@@ -59,7 +59,7 @@ export default function App() {
   }, [screen])
   useEffect(() => {
     sessionStorage.setItem('wf-screen', screen)
-    document.title = `${label} · Workflow Factory`
+    document.title = `${label} · Mutehand`
   }, [screen, label])
 
   // it asks only when something would be lost: a run in progress or a change not kept. Nothing is lost otherwise.
@@ -71,21 +71,21 @@ export default function App() {
     setClosed(true)
   }
   if (closed) {
-    return <main data-testid="closed" className="notice-page"><h1>Workflow Factory is closed</h1>
+    return <main data-testid="closed" className="notice-page"><h1>Mutehand is closed</h1>
       <p>You can close this tab. {OPEN_AGAIN}</p></main>
   }
   if (locked) {
     return (
       <main data-testid="locked" className="notice-page" role="alert">
         <h1>This link no longer works</h1>
-        <p>Close this tab and start Workflow Factory again: it opens a new link.</p>
+        <p>Close this tab and start Mutehand again: it opens a new link.</p>
       </main>
     )
   }
   return (
     <div className="shell">
       <nav className="tabs" aria-label="screens">
-        <span className="brand">Workflow Factory</span>
+        <span className="brand">Mutehand</span>
         {/* the flow screen belongs to Home: its tab stays the current one */}
         {TABS.map(([id, name]) => (
           <button key={id} data-testid={`tab-${id}`} aria-current={id === screen || (id === 'home' && screen === 'editor') ? 'page' : undefined}

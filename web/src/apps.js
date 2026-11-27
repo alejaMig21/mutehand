@@ -38,5 +38,5 @@ export function stopsWords({ stops }, hidden) {
 export const takeBackWords = (permission, hidden) => `${stopsWords(permission, hidden)} To give it again, ask the assistant in the chat to teach it.`
 
 // The words the person sends in a chat. Only the person starts anything with them.
-export const teachMessage = (app) => `In Workflow Factory I want to teach another action in ${app}. `
+export const teachMessage = (app) => `In Mutehand I want to teach another action in ${app}. `
   + `Please ask me what I want it to be able to do in ${app}, then teach it.`

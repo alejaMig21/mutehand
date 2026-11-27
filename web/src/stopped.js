@@ -23,8 +23,8 @@ export function stoppedWords(item, now = new Date()) {
 // The words the person sends in a chat. Only the person starts anything with them.
 export function helpMessage(item, appName, note) {
   const mine = String(note ?? '').trim()
-  return `In Workflow Factory my chore “${item.title}” (${appName}) stopped at ${where(item)}. ${reasonWords(item.reason)} `
-    + `It is open question ${item.doubt} in Workflow Factory.${mine ? ` My note: “${mine}”.` : ''} Please help me get it running again.`
+  return `In Mutehand my chore “${item.title}” (${appName}) stopped at ${where(item)}. ${reasonWords(item.reason)} `
+    + `It is open question ${item.doubt} in Mutehand.${mine ? ` My note: “${mine}”.` : ''} Please help me get it running again.`
 }
 
 const finishedSteps = (run) => Object.values(run.nodes ?? {}).filter((state) => state === 'done' || state === 'continued').length
@@ -67,7 +67,7 @@ export const titles = (flows) => flows.map((flow) => `“${flow.title}”`).join
 // finds which ones. `app` is the name on screen; `flows` are the chores that wait, when the place that offers it knows them.
 export function relearnMessage(app, flows = []) {
   const waiting = flows.length ? ` so ${flows.length > 1 ? 'these chores' : 'this chore'} can run: ${titles(flows)}` : ''
-  return `In Workflow Factory, ${app} was updated and its actions have to be learned again. Please find which ones and teach them again${waiting}.`
+  return `In Mutehand, ${app} was updated and its actions have to be learned again. Please find which ones and teach them again${waiting}.`
 }
 
 // An app update: what the card says, and the message to send in a chat.

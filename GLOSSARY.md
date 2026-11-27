@@ -1,4 +1,4 @@
-# Desktop Workflow Factory
+# Mutehand
 
 A mini n8n for Windows desktop apps whose building blocks are taught by an agent. A deterministic apprentice replays what an AI tutor has taught it, and the user wires that knowledge, with system nodes, into flows that run and are scheduled without any agent.
 

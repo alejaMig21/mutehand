@@ -16,7 +16,7 @@ const token = readToken()
 window.addEventListener('hashchange', () => { if (location.hash.includes('token=')) location.reload() })
 
 export const LOCKED = 'wf-locked' // the event for "this token is no longer accepted"
-export const UNREACHABLE = 'Cannot reach Workflow Factory. Is it still running?'
+export const UNREACHABLE = 'Cannot reach Mutehand. Is it still running?'
 
 // An error with a `status` is the server's answer; one without it means no answer arrived.
 export async function api(path, { method = 'GET', body } = {}) {
@@ -35,7 +35,7 @@ export async function api(path, { method = 'GET', body } = {}) {
   }
   const data = await response.json().catch(() => null)
   if (response.status === 401) window.dispatchEvent(new Event(LOCKED))
-  if (!response.ok) throw Object.assign(new Error(data?.error ?? 'Workflow Factory could not do that. Try again in a moment.'), { status: response.status })
+  if (!response.ok) throw Object.assign(new Error(data?.error ?? 'Mutehand could not do that. Try again in a moment.'), { status: response.status })
   return data
 }
 

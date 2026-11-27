@@ -62,7 +62,7 @@ test('a run that left no record says what happened, and never repeats a code', (
   assert.match(runNoteWords({ status: 'waiting' }, 'Paint'), /open question/)
   assert.match(runNoteWords({ status: 'busy' }, 'Paint'), /already running/)
   assert.match(runNoteWords({ status: 'error', error: 'APP_NOT_FOUND' }, 'Paint'), /^It failed to run\. Check that Paint is open/)
-  assert.match(runNoteWords({ status: 'error', error: 'INTERNAL' }, 'Paint'), /problem inside Workflow Factory/)
+  assert.match(runNoteWords({ status: 'error', error: 'INTERNAL' }, 'Paint'), /problem inside Mutehand/)
   assert.equal(runNoteWords({ status: 'error', error: 'no such run' }, 'Paint'), 'The run was lost (no such run).')
   for (const run of [undefined, { status: 'finished' }, { status: 'running' }, { status: 'stopped' }]) assert.equal(runNoteWords(run, 'Paint'), '')
 })

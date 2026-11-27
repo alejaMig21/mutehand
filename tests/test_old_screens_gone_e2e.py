@@ -92,7 +92,7 @@ def test_a_screen_title_names_only_home_or_apps(tmp_path):
     chores(tmp_path)
     with served(tmp_path) as (page, _, _, _):
         at_home(page)
-        assert page.title() == "Home · Workflow Factory"
+        assert page.title() == "Home · Mutehand"
         page.get_by_test_id("tab-apps").click()
         page.wait_for_function("() => document.title.startsWith('Apps')")
         assert page.get_by_test_id("tab-apps").get_attribute("aria-current") == "page"
@@ -125,7 +125,7 @@ def test_closing_with_nothing_to_lose_does_not_ask_and_the_closed_page_says_how_
         assert not page.get_by_test_id("quit").is_visible()  # it is not at hand: a tap near the tabs cannot reach it
         tab_to(page, "app-more-toggle")
         page.keyboard.press("Enter")
-        assert "uv run workflow-factory" in page.get_by_test_id("quit").get_attribute("title")  # the control says it too
+        assert "uv run mutehand" in page.get_by_test_id("quit").get_attribute("title")  # the control says it too
 
         tab_to(page, "quit")
         page.keyboard.press("Enter")
@@ -133,7 +133,7 @@ def test_closing_with_nothing_to_lose_does_not_ask_and_the_closed_page_says_how_
         closed = page.get_by_test_id("closed")
         closed.wait_for()
         assert asked == [] and server.quit_requested.is_set()
-        assert "uv run workflow-factory" in closed.inner_text()
+        assert "uv run mutehand" in closed.inner_text()
 
 
 def test_closing_while_a_chore_runs_asks_first_says_what_is_lost_and_how_to_open_it_again(tmp_path):
@@ -150,7 +150,7 @@ def test_closing_while_a_chore_runs_asks_first_says_what_is_lost_and_how_to_open
         page.get_by_test_id("quit").click()
         page.wait_for_timeout(400)
         assert len(asked) == 1 and not server.quit_requested.is_set()  # asked, and "cancel" changed nothing
-        assert "running will be stopped" in asked[0] and "uv run workflow-factory" in asked[0]
+        assert "running will be stopped" in asked[0] and "uv run mutehand" in asked[0]
 
         accept["now"] = True
         page.get_by_test_id("quit").click()  # the menu is still open after a cancelled close

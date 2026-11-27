@@ -97,7 +97,7 @@ test('an app update names the app and the chores it blocks, never a file name', 
 
 test('the update message is one text, with or without the chores that wait', () => {
   const alone = relearnMessage('Paint')
-  assert.equal(alone, 'In Workflow Factory, Paint was updated and its actions have to be learned again. Please find which ones and teach them again.')
+  assert.equal(alone, 'In Mutehand, Paint was updated and its actions have to be learned again. Please find which ones and teach them again.')
   assert.equal(relearnWords({ app: 'paint.exe', flows }).message, relearnMessage('Paint', flows))
   assert.match(relearnMessage('Paint', flows.slice(0, 1)), /^.*again so this chore can run: “Morning report”\.$/)
 })

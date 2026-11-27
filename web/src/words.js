@@ -92,7 +92,7 @@ const NO_RECORD = {
 // not repeated to the person.
 export function runNoteWords(run, app) {
   if (run?.status !== 'error') return NO_RECORD[run?.status] ?? ''
-  if (run.error === 'INTERNAL') return 'It failed to run because of a problem inside Workflow Factory.'
+  if (run.error === 'INTERNAL') return 'It failed to run because of a problem inside Mutehand.'
   return /^[A-Z_]+$/.test(run.error) ? `It failed to run. Check that ${app} is open, then try again.` : `The run was lost (${run.error}).`
 }
 

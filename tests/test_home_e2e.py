@@ -67,7 +67,7 @@ def test_home_is_the_first_screen_and_apps_is_the_only_other_place(tmp_path):
     chores(tmp_path)
     with home(tmp_path) as (page, _):
         page.get_by_role("heading", name="Your chores").wait_for()
-        assert page.title() == "Home · Workflow Factory"
+        assert page.title() == "Home · Mutehand"
         for tab, title in (("apps", "Apps"), ("home", "Home")):
             page.get_by_test_id(f"tab-{tab}").click()
             page.wait_for_function("(t) => document.title.startsWith(t)", arg=title)
@@ -517,7 +517,7 @@ def test_home_says_when_it_cannot_reach_the_program_until_it_answers(tmp_path, a
         questions = re.compile(r"/api/runs/\w+$")
         page.route(questions, lambda asked: asked.abort())
         run_button(page, "morning").click()
-        unreachable = page.get_by_role("status").filter(has_text="Cannot reach Workflow Factory")
+        unreachable = page.get_by_role("status").filter(has_text="Cannot reach Mutehand")
         unreachable.wait_for()
         page.unroute(questions)
         if answer == "the run goes on":
