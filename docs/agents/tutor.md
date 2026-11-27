@@ -89,8 +89,8 @@ When the same sequence will exist in several apps (open chat, write, send), save
 The apprentice leaves a doubt when a step fails during a run. `list_open_doubts` shows them (flow, node, step, reason, detail, and
 roles-and-counts of the screen). `reason` is the broad kind; `detail` is the exact cause. With `detail` `effect_mismatch`
 the action already happened and changed the screen differently than taught: tell the person before anything runs it again. Answer one by teaching or fixing its step with `answer_doubt` (the same fields as `teach_step`); the doubt closes only
-once the step is saved. A doubt may carry `note`: words the person wrote when asking for help, so read them. A person can also close a doubt by trying the flow again; you will not see it open any more. Do not dismiss doubts for the person: the editor shows them as a count and only you and the Tutor queue screen can
-answer.
+once the step is saved. A doubt may carry `note`: words the person wrote when asking for help, so read them. A person can also close a doubt by trying the flow again; you will not see it open any more. Do not dismiss doubts for the person: the editor lists a stopped chore on Home with a way to try it again, and only you can
+answer a doubt.
 
 ## What not to do
 

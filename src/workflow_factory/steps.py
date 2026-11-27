@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS step_state (
     PRIMARY KEY (app, name)
 )
 """
-# the newest version of each app a run has seen: lets the library show to_revalidate before any lookup
+# the newest version of each app a run has seen: lets the Apps screen show to_revalidate before any lookup
 SEEN_SCHEMA = "CREATE TABLE IF NOT EXISTS app_seen (app TEXT PRIMARY KEY, version TEXT NOT NULL)"
 # the product name each app's executable declared when it was last seen: what screens call it once it is closed
 NAMES_SCHEMA = "CREATE TABLE IF NOT EXISTS app_names (app TEXT PRIMARY KEY, name TEXT NOT NULL)"

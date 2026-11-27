@@ -40,8 +40,8 @@ real exe, not the npm `.cmd` shim).
 
 All 16 build tickets and the research tickets are done and tested (`uv run pytest -q`, plus opt-in tests with `-m
 live` and `-m web`). The product shell is in progress (`.scratch/usable-product/spec.md`): the one command and the
-zero-setup tutor connection are done; the editor is being redesigned as a node editor fed by lessons, scheduling from
-the screen and a first-run check follow. No lessons are taught yet; the data folder starts empty. The example flow
+zero-setup tutor connection are done; the editor was rebuilt around chores (Home, a top-to-bottom canvas, daily runs, an
+Apps screen and a first-day guide: `.scratch/editor-rethink/spec.md`). No lessons are taught yet; the data folder starts empty. The example flow
 Vivaldi -> Word -> Telegram is not built (research in `docs/research/17` to `19`); writing into a Word page needs the
 paste step of ticket 29.
 

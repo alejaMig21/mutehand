@@ -15,13 +15,12 @@ from pathlib import Path
 from workflow_factory.data import expressions
 from workflow_factory.desktop import plain_app
 from workflow_factory.flow import Flow, Node
-from workflow_factory.legacy import upgrade_node
+from workflow_factory.legacy import add_text_column, upgrade_node
 from workflow_factory.queue import last_runs, list_doubts
 from workflow_factory.steps import Origin, Status, Step, list_steps, seen_versions, step_reports
 
 SCHEMA = "CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, definition TEXT NOT NULL)"
 # where the editor drew each node: kept apart so moving a card never changes the definition a checkpoint belongs to.
-# These are the places of the top-to-bottom canvas; the `flow_layout` table of the left-to-right one is no longer read.
 LAYOUT_SCHEMA = "CREATE TABLE IF NOT EXISTS flow_positions (id TEXT PRIMARY KEY, positions TEXT NOT NULL)"
 # what the person calls a flow and the app it runs on: kept apart too, so a rename never drops a checkpoint
 INFO_SCHEMA = "CREATE TABLE IF NOT EXISTS flow_info (id TEXT PRIMARY KEY, title TEXT, app TEXT)"
@@ -109,8 +108,7 @@ def set_title(user_db: Path, flow_id: str, title: str) -> None:
 def _trash_tables(db: sqlite3.Connection) -> None:
     for schema in (SCHEMA, LAYOUT_SCHEMA, INFO_SCHEMA, TRASH_SCHEMA):
         db.execute(schema)
-    if not any(column[1] == "deleted_at" for column in db.execute("PRAGMA table_info(flow_trash)")):
-        db.execute("ALTER TABLE flow_trash ADD COLUMN deleted_at TEXT")  # a trash made before deletions were dated
+    add_text_column(db, "flow_trash", "deleted_at")  # a trash made before deletions were dated
 
 
 def trash_flow(user_db: Path, flow_id: str, schedules: list[dict]) -> bool:
