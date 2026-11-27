@@ -19,10 +19,10 @@ lesson; where teaching is needed, it shows the message to send in a chat.
 
 ```text
 cd web && npm ci && npm run build   # the editor is built into src/workflow_factory/web (tracked, so a plain checkout runs)
-uv build                            # dist/workflow_factory-<version>-py3-none-any.whl, editor included
+uv build                            # dist/mutehand-<version>-py3-none-any.whl, editor included
 ```
 
-The wheel needs Python 3.14 and Windows (the desktop adapter and `pywin32`); it installs the `workflow-factory` command.
+The wheel needs Python 3.14 and Windows (the desktop adapter and `pywin32`); it installs the `mutehand` command.
 
 ## Teach it (an agent chat)
 

@@ -5,6 +5,7 @@ no screenshot or trace option, and no tool that returns a secret value (ADR 0002
 """
 
 import functools
+import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -32,8 +33,8 @@ def _code_only(tool):
     return guarded
 
 
-def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPServer:
-    server = MCPServer("workflow-factory-tutor")
+def build_server(user_db: Path, desktop_for: Callable[[str], Desktop], factory_db: Path | None = None) -> MCPServer:
+    server = MCPServer("mutehand-tutor")
 
     @server.tool(name="observe_app")
     @_code_only
@@ -135,7 +136,9 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPSer
     @server.tool(name="list_known_steps")
     def list_known_steps(app: str) -> list[dict]:
         """What the apprentice already knows how to do in an app: each step's name, action and state."""
-        known = [step for step in list_steps(user_db, None, light=True) if step.app == app]
+        known = [step for step in list_steps(user_db, factory_db, light=True) if step.app == app]
+        if tutor.is_private(user_db, app):  # the names of a private app's actions stay out, like what observe_app shows
+            return [{"private": True, "count": len(known)}] if known else []
         return [{"name": step.name, "action": step.action, "state": report["state"]}
                 for step, report in zip(known, step_reports(user_db, known), strict=True)]
 
@@ -159,12 +162,12 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPSer
         """Save a chore the person described. Nodes are {id, step, kind?, fields?, inputs?}; edges are [from, to] pairs
         (None: the nodes run in order). A step not taught yet is allowed: the answer's missing_steps lists the lessons
         still to teach with teach_step, then flow_status says when the chore is ready."""
-        return flows.create_flow(user_db, title, app, nodes, edges)
+        return flows.create_flow(user_db, title, app, nodes, edges, factory_db)
 
     @server.tool(name="flow_status")
     def flow_status(flow_id: str) -> dict:
         """Whether a chore can run now, why not if it cannot, and which steps are still to be taught."""
-        return flows.flow_readiness(user_db, flow_id)
+        return flows.flow_readiness(user_db, flow_id, factory_db)
 
     return server
 
@@ -172,7 +175,8 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPSer
 def main() -> None:
     user_db = default_user_db()
     user_db.parent.mkdir(parents=True, exist_ok=True)
-    build_server(user_db, AgentDesktop).run()
+    factory = os.environ.get("WORKFLOW_FACTORY_FACTORY_DB")
+    build_server(user_db, AgentDesktop, Path(factory) if factory else None).run()
 
 
 if __name__ == "__main__":

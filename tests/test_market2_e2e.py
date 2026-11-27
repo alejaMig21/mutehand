@@ -26,6 +26,13 @@ def more_menu(page):
     return page.locator("details.app-more")
 
 
+def reread(page, endpoint):
+    """Make the screen read its lists again (the window gets focus back) and wait until the answer has been drawn."""
+    with page.expect_response(lambda response: endpoint in response.url):
+        page.evaluate("() => window.dispatchEvent(new Event('focus'))")
+    page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))")
+
+
 # --- 1: the More menu of the tab bar closes by itself ----------------------------------------------------------------
 
 @pytest.mark.parametrize("how", ["tab", "escape", "outside"])
@@ -136,7 +143,7 @@ def test_after_run_now_the_row_has_one_line_about_the_last_run(tmp_path):
         result = page.get_by_test_id("chore-result-morning")
         result.wait_for()
         assert re.fullmatch(r"Worked .+ at \d\d:\d\d\. 2 steps finished\.", result.inner_text().strip())
-        page.wait_for_timeout(600)  # the list is read again: still one line
+        reread(page, "/api/flow-overview")  # the list is read again: still one line
         assert len(re.findall(r"orked", row(page, "morning").inner_text())) == 1
 
 
@@ -156,7 +163,7 @@ def test_try_again_answers_in_place_of_the_card_and_the_list_below_stays_put(tmp
         fixed.filter(has_text="Fixed").wait_for()
         assert page.get_by_test_id("attention").is_visible()  # the red box did not just disappear
         assert abs(fixed.bounding_box()["y"] - tapped) < 200  # next to where the finger was
-        page.wait_for_timeout(500)
+        reread(page, "/api/flow-overview")
         assert abs(row(page, "evening").bounding_box()["y"] - before) <= 60
         fixed.get_by_role("button", name="Hide").click()
         page.get_by_test_id("tried-weekly").wait_for(state="detached")
@@ -190,7 +197,7 @@ def test_the_programs_keep_their_order_after_something_is_fixed(tmp_path):
         app_row(page, "zeta.exe").click()
         page.get_by_role("button", name="Allow again").click()
         page.get_by_test_id("app-allowed-Open").wait_for()
-        page.wait_for_timeout(500)
+        reread(page, "/api/apps")
         assert page.evaluate(order) == first
 
 

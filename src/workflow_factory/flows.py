@@ -320,25 +320,25 @@ def flow_overview(user_db: Path, factory_db: Path | None) -> list[dict]:
     return overview
 
 
-def create_flow(user_db: Path, title: str, app: str, nodes, edges) -> dict:
+def create_flow(user_db: Path, title: str, app: str, nodes, edges, factory_db: Path | None = None) -> dict:
     """Save a new flow under an identifier made from its title, so it never replaces another, and say whether it can run.
 
     A step the apprentice has not been taught is not an error: the flow is saved and `missing_steps` names the lessons
     still to teach. ValueError when the nodes are not a flow."""
     title, app = check_title(title), check_app(app)
-    taken = [*(entry["id"] for entry in list_flows(user_db, None)), *trashed_ids(user_db)]
+    taken = [*(entry["id"] for entry in list_flows(user_db, factory_db)), *trashed_ids(user_db)]
     flow_id = new_flow_id(title, taken)
     try:
         flow = flow_from_dict(flow_id, {"nodes": nodes, "edges": edges})
     except (TypeError, KeyError, AttributeError):  # their words would show how the engine is built
         raise ValueError("that is not a valid flow") from None
     save_flow(user_db, flow, title, app)
-    return flow_readiness(user_db, flow_id)
+    return flow_readiness(user_db, flow_id, factory_db)
 
 
-def flow_readiness(user_db: Path, flow_id: str) -> dict:
+def flow_readiness(user_db: Path, flow_id: str, factory_db: Path | None = None) -> dict:
     """{"flow_id", "ready", "why", "missing_steps"}: what stops a run of the flow, and the steps still to teach."""
-    entry = next((e for e in flow_overview(user_db, None) if e["id"] == flow_id), None)
+    entry = next((e for e in flow_overview(user_db, factory_db) if e["id"] == flow_id), None)
     if entry is None:
         raise ValueError(f"no flow named {flow_id!r}")
     blocked = entry["blocked"]

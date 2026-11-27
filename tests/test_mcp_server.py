@@ -2,8 +2,9 @@ import asyncio
 import json
 
 from mcp.client import Client
+from test_knowledge import source_with_templates
 
-from workflow_factory import load_flow, save_step
+from workflow_factory import build_factory, load_flow, save_step
 from workflow_factory.flows import flow_summaries
 from workflow_factory.mcp_server import build_server
 
@@ -204,3 +205,26 @@ def test_a_data_box_written_from_the_listed_operations_is_saved_and_a_misspelled
     refused = ask(server, "create_flow", {"title": "Typo", "app": "paint.exe", "nodes": [bad], "edges": None})
 
     assert saved["flow_id"] == "sum" and refused.is_error
+
+
+def test_the_known_steps_of_a_private_app_are_counted_and_never_named(tmp_path):
+    taught(tmp_path, "send-it", "pick-chat", app="telegram.exe")
+    server = server_for(tmp_path, {})
+    ask(server, "mark_app_private", {"app": "telegram.exe"})
+
+    result = payload(ask(server, "list_known_steps", {"app": "telegram.exe"}))["result"]
+
+    assert result == [{"private": True, "count": 2}]
+    assert "send-it" not in json.dumps(result)
+
+
+def test_what_the_factory_already_knows_counts_when_a_chore_is_made_through_the_tutor_tools(tmp_path):
+    build_factory(tmp_path / "factory.db", source_with_templates())
+    server = build_server(tmp_path / "user.db", lambda app: None, factory_db=tmp_path / "factory.db")
+
+    known = payload(ask(server, "list_known_steps", {"app": "paint.exe"}))["result"]
+    made = payload(ask(server, "create_flow", {"title": "From the factory", "app": "paint.exe",
+                                               "nodes": [{"id": "a", "step": "open-menu"}], "edges": None}))
+
+    assert [entry["name"] for entry in known] == ["open-menu"]
+    assert made["ready"] is True and made["missing_steps"] == []
