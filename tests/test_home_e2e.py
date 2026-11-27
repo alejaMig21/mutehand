@@ -45,7 +45,7 @@ def home(tmp_path, desktop=None, desktop_for=None):
 def chore(tmp_path, flow_id, title, *steps, app="paint.exe"):
     flow = Flow(id=flow_id, nodes=[Node(f"n{i}", name) for i, name in enumerate(steps, 1)])
     save_flow_on(tmp_path / "user.db", flow, title, app)
-    return flow
+    return load_flow(tmp_path / "user.db", None, flow_id)  # as stored: its nodes say which program they act on
 
 
 def chores(tmp_path):
@@ -186,10 +186,6 @@ def no_boxes(db):
     save_flow_on(db, Flow(id="stuck", nodes=[]), "Stuck", "paint.exe")
 
 
-def no_app(db):
-    save_flow(db, Flow(id="stuck", nodes=[Node("w", kind="wait", fields={"seconds": {"value": 1}})]), "Stuck")
-
-
 def not_learned(db):
     save_flow_on(db, Flow(id="stuck", nodes=[Node("a", "open-menu"), Node("b", "print-it"), Node("c", "print-it")]), "Stuck", "paint.exe")
 
@@ -225,7 +221,6 @@ def unreadable(db):
 
 @pytest.mark.parametrize("trouble, why", [
     (no_boxes, "It has no steps yet. Open it to add some."),
-    (no_app, "No app is chosen for it. Open it, choose one and press Save."),
     (not_learned, "“print-it” is not learned for Paint yet."),
     (learned_for_another_app, "“open-menu” is not learned for Word yet."),
     (never_learned_at_all, "“print-it” is not learned yet."),

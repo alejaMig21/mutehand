@@ -50,7 +50,7 @@ function ChosenBox({ node, meta, nodes, edges, appName, context, ensureSaved, on
     try {
       const values = JSON.parse(context || '{}')
       const flowId = await ensureSaved() // a flow never saved before gets its identifier here
-      const { run_id } = await api(`/api/flows/${encode(flowId)}/nodes/${box.id}/test`, { method: 'POST', body: { app: appName, context: values } })
+      const { run_id } = await api(`/api/flows/${encode(flowId)}/nodes/${box.id}/test`, { method: 'POST', body: { context: values } })
       for (;;) {
         const view = await api(`/api/runs/${run_id}`).catch((e) => {
           if (e.status) throw e

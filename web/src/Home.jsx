@@ -67,7 +67,8 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
 const withNotice = (rows, { notice, at }) => (notice ? rows.toSpliced(Math.min(at, rows.length), 0, <li key="undo-notice">{notice}</li>) : rows)
 
 function Chore({ flow, title, following: { runs, follow, attach, forget }, reload, stopped, tryAgain, clearTried, place, onOpen, onDeleted }) {
-  const { id, app } = flow
+  const { id } = flow
+  const technologies = flow.technologies ?? [] // the programs its step nodes act on: no flow has one program of its own
   const run = runs[id]
   const running = run?.status === 'running'
   const [starting, setStarting] = useState(false)
@@ -78,18 +79,18 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
   const whyLine = useRef(null)
   useEffect(() => { if (running) setProblem('') }, [running]) // it runs after all: what went wrong asking no longer matters
 
-  const appName = app ? appLabel(app) : 'No app chosen'
-  const chip = chipFor(app || title)
+  const appName = technologies.map(appLabel).join(', ')
+  const chip = chipFor(technologies[0] || title)
   const paused = running && Object.values(run.nodes).includes('paused')
   const ran = !running && !starting && !problem && ranResult(run) // a run that ended here replaces the older line at once
   const last = ran ? { ...ran, icon: 'check' } : lastRunWords(flow.last_run)
   const line = starting ? { words: 'Running now', tone: 'info', icon: 'spinner' } : !running ? last : paused
     ? { words: PAUSED_WORDS, tone: 'warn', icon: 'pause' }
     : { words: 'Running now', tone: 'info', icon: 'spinner' }
-  const wrong = !running && (problem || runNoteWords(run, appName))
+  const wrong = !running && (problem || runNoteWords(run, appName || 'the app'))
   // a chore that stopped is tried again, not run: what it is waiting for is the person's Try again
   const again = Boolean(stopped) && !stopped.rejected_by_person.length
-  const why = !running && blockedWords(again && flow.blocked?.why === 'question' ? null : flow.blocked, app && appName)
+  const why = !running && blockedWords(again && flow.blocked?.why === 'question' ? null : flow.blocked, Object.keys(flow.blocked?.by_technology ?? {}).filter(Boolean).map(appLabel).join(', '))
   const label = running ? 'Stop' : starting ? 'Running…' : why ? 'Cannot run yet' : again ? 'Try again' : 'Run now'
   const unavailable = starting || (running && !run.armed) || Boolean(why)
 
@@ -106,7 +107,7 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
       setStarting(true) // drawn before a second press arrives, so the server is asked once
       forget(id)
       clearTried()
-      const { run_id } = await api(`/api/flows/${encode(id)}/run`, { method: 'POST', body: { app, context: {} } })
+      const { run_id } = await api(`/api/flows/${encode(id)}/run`, { method: 'POST', body: { context: {} } })
       follow(id, run_id)
     } catch (e) {
       if (running && e.status === 409) return // it had just ended
@@ -132,7 +133,7 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
       <div className="chore-words">
         {/* the button covers the whole row, under the row's other controls */}
         <h2><button className="chore-open" data-testid={`open-chore-${id}`} onClick={onOpen}>{title}</button></h2>
-        <p className="muted">{appName}</p>
+        {appName && <p className="muted">{appName}</p>}
         <p className={`chore-line tone-${line.tone}`} role="status" data-testid={ran ? `chore-result-${id}` : undefined}><Icon name={line.icon} size={18} /> {line.words}{again && !running && '. See above.'}</p>
         {why && <p className="chore-line tone-warn" id={`why-${id}`} data-testid={`chore-why-${id}`} tabIndex={-1} ref={whyLine}><Icon name="alert" size={18} /> {why}</p>}
         {wrong && <p className="chore-line tone-bad" role="alert"><Icon name="alert" size={18} /> {wrong}</p>}

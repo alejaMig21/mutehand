@@ -285,11 +285,10 @@ def _why_not(flow: Flow, learned: dict, seen: dict, waiting: bool) -> dict | Non
 
     `learned` is {(technology, step name): (step, state)}; `seen` the newest version of each app a run has met."""
     pairs = list(dict.fromkeys((node.technology, node.step) for node in flow.nodes if node.kind in ("step", "loop")))
-    bare = [pair for pair in pairs if not pair[0]]
     known = {pair: learned[pair] for pair in pairs if pair in learned}
     # A step taught again since the last run is newer than what was seen: only the mark a run left on it, or (for factory
     # knowledge, which holds no mark) an older version, means it has to be learned again.
-    missing = [pair for pair in pairs if pair[0] and pair not in known]
+    missing = [pair for pair in pairs if pair not in known]  # a step node with no technology is learned nowhere
     rejected = [pair for pair, (_, state) in known.items() if state == Status.REJECTED]
     stale = [pair for pair, (step, state) in known.items() if state == Status.TO_REVALIDATE and (
         step.status == Status.TO_REVALIDATE
@@ -297,7 +296,6 @@ def _why_not(flow: Flow, learned: dict, seen: dict, waiting: bool) -> dict | Non
     reasons = (  # (code, whether it holds, the (technology, step) pairs it is about)
         ("empty", not flow.nodes, []),
         ("expression", any(expressions(node.fields) for node in flow.nodes), []),
-        ("no_technology", bare, bare),
         ("not_learned", missing, missing),
         ("rejected", rejected, rejected),
         ("to_revalidate", stale, stale),

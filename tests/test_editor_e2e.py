@@ -563,8 +563,8 @@ def test_dropping_a_recipe_adds_its_connected_nodes_and_adapted_steps_say_where_
             assert "Adapted from A" in page.get_by_test_id("node-n2").inner_text()  # compose was taught for b on its own
             assert page.get_by_test_id("cannot-start").count() == 0 and not page.get_by_test_id("run").is_disabled()
 
-            page.get_by_test_id("app-name").select_option("a.exe")  # the original app: nothing is adapted
-            assert "Adapted" not in page.get_by_test_id("node-n2").inner_text()
+            page.get_by_test_id("app-name").select_option("a.exe")  # the panel's program: a node keeps the one it acts on
+            assert "Adapted from A" in page.get_by_test_id("node-n2").inner_text()
             browser.close()
     finally:
         server.stop()

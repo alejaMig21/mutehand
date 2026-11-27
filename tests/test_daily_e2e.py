@@ -177,7 +177,7 @@ def test_a_schedule_made_before_shows_on_its_chore_and_on_the_canvas_without_rew
     chores(tmp_path)
     scheduler = FakeScheduler()
     # a task made by the old Schedules screen, which put no start box on the flow
-    create_schedule("morning daily 0645", "morning", "paint.exe", "06:45", ["--user-db", str(tmp_path / "user.db")],
+    create_schedule("morning daily 0645", "morning", "06:45", ["--user-db", str(tmp_path / "user.db")],
                     runner=scheduler)
     with served(tmp_path, scheduler=scheduler) as (page, _, _):
         page.get_by_test_id("daily-morning").filter(has_text="Every day at 6:45 AM").wait_for()

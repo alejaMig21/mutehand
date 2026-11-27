@@ -47,7 +47,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const [flows, setFlows] = useState([])
   const [flowId, setFlowId] = useState(null) // null: a new flow, which gets its identifier when it is first saved
   const [title, setTitle] = useState(FIRST_TITLE)
-  const [saved, setSaved] = useState({ json: EMPTY_FLOW, title: FIRST_TITLE, app: '' })
+  const [saved, setSaved] = useState({ json: EMPTY_FLOW, title: FIRST_TITLE })
   const [appName, setAppName] = useState('')
   const [context, setContext] = useState('{}')
   const [nodes, setNodes, onNodesChange] = useNodesState([])
@@ -90,9 +90,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const template = flows.some((f) => f.id === flowId && f.origin === 'factory') // read-only: a copy is what is edited
   const apps = useMemo(() => [...new Set(steps.map((s) => s.app))], [steps])
   const runsOn = taughtApp(appName, apps)
-  // choosing an app on a new flow is not work to lose; on a stored one it is a change to keep
   const dirty = JSON.stringify(body) !== saved.json || title !== saved.title || invalid.length > 0
-    || (isStored && runsOn !== taughtApp(saved.app, apps)) // both as taught: the steps may arrive after the flow
   // changes the server has not got: a chore with no box yet is not stored, so its name alone is nothing to lose
   const unkept = dirty && (isStored || nodes.length > 0)
   // what keeps the flow from being stored, in the person's words (the box says it too)
@@ -260,7 +258,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
 
   const addStep = (step, dropped) => {
     if (nodes.length === 0) setAppName(step.app) // a flow runs on one app: the first step says which
-    addNode({ step: step.name }, dropped)
+    addNode({ step: step.name, technology: step.app }, dropped)
   }
 
   function drop(event) {
@@ -282,7 +280,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     let list = [...nodes]
     const added = recipe.holes.map((hole) => {
       const id = nextNodeId(list)
-      const node = { id, step: bound[hole.hole] ?? `${recipe.name}-${hole.hole}`, inputs: [], exclusive_input: false }
+      const node = { id, step: bound[hole.hole] ?? `${recipe.name}-${hole.hole}`, technology: runsOn, inputs: [], exclusive_input: false }
       const card = { id, type: 'card', data: { node, hole: { recipe: recipe.name, hole: hole.hole } } }
       list = [...list, card]
       return card
@@ -336,9 +334,9 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       setFlowId(id)
       keep(id, read.revision)
       setTitle(read.title)
-      if (read.app) setAppName(read.app)
-      setSaved({ json: JSON.stringify(toFlowJson(loaded.nodes, loaded.edges)), title: read.title,
-        app: read.app || runsOn })
+      const first = read.nodes.find((n) => n.technology)?.technology // the panel offers the program of the first node
+      if (first) setAppName(first)
+      setSaved({ json: JSON.stringify(toFlowJson(loaded.nodes, loaded.edges)), title: read.title })
       setSelectedId(null)
       setNodeData({})
       if (id !== flowId) setContext('{}') // starting values belong to one flow
@@ -377,7 +375,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     setDaily(null)
     setSettingDaily(false)
     setTitle(fresh)
-    setSaved({ json: EMPTY_FLOW, title: fresh, app: '' })
+    setSaved({ json: EMPTY_FLOW, title: fresh })
     setContext('{}')
     setSelectedId(null)
     setNodeData({})
@@ -434,7 +432,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       setError(`${held} Nothing was kept since.`)
       return Promise.resolve(null)
     }
-    const snap = { nodes, edges, title, app: runsOn, ticket: busy.current.ticket, was: { ...stored.current } }
+    const snap = { nodes, edges, title, ticket: busy.current.ticket, was: { ...stored.current } }
     const done = queue.current.then(() => store(snap, force))
     queue.current = done
     return done
@@ -444,7 +442,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     const here = () => snap.ticket === busy.current.ticket // false: another flow is on the screen by now
     const was = here() ? stored.current : snap.was
     const sent = toFlowJson(snap.nodes, snap.edges)
-    const flow = { ...sent, title: snap.title, app: snap.app }
+    const flow = { ...sent, title: snap.title }
     try {
       let kept
       try {
@@ -464,7 +462,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       }
       stored.current = { id: kept.id, revision: kept.revision }
       setFlowId(kept.id)
-      setSaved({ json: JSON.stringify(sent), title: kept.title, app: snap.app })
+      setSaved({ json: JSON.stringify(sent), title: kept.title })
       setTitle((current) => (current === snap.title ? kept.title : current))
       setProblem('')
       setConflict('')
@@ -530,7 +528,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       const id = await ensureStored()
       if (!id) return
       forget(id)
-      const { run_id } = await api(`${flowUrl(id)}/run`, { method: 'POST', body: { app: runsOn, context: values } })
+      const { run_id } = await api(`${flowUrl(id)}/run`, { method: 'POST', body: { context: values } })
       follow(id, run_id)
     } catch (e) {
       setError(e.message)
@@ -581,7 +579,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const viewNodes = useMemo(() => nodes.map((n) => {
     const node = n.data.node
     if (node.kind && node.kind !== 'step') return n
-    const step = steps.find((s) => s.name === node.step && appKey(s.app) === appKey(appName))
+    const step = steps.find((s) => s.name === node.step && appKey(s.app) === appKey(node.technology || appName))
     return { ...n, data: { ...n.data, meta: step ? { ...metaOf(step), hole: n.data.hole } : { missing: true, hole: n.data.hole } } }
   }), [nodes, steps, appName])
 

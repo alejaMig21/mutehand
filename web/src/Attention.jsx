@@ -21,7 +21,7 @@ export function useTryAgain({ runs, follow, forget }) {
     try {
       if (ensure) await ensure()
       forget(item.flow)
-      const { run_id } = await api(`/api/flows/${encode(item.flow)}/try-again`, { method: 'POST', body: { app: item.app, context: {} } })
+      const { run_id } = await api(`/api/flows/${encode(item.flow)}/try-again`, { method: 'POST', body: { context: {} } })
       setTries((all) => ({ ...all, [item.flow]: { before: item, runId: run_id, result: null } }))
       follow(item.flow, run_id)
     } catch (e) {

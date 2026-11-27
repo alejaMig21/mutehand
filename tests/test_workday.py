@@ -55,6 +55,22 @@ def test_a_finished_workday_exits_zero_and_writes_a_report_of_what_ran(tmp_path,
     assert capsys.readouterr().out.strip() == f"status=finished report={path}"
 
 
+def test_a_workday_needs_no_program_and_runs_each_node_on_its_own(tmp_path):
+    db = tmp_path / "user.db"
+    save_step(db, step("save", "Save workbook", app="excel.exe"))
+    save_step(db, step("save", "Save picture", app="paint.exe"))
+    save_flow(db, Flow(id="both", nodes=[Node("a", "save", technology="excel.exe"), Node("b", "save", technology="paint.exe")]))
+    desktops = {"excel.exe": FakeDesktop(controls=[button("Save workbook")], app="excel.exe"),
+                "paint.exe": FakeDesktop(controls=[button("Save picture")], app="paint.exe")}
+
+    code = main(["--flow", "both", "--user-db", str(db), "--report-dir", str(tmp_path / "reports"), "--no-hotkey"],
+                desktop_for=desktops.__getitem__)
+
+    assert code == EXIT_FINISHED
+    assert [d.clicks[0].name for d in desktops.values()] == ["Save workbook", "Save picture"]
+    assert "app" not in json.loads(reports(tmp_path)[0].read_text(encoding="utf-8"))
+
+
 def test_a_workday_that_stops_exits_one_and_says_what_stopped_and_why(tmp_path):
     setup(tmp_path)
 

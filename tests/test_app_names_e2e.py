@@ -120,17 +120,6 @@ def test_no_screen_shows_a_file_name_and_each_calls_the_app_the_same(tmp_path, b
     assert_no_file_names(page)
 
 
-def test_a_refused_schedule_names_the_app_without_an_extension(tmp_path, browse):
-    one_step_flow(tmp_path, app="zz qx.exe")  # a space: Windows Task Scheduler is never given such a name
-
-    page = browse()
-    page.get_by_test_id("tab-home").click()
-    page.get_by_test_id("daily-morning").click()
-    page.get_by_test_id("daily-set-morning").click()
-    page.get_by_text("the app name may only use").wait_for()
-    assert_no_file_names(page)
-
-
 def test_apps_that_declare_the_same_name_can_still_be_told_apart(tmp_path, browse):
     db = one_step_flow(tmp_path)
     save_step(db, step("stamp", "Stamp", app="vvrt.exe"))
