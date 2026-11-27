@@ -86,13 +86,11 @@ def test_a_refused_request_says_what_is_wrong_without_showing_the_inside(tmp_pat
     server = make_server(tmp_path)
     try:
         call(server, "/api/flows/report", "PUT", ONE)
-        no_body = call(server, "/api/flows/report/run", "POST", {})
         strange = call(server, "/api/flows/odd", "PUT", {"nodes": [{"id": "n1", "step": "x", "surprise": 1}]})
         too_long = call(server, f"/api/flows/{'a' * 101}", "PUT", ONE)
     finally:
         server.stop()
 
-    assert no_body[:2] == (400, {"error": "the request is missing 'app'"})
     assert strange[:2] == (400, {"error": "that is not a valid flow"})
     assert too_long[0] == 400 and "100 characters" in too_long[1]["error"]
 

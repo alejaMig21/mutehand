@@ -1,14 +1,17 @@
 """Fake desktop port: the single test seam. No real screen access."""
 
+import sqlite3
 import threading
 import time
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 
 from fake_clipboard import FakeClipboard
 
-from workflow_factory import Locator, Step
+from workflow_factory import Locator, Step, save_flow
 from workflow_factory.clipboard import backup, restore, set_text
 from workflow_factory.desktop import AppKey, Control, DesktopError, Frame
+from workflow_factory.flows import with_technology
 
 
 class FakeDesktop:
@@ -218,3 +221,15 @@ def icon(name, x, y, width, height):
 
 def pane(name, x, y, width, height):
     return Control(role="pane", name=name, bounds=(x, y, width, height))
+
+
+def save_flow_on(db, flow, title=None, app=None):
+    """Save a flow whose step nodes that name no technology act on `app`."""
+    save_flow(db, with_technology(flow, app) if app else flow, title)
+
+
+def save_legacy_flow(db, flow, title=None, app=None):
+    """Save a flow the way an earlier version did: nodes without a technology and the program kept on the flow."""
+    save_flow(db, flow, title)
+    with closing(sqlite3.connect(db)) as conn, conn:
+        conn.execute("UPDATE flow_info SET app = ? WHERE id = ?", (app, flow.id))

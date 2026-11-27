@@ -7,12 +7,12 @@ import pytest
 from fake_scheduler import FakeScheduler
 from test_api import call
 
-from workflow_factory import Flow, Node, reject_step, run_flow, save_flow, save_step
+from workflow_factory import Flow, Node, reject_step, run_flow, save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.steps import revalidate_changed_versions
 from workflow_factory.tutor import mark_private
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 MISSING = {"id": "agent-desktop", "title": "Desktop control (agent-desktop)", "why": "It is how the apprentice sees and acts on apps.",
            "ok": False, "fix": "Install it with npm: npm install -g agent-desktop", "optional": False}
@@ -26,8 +26,8 @@ class Setup:
         self.app = app
         save_step(self.db, step("open-menu", "Alpha", app=app))
         save_step(self.db, step("save-file", "Beta", app=app))
-        save_flow(self.db, Flow(id="morning", nodes=[Node("a", "open-menu"), Node("b", "save-file")]), "Morning report", app)
-        save_flow(self.db, Flow(id="evening", nodes=[Node("a", "open-menu")]), "Evening report", app)
+        save_flow_on(self.db, Flow(id="morning", nodes=[Node("a", "open-menu"), Node("b", "save-file")]), "Morning report", app)
+        save_flow_on(self.db, Flow(id="evening", nodes=[Node("a", "open-menu")]), "Evening report", app)
         self.server = ApiServer(self.db, None, lambda name: FakeDesktop(controls=[button("Alpha")], app=app), token="secret-token",
                                 schedule_runner=FakeScheduler())
         self.server.start()

@@ -5,11 +5,9 @@ import re
 import sqlite3
 import unicodedata
 from collections import Counter
-from collections.abc import Callable
 from contextlib import closing
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
-from functools import cache
 from pathlib import Path
 
 from workflow_factory.data import expressions
@@ -22,7 +20,8 @@ from workflow_factory.steps import Origin, Status, Step, list_steps, seen_versio
 SCHEMA = "CREATE TABLE IF NOT EXISTS flows (id TEXT PRIMARY KEY, definition TEXT NOT NULL)"
 # where the editor drew each node: kept apart so moving a card never changes the definition a checkpoint belongs to.
 LAYOUT_SCHEMA = "CREATE TABLE IF NOT EXISTS flow_positions (id TEXT PRIMARY KEY, positions TEXT NOT NULL)"
-# what the person calls a flow and the app it runs on: kept apart too, so a rename never drops a checkpoint
+# what the person calls a flow: kept apart too, so a rename never drops a checkpoint. `app` is what a flow saved before nodes
+# recorded their technology kept: it is only read, to give those nodes their technology, and cleared by the next save.
 INFO_SCHEMA = "CREATE TABLE IF NOT EXISTS flow_info (id TEXT PRIMARY KEY, title TEXT, app TEXT)"
 # a deleted flow waits here until it is undone: its words, places and daily runs, so that undo gives back all of them.
 # ponytail: kept for good, and its identifier stays taken so a new flow never inherits the old history; purge by age if it grows.
@@ -82,18 +81,17 @@ def new_flow_id(title: str, taken: list[str]) -> str:
     return new
 
 
-def save_flow(db_path: Path, flow: Flow, title: str | None = None, app: str | None = None) -> None:
-    """Store a flow. A title or app left as None keeps the stored one."""
+def save_flow(db_path: Path, flow: Flow, title: str | None = None) -> None:
+    """Store a flow. A title left as None keeps the stored one."""
     if not flow.id:
         raise ValueError("a flow needs an id to be saved")
     title = None if title is None else check_title(title)
-    app = None if app is None else check_app(app)
     with closing(sqlite3.connect(db_path)) as db, db:
         db.execute(SCHEMA)
         db.execute(INFO_SCHEMA)
         db.execute("INSERT OR REPLACE INTO flows VALUES (?, ?)", (flow.id, _dump(flow)))
-        db.execute("INSERT INTO flow_info (id, title, app) VALUES (?, ?, ?) ON CONFLICT (id) DO UPDATE SET "
-                   "title = COALESCE(excluded.title, title), app = COALESCE(excluded.app, app)", (flow.id, title, app))
+        db.execute("INSERT INTO flow_info (id, title) VALUES (?, ?) ON CONFLICT (id) DO UPDATE SET "
+                   "title = COALESCE(excluded.title, title), app = NULL", (flow.id, title))
 
 
 def set_title(user_db: Path, flow_id: str, title: str) -> None:
@@ -165,22 +163,40 @@ def _has_table(db: sqlite3.Connection, name: str) -> bool:
     return db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone() is not None
 
 
-def _read(db: sqlite3.Connection, flow_id: str) -> Flow | None:
+def _read(db: sqlite3.Connection, flow_id: str) -> tuple[Flow, str] | None:
+    """(the flow, the app it was saved with before nodes recorded a technology: "" when none), or None."""
     if not _has_table(db, "flows"):  # e.g. a factory file that only ships steps
         return None
     row = db.execute("SELECT definition FROM flows WHERE id = ?", (flow_id,)).fetchone()
-    return _load(flow_id, row[0]) if row else None
+    if row is None:
+        return None
+    old = db.execute("SELECT app FROM flow_info WHERE id = ?", (flow_id,)).fetchone() if _has_table(db, "flow_info") else None
+    return _load(flow_id, row[0]), (old and old[0]) or ""
 
 
 def load_flow(user_db: Path, factory_db: Path | None, flow_id: str) -> Flow | None:
-    """The user's flow first, then the factory template (opened read-only)."""
+    """The user's flow first, then the factory template (opened read-only). A step node saved without a technology takes
+    the app its flow was saved with, else the app that has the flow's steps: the next save keeps it on the node."""
     with closing(sqlite3.connect(user_db)) as db, db:
         db.execute(SCHEMA)
         found = _read(db, flow_id)
-    if found or factory_db is None or not factory_db.exists():
-        return found
-    with closing(_read_only(factory_db)) as db:
-        return _read(db, flow_id)
+    if found is None and factory_db is not None and factory_db.exists():
+        with closing(_read_only(factory_db)) as db:
+            found = _read(db, flow_id)
+    return found and _with_technologies(*found, user_db, factory_db)
+
+
+def with_technology(flow: Flow, technology: str) -> Flow:
+    """The flow with `technology` on every step node that names none."""
+    return replace(flow, nodes=[replace(node, technology=technology) if node.kind in ("step", "loop") and not node.technology
+                                else node for node in flow.nodes])
+
+
+def _with_technologies(flow: Flow, old_app: str, user_db: Path, factory_db: Path | None) -> Flow:
+    if all(node.technology for node in flow.nodes if node.kind in ("step", "loop")):
+        return flow
+    steps = list_steps(user_db, factory_db)
+    return with_technology(flow, taught_app(old_app, steps) if old_app else guess_app(flow, steps))
 
 
 def _read_only(factory_db: Path) -> sqlite3.Connection:
@@ -225,12 +241,11 @@ def list_flows(user_db: Path, factory_db: Path | None) -> list[dict]:
 def _info_rows(db: sqlite3.Connection) -> dict:
     if not _has_table(db, "flow_info"):
         return {}
-    return {flow_id: {key: value for key, value in (("title", title), ("app", app)) if value}
-            for flow_id, title, app in db.execute("SELECT id, title, app FROM flow_info")}
+    return {flow_id: {"title": title} if title else {} for flow_id, title in db.execute("SELECT id, title FROM flow_info")}
 
 
 def stored_info(user_db: Path, factory_db: Path | None) -> dict[str, dict]:
-    """{flow id: {"title", "app"}}, holding only what was stored; the user's words over the factory's."""
+    """{flow id: {"title"}}, holding only what was stored; the user's words over the factory's."""
     found = {}
     if factory_db is not None and factory_db.exists():
         with closing(_read_only(factory_db)) as db:
@@ -247,23 +262,10 @@ def guess_app(flow: Flow, steps: list[Step]) -> str:
     return apps.most_common(1)[0][0] if apps else ""
 
 
-def describe_flow(flow_id: str, info: dict, flow: Callable[[], Flow], steps: Callable[[], list[Step]]) -> dict:
-    """What the screen calls a flow. One stored before titles takes its identifier and the app of its steps."""
-    app = info.get("app")
-    if not app:
-        try:
-            app = guess_app(flow(), steps())
-        except (ValueError, TypeError, KeyError):  # a definition that cannot be read must not hide the other flows
-            app = ""
-    return {"title": info.get("title") or flow_id, "app": app}
-
-
 def flow_summaries(user_db: Path, factory_db: Path | None) -> list[dict]:
-    """`list_flows` with each flow's title and app."""
+    """`list_flows` with each flow's title: the person's words, else its identifier."""
     info = stored_info(user_db, factory_db)
-    steps = cache(lambda: list_steps(user_db, factory_db))  # read once, and only for a flow with no app stored
-    return [{**entry, **describe_flow(entry["id"], info.get(entry["id"], {}),
-                                      lambda i=entry["id"]: load_flow(user_db, factory_db, i), steps)}
+    return [{**entry, "title": info.get(entry["id"], {}).get("title") or entry["id"]}
             for entry in list_flows(user_db, factory_db)]
 
 
@@ -277,33 +279,43 @@ def _older(version: str, than: str) -> bool:
     return [int(n) for n in re.findall(r"\d+", version)] < [int(n) for n in re.findall(r"\d+", than)]
 
 
-def _why_not(flow: Flow, app: str, learned: dict, seen: dict, waiting: bool) -> dict | None:
-    """The first thing a run of `flow` on `app` would refuse or stop on, as {"why": code, "steps": [names]}, or None.
+def _why_not(flow: Flow, learned: dict, seen: dict, waiting: bool) -> dict | None:
+    """The first thing a run of `flow` would refuse or stop on, as {"why": code, "steps": [names], "by_technology":
+    {technology: [names]}}, or None.
 
-    `learned` is {(app, step name): (step, state)}; `seen` the newest version of each app a run has met."""
-    used = list(dict.fromkeys(node.step for node in flow.nodes if node.kind in ("step", "loop")))
-    known = {name: learned[app, name] for name in used if (app, name) in learned}
+    `learned` is {(technology, step name): (step, state)}; `seen` the newest version of each app a run has met."""
+    pairs = list(dict.fromkeys((node.technology, node.step) for node in flow.nodes if node.kind in ("step", "loop")))
+    bare = [pair for pair in pairs if not pair[0]]
+    known = {pair: learned[pair] for pair in pairs if pair in learned}
     # A step taught again since the last run is newer than what was seen: only the mark a run left on it, or (for factory
     # knowledge, which holds no mark) an older version, means it has to be learned again.
-    missing = [name for name in used if name not in known]
-    rejected = [name for name, (_, state) in known.items() if state == Status.REJECTED]
-    stale = [name for name, (step, state) in known.items() if state == Status.TO_REVALIDATE and (
-        step.status == Status.TO_REVALIDATE or (step.origin == Origin.FACTORY and _older(step.version, seen[app])))]
-    reasons = (  # (code, whether it holds, the steps it is about)
+    missing = [pair for pair in pairs if pair[0] and pair not in known]
+    rejected = [pair for pair, (_, state) in known.items() if state == Status.REJECTED]
+    stale = [pair for pair, (step, state) in known.items() if state == Status.TO_REVALIDATE and (
+        step.status == Status.TO_REVALIDATE
+        or (step.origin == Origin.FACTORY and pair[0] in seen and _older(step.version, seen[pair[0]])))]
+    reasons = (  # (code, whether it holds, the (technology, step) pairs it is about)
         ("empty", not flow.nodes, []),
         ("expression", any(expressions(node.fields) for node in flow.nodes), []),
+        ("no_technology", bare, bare),
         ("not_learned", missing, missing),
         ("rejected", rejected, rejected),
         ("to_revalidate", stale, stale),
-        ("no_app", not app, []),
         ("question", waiting, []),
     )
-    return next(({"why": why, "steps": names} for why, holds, names in reasons if holds), None)
+    for why, holds, about in reasons:
+        if holds:
+            by_technology: dict[str, list[str]] = {}
+            for tech, name in about:
+                by_technology.setdefault(tech, []).append(name)
+            return {"why": why, "steps": list(dict.fromkeys(name for _, name in about)), "by_technology": by_technology}
+    return None
 
 
 def flow_overview(user_db: Path, factory_db: Path | None) -> list[dict]:
-    """What Home says about each flow: `flow_summaries` with the app as taught, how the last run went, and `blocked`:
-    why it cannot run (see `_why_not`), or None. No desktop is asked and nothing seen on a screen is included."""
+    """What Home says about each flow: `flow_summaries` with the technologies its step nodes act on, how the last run
+    went, and `blocked`: why it cannot run (see `_why_not`), or None. No desktop is asked and nothing seen on a screen is
+    included."""
     steps = list_steps(user_db, factory_db)
     learned = {(step.app, step.name): (step, report["state"])
                for step, report in zip(steps, step_reports(user_db, steps), strict=True)}
@@ -311,28 +323,32 @@ def flow_overview(user_db: Path, factory_db: Path | None) -> list[dict]:
     waiting = {doubt.flow_id for doubt in list_doubts(user_db, "open")}
     overview = []
     for entry in flow_summaries(user_db, factory_db):
-        app = taught_app(entry["app"], steps)
         try:
-            blocked = _why_not(load_flow(user_db, factory_db, entry["id"]), app, learned, seen, entry["id"] in waiting)
+            flow = load_flow(user_db, factory_db, entry["id"])
+            technologies = list(dict.fromkeys(node.technology for node in flow.nodes
+                                              if node.kind in ("step", "loop") and node.technology))
+            blocked = _why_not(flow, learned, seen, entry["id"] in waiting)
         except (ValueError, TypeError, KeyError):  # a definition that cannot be read must not hide the other flows
-            blocked = {"why": "unreadable", "steps": []}
-        overview.append({**entry, "app": app, "last_run": runs.get(entry["id"]), "blocked": blocked})
+            technologies, blocked = [], {"why": "unreadable", "steps": [], "by_technology": {}}
+        overview.append({**entry, "technologies": technologies, "last_run": runs.get(entry["id"]), "blocked": blocked})
     return overview
 
 
 def create_flow(user_db: Path, title: str, app: str, nodes, edges, factory_db: Path | None = None) -> dict:
     """Save a new flow under an identifier made from its title, so it never replaces another, and say whether it can run.
 
-    A step the apprentice has not been taught is not an error: the flow is saved and `missing_steps` names the lessons
-    still to teach. ValueError when the nodes are not a flow."""
-    title, app = check_title(title), check_app(app)
+    A step node that names no technology acts on `app`. A step the apprentice has not been taught is not an error: the flow
+    is saved and `missing_steps` names the lessons still to teach. ValueError when the nodes are not a flow."""
+    title, app = check_title(title), taught_app(check_app(app), list_steps(user_db, factory_db))
     taken = [*(entry["id"] for entry in list_flows(user_db, factory_db)), *trashed_ids(user_db)]
     flow_id = new_flow_id(title, taken)
     try:
+        nodes = [{**node, "technology": node.get("technology") or app} if node.get("kind", "step") in ("step", "loop") else node
+                 for node in nodes]
         flow = flow_from_dict(flow_id, {"nodes": nodes, "edges": edges})
     except (TypeError, KeyError, AttributeError):  # their words would show how the engine is built
         raise ValueError("that is not a valid flow") from None
-    save_flow(user_db, flow, title, app)
+    save_flow(user_db, flow, title)
     return flow_readiness(user_db, flow_id, factory_db)
 
 

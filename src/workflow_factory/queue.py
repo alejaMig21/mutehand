@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS doubts (
     capture TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'answered', 'dismissed')),
     note TEXT,  -- what the person wrote when answering, if anything
-    detail TEXT  -- the exact cause behind the triage reason, as the run history names it
+    detail TEXT,  -- the exact cause behind the triage reason, as the run history names it
+    technology TEXT  -- the program the node acts on (a step node), as its steps are stored
 );
 CREATE TABLE IF NOT EXISTS run_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,6 +79,7 @@ class Doubt:
     note: str | None = None
     detail: str | None = None
     closed_as: str | None = None  # "tried_again" when the person closed it by trying again; None for the tutor's answer
+    technology: str | None = None  # the program the node of a step acts on; None for any other node
 
 
 def _connect(user_db: Path) -> sqlite3.Connection:
@@ -88,27 +90,29 @@ def _connect(user_db: Path) -> sqlite3.Connection:
         add_text_column(db, "run_nodes", column)
     add_text_column(db, "doubts", "detail")
     add_text_column(db, "doubts", "closed_as")
+    add_text_column(db, "doubts", "technology")
     return db
 
 
 def record_doubt(user_db: Path, flow_id: str, node_id: str, step: str,
-                 reason: Reason, capture: dict[str, int], detail: str | None = None) -> int:
+                 reason: Reason, capture: dict[str, int], detail: str | None = None,
+                 technology: str | None = None) -> int:
     with closing(_connect(user_db)) as db, db:
         cursor = db.execute(
-            "INSERT INTO doubts (flow_id, node_id, step, reason, capture, detail) VALUES (?, ?, ?, ?, ?, ?)",
-            (flow_id, node_id, step, str(reason), json.dumps(capture), detail),
+            "INSERT INTO doubts (flow_id, node_id, step, reason, capture, detail, technology) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (flow_id, node_id, step, str(reason), json.dumps(capture), detail, technology),
         )
         return cursor.lastrowid
 
 
 def list_doubts(user_db: Path, status: str | None = None) -> list[Doubt]:
-    query = "SELECT id, flow_id, node_id, step, reason, capture, status, note, detail, closed_as FROM doubts"
+    query = "SELECT id, flow_id, node_id, step, reason, capture, status, note, detail, closed_as, technology FROM doubts"
     args = ()
     if status:
         query, args = query + " WHERE status = ?", (status,)
     with closing(_connect(user_db)) as db:
-        return [Doubt(i, f, n, step, Reason(r), json.loads(c), s, note, detail, closed_as)
-                for i, f, n, step, r, c, s, note, detail, closed_as in db.execute(query + " ORDER BY id", args)]
+        return [Doubt(i, f, n, step, Reason(r), json.loads(c), s, note, detail, closed_as, technology)
+                for i, f, n, step, r, c, s, note, detail, closed_as, technology in db.execute(query + " ORDER BY id", args)]
 
 
 def _close_doubt(user_db: Path, doubt_id: int, new_status: str, note: str | None = None) -> None:

@@ -7,11 +7,11 @@ import pytest
 from fake_scheduler import FakeScheduler
 from test_editor_e2e import DIST, open_page
 
-from workflow_factory import Flow, Node, save_flow, save_step
+from workflow_factory import Flow, Node, save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.upgrade import start_user_db
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 pytestmark = pytest.mark.web
 
@@ -23,7 +23,7 @@ def started(tmp_path):
 
     db = tmp_path / "user.db"
     save_step(db, step("open-menu", "Alpha"))
-    save_flow(db, Flow(id="weekly", nodes=[Node("n1", "open-menu")]), "Weekly export", "paint.exe")
+    save_flow_on(db, Flow(id="weekly", nodes=[Node("n1", "open-menu")]), "Weekly export", "paint.exe")
     start_user_db(db, today=date(2026, 11, 27))
     desktop = FakeDesktop(controls=[button("Alpha")])
     server = ApiServer(db, tmp_path / "factory.db", lambda app: desktop, token="e2e-token", web_dir=DIST,

@@ -18,7 +18,7 @@ from workflow_factory.queue import answer_doubt, list_doubts, record_run
 from workflow_factory.steps import record_app_name, revalidate_changed_versions
 from workflow_factory.tutor import mark_private
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 pytestmark = pytest.mark.web
 
@@ -44,7 +44,7 @@ def home(tmp_path, desktop=None, desktop_for=None):
 
 def chore(tmp_path, flow_id, title, *steps, app="paint.exe"):
     flow = Flow(id=flow_id, nodes=[Node(f"n{i}", name) for i, name in enumerate(steps, 1)])
-    save_flow(tmp_path / "user.db", flow, title, app)
+    save_flow_on(tmp_path / "user.db", flow, title, app)
     return flow
 
 
@@ -183,7 +183,7 @@ def test_a_run_that_cannot_reach_the_app_says_so_without_the_apps_words(tmp_path
 
 
 def no_boxes(db):
-    save_flow(db, Flow(id="stuck", nodes=[]), "Stuck", "paint.exe")
+    save_flow_on(db, Flow(id="stuck", nodes=[]), "Stuck", "paint.exe")
 
 
 def no_app(db):
@@ -191,11 +191,11 @@ def no_app(db):
 
 
 def not_learned(db):
-    save_flow(db, Flow(id="stuck", nodes=[Node("a", "open-menu"), Node("b", "print-it"), Node("c", "print-it")]), "Stuck", "paint.exe")
+    save_flow_on(db, Flow(id="stuck", nodes=[Node("a", "open-menu"), Node("b", "print-it"), Node("c", "print-it")]), "Stuck", "paint.exe")
 
 
 def learned_for_another_app(db):
-    save_flow(db, Flow(id="stuck", nodes=[Node("a", "open-menu")]), "Stuck", "word.exe")
+    save_flow_on(db, Flow(id="stuck", nodes=[Node("a", "open-menu")]), "Stuck", "word.exe")
 
 
 def never_learned_at_all(db):
@@ -204,21 +204,21 @@ def never_learned_at_all(db):
 
 def rejected(db):
     reject_step(db, "paint.exe", "save-file")
-    save_flow(db, Flow(id="stuck", nodes=[Node("a", "save-file")]), "Stuck", "paint.exe")
+    save_flow_on(db, Flow(id="stuck", nodes=[Node("a", "save-file")]), "Stuck", "paint.exe")
 
 
 def app_updated(db):
     revalidate_changed_versions(db, "paint.exe", "2.0")  # what a run records when it meets another version
-    save_flow(db, Flow(id="stuck", nodes=[Node("a", "open-menu")]), "Stuck", "paint.exe")
+    save_flow_on(db, Flow(id="stuck", nodes=[Node("a", "open-menu")]), "Stuck", "paint.exe")
 
 
 def an_expression(db):
     node = Node("a", "open-menu", fields={"text": {"expression": "1 + 1"}})
-    save_flow(db, Flow(id="stuck", nodes=[node]), "Stuck", "paint.exe")
+    save_flow_on(db, Flow(id="stuck", nodes=[node]), "Stuck", "paint.exe")
 
 
 def unreadable(db):
-    save_flow(db, Flow(id="stuck", nodes=[]), "Stuck", "paint.exe")
+    save_flow_on(db, Flow(id="stuck", nodes=[]), "Stuck", "paint.exe")
     with closing(sqlite3.connect(db)) as connection, connection:
         connection.execute("UPDATE flows SET definition = ? WHERE id = 'stuck'", ('{"nodes": [{"id": "a", "kind": "from-the-future"}]}',))
 
@@ -675,7 +675,7 @@ def test_home_fits_a_narrow_window_and_stays_readable(tmp_path, width, height):
 
 def test_an_app_remembered_in_another_spelling_runs_on_the_taught_one(tmp_path):
     chores(tmp_path)
-    save_flow(tmp_path / "user.db", load_flow(tmp_path / "user.db", None, "morning"), app="PAINT")
+    save_flow_on(tmp_path / "user.db", load_flow(tmp_path / "user.db", None, "morning"), app="PAINT")
     asked = []
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
     with home(tmp_path, desktop_for=lambda app: asked.append(app) or desktop) as (page, _):

@@ -81,7 +81,7 @@ def test_deleting_removes_the_flow_and_its_daily_run_and_undo_restores_both(serv
 
     assert code == 200 and back == view  # words, app, boxes, places and revision as they were
     assert call(server, "/api/schedules")[1] == [
-        {"name": "morning daily 0930", "flow": "morning", "app": "paint.exe", "at": "09:30"}]
+        {"name": "morning daily 0930", "flow": "morning", "at": "09:30"}]
     with closing(sqlite3.connect(tmp_path / "user.db")) as con:
         assert con.execute("SELECT count(*) FROM checkpoints WHERE flow_id = 'morning'").fetchone() == (1,)
 

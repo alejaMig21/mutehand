@@ -27,11 +27,10 @@ from workflow_factory.apps import app_detail, app_rows
 from workflow_factory.attention import attention_items, rejected_by_person
 from workflow_factory.consent import consents, covers, effective_sensitivity, revoke_consent
 from workflow_factory.desktop import Desktop, DesktopError
-from workflow_factory.flow import clear_emergency_stop, emergency_stop, rejected_steps, run_flow
+from workflow_factory.flow import clear_emergency_stop, emergency_stop, missing_locators, rejected_steps, run_flow
 from workflow_factory.flows import (
     check_positions,
     check_title,
-    describe_flow,
     flow_from_dict,
     flow_overview,
     flow_summaries,
@@ -46,7 +45,6 @@ from workflow_factory.flows import (
     save_layout,
     set_title,
     stored_info,
-    taught_app,
     trash_flow,
     trashed_ids,
 )
@@ -152,7 +150,7 @@ class ApiServer:
         for run_id in finished[: max(0, len(finished) - self.max_kept_runs)]:
             del self._runs[run_id]
 
-    def _start_run(self, flow_id: str, app: str, context: dict, again: bool = False) -> tuple[int, str | None]:
+    def _start_run(self, flow_id: str, context: dict, again: bool = False) -> tuple[int, str | None]:
         """(202, run id) when started; 404 no such flow; 409 already running; 429 too many runs.
 
         `again` is the person pressing "Try again" on a stopped flow: the flow's open doubts close, and a step a failed
@@ -160,26 +158,23 @@ class ApiServer:
         flow = load_flow(self.user_db, self.factory_db, flow_id)
         if flow is None:
             return 404, None
-        process = ""
-        try:
-            desktop = self.desktop_for(app)
-            refused = rejected_steps(flow, desktop, self.user_db, self.factory_db)
-            process = desktop.app_key().process
-            untaught = [n.step for n in flow.nodes if n.kind in ("step", "loop")
-                        and find_step(self.user_db, self.factory_db, process, n.step) is None]
-        except DesktopError:
-            refused, untaught = (), []  # the app is not there: the run itself will say so
+        untaught = missing_locators(flow, self.user_db, self.factory_db)
         if untaught:  # a recipe's hole nobody filled is just a step that was never taught
-            names = ", ".join(f"'{step}'" for step in untaught)
+            names = ", ".join(f"'{step}' for {_program(tech)}" if tech else f"'{step}' (it names no program)"
+                              for _, step, tech in untaught)
             raise ValueError(f"This flow will not start: {names} {'has' if len(untaught) == 1 else 'have'} not been taught "
-                             "for this app yet. An agent teaches it in a chat.")
+                             "yet. An agent teaches it in a chat.")
+        try:
+            refused = rejected_steps(flow, self.desktop_for, self.user_db, self.factory_db)
+        except DesktopError:
+            refused = ()  # the app is not there: the run itself will say so
         lift = []
         if again and refused:
-            found = {name: find_step(self.user_db, self.factory_db, process, name) for _, name in refused}
+            found = {(step, tech): find_step(self.user_db, self.factory_db, tech, step) for _, step, tech in refused}
             lift = [step for step in found.values() if not rejected_by_person(step_report(self.user_db, step))]
-            refused = tuple(r for r in refused if found[r[1]] not in lift)
+            refused = tuple(r for r in refused if found[r[1], r[2]] not in lift)
         if refused:  # a rejected step is never run: name them all before anything starts
-            names = ", ".join(f"'{step}'" for _, step in refused)
+            names = ", ".join(f"'{step}'" for _, step, _ in refused)
             many = len(refused) > 1
             if again:
                 raise ValueError(f"You rejected {names}, so trying again would not run {'them' if many else 'it'}. "
@@ -191,9 +186,9 @@ class ApiServer:
             for step in lift:
                 restore_step(self.user_db, step.app, step.name)
             close_as_tried_again(self.user_db, flow_id)
-        return self._launch(flow, flow_id, flow_id, app, context, prepare if again else None)
+        return self._launch(flow, flow_id, flow_id, context, prepare if again else None)
 
-    def _launch(self, flow, run_key: str, data_key: str, app: str, context: dict, prepare=None) -> tuple[int, str | None]:
+    def _launch(self, flow, run_key: str, data_key: str, context: dict, prepare=None) -> tuple[int, str | None]:
         """Run `flow` in the background. `run_key` says what may not run twice at once; `data_key` is the flow whose
         node data this run updates (a test of one node updates the data of the flow it belongs to). `prepare` is called
         once the run is sure to start, and before it does."""
@@ -219,7 +214,7 @@ class ApiServer:
 
         def work() -> None:
             try:
-                result = run_flow(flow, self.desktop_for(app), self.user_db, self.factory_db,
+                result = run_flow(flow, self.desktop_for, self.user_db, self.factory_db,
                                   context=context, progress=progress)
                 final = {"status": result.status, "stopped": result.stopped}
                 with self._runs_lock:
@@ -237,7 +232,7 @@ class ApiServer:
         threading.Thread(target=work, name=f"run-{run_id[:8]}", daemon=True).start()
         return 202, run_id
 
-    def _start_node_test(self, flow_id: str, node_id: str, app: str, context: dict) -> tuple[int, str | None]:
+    def _start_node_test(self, flow_id: str, node_id: str, context: dict) -> tuple[int, str | None]:
         """Run one node alone, on the data the last run gave it. ValueError (a 400) says why it cannot be done."""
         flow = load_flow(self.user_db, self.factory_db, flow_id)
         if flow is None:
@@ -248,16 +243,15 @@ class ApiServer:
         for doubt in list_doubts(self.user_db, "open"):
             if doubt.flow_id == alone.key:  # a test leaves nothing to resume: the next one starts fresh
                 dismiss_doubt(self.user_db, doubt.id)
-        return self._launch(alone, alone.key, flow_id, app, context)
+        return self._launch(alone, alone.key, flow_id, context)
 
     def _flow_view(self, flow) -> dict:
-        """A flow as the editor sees it: where its nodes sit, what it is called, the app it runs on, and a revision
-        that changes when any of what is stored does."""
+        """A flow as the editor sees it: where its nodes sit, what it is called, and a revision that changes when any of
+        what is stored does."""
         view = {**flow_to_dict(flow), "positions": load_layout(self.user_db, flow.id)}
         info = stored_info(self.user_db, self.factory_db).get(flow.id, {})
         digest = hashlib.sha256(json.dumps({**view, **info}, sort_keys=True).encode()).hexdigest()[:16]
-        words = describe_flow(flow.id, info, lambda: flow, lambda: list_steps(self.user_db, self.factory_db))
-        return {**view, **words, "revision": digest}
+        return {**view, "title": info.get("title") or flow.id, "revision": digest}
 
     def _save(self, flow_id: str, body: dict) -> tuple[int, dict]:
         """Save a flow. A body with "base" only replaces what the editor has seen: the revision it loaded, or
@@ -338,7 +332,7 @@ class ApiServer:
         lost = []
         for task in tasks:
             try:
-                schedule.create_schedule(task["name"], flow_id, task["app"], task["at"], self._schedule_extra(),
+                schedule.create_schedule(task["name"], flow_id, task["at"], self._schedule_extra(),
                                          runner=self.schedule_runner)
             except (ValueError, RuntimeError, TypeError):  # the flow is back; say what did not come back with it
                 lost.append(task["name"])
@@ -370,11 +364,11 @@ class ApiServer:
         now = daily.trigger_time(flow)
         if (daily.trigger_time(stored) if stored else None) == now:
             return ok, self._write(flow, positions, body)
-        return self._with_task(flow.id, flow, now, lambda: self._write(flow, positions, body), ok, body.get("app"))
+        return self._with_task(flow.id, flow, now, lambda: self._write(flow, positions, body), ok)
 
     def _write(self, flow, positions: dict | None, body: dict) -> dict:
         """Call with the save lock held."""
-        save_flow(self.user_db, flow, body.get("title"), body.get("app"))
+        save_flow(self.user_db, flow, body.get("title"))
         if positions is not None:
             save_layout(self.user_db, flow.id, positions)
         return self._flow_view(flow)
@@ -417,7 +411,7 @@ class ApiServer:
                 return {"at": at}
             return self._with_task(flow_id, flow, at, commit)
 
-    def _with_task(self, flow_id: str, flow, at: str | None, commit, ok: int = 200, app: str | None = None) -> tuple[int, dict]:
+    def _with_task(self, flow_id: str, flow, at: str | None, commit, ok: int = 200) -> tuple[int, dict]:
         """Set the flow's Windows task to `at` (None: no task), then `commit()` what goes with it; the answer is
         (ok, what commit gave). The task and what commit stores change together, or neither does. Call with the save lock held."""
         runner = self.schedule_runner
@@ -434,19 +428,13 @@ class ApiServer:
                 if isinstance(error, RuntimeError):
                     return 502, {"error": f"The daily run could not be stopped, so it still runs every day. {error}"}
                 raise
-        steps = list_steps(self.user_db, self.factory_db)
-        info = {**stored_info(self.user_db, self.factory_db).get(flow_id, {}), **({"app": app} if app else {})}
-        app = taught_app(describe_flow(flow_id, info, lambda: flow, lambda: steps)["app"], steps) \
-            or next((t["app"] for t in old if t["app"]), "")
-        if not app:
-            raise ValueError("Choose which app this chore runs on first: the daily run needs to know it.")
         name = f"{flow_id} daily {at.replace(':', '')}"
         full, kept = schedule.full_name(name), {schedule.full_name(t["name"]) for t in old}
         listed = schedule.list_schedules(runner=runner)
         if len(listed) >= MAX_SCHEDULES and full not in listed:
             return 409, {"error": f"There are already {MAX_SCHEDULES} daily runs in Windows. Stop one first."}
         try:
-            schedule.create_schedule(name, flow_id, app, at, self._schedule_extra(), runner=runner)
+            schedule.create_schedule(name, flow_id, at, self._schedule_extra(), runner=runner)
         except (ValueError, RuntimeError) as error:  # the words are Windows' own or ours: no screen content
             return (502 if isinstance(error, RuntimeError) else 400), {
                 "error": f"The daily run was not set, nothing was changed. {error}"}
@@ -608,7 +596,7 @@ class ApiServer:
                 test_match = re.fullmatch(r"/api/flows/([\w.-]+)/nodes/([\w.-]+)/test", path)
                 if test_match and method == "POST":
                     body = self._body()
-                    code, run_id = api._start_node_test(test_match[1], test_match[2], body["app"], body.get("context") or {})
+                    code, run_id = api._start_node_test(test_match[1], test_match[2], body.get("context") or {})
                     if code == 202:
                         return self._send(202, {"run_id": run_id})
                     return self._send(code, {"error": {404: "no such flow", 409: "this node is already being tested",
@@ -616,7 +604,7 @@ class ApiServer:
                 run_match = re.fullmatch(r"/api/flows/([\w.-]+)/(run|try-again)", path)
                 if run_match and method == "POST":
                     body = self._body()
-                    code, run_id = api._start_run(run_match[1], body["app"], body.get("context") or {}, run_match[2] == "try-again")
+                    code, run_id = api._start_run(run_match[1], body.get("context") or {}, run_match[2] == "try-again")
                     if code == 202:
                         return self._send(202, {"run_id": run_id})
                     return self._send(code, {"error": {404: "no such flow", 409: "this flow is already running",
@@ -675,7 +663,7 @@ class ApiServer:
                     return self._send(200, schedule.describe_schedules(runner=runner))
                 body = self._body()
                 if method == "POST":
-                    flow_id, app, at = body["flow"], body["app"], body["at"]
+                    flow_id, at = body["flow"], body["at"]
                     if not schedule.SAFE_NAME.fullmatch(str(flow_id)):
                         raise ValueError("a flow name may only use letters, digits, '_', '.' and '-'")
                     if load_flow(api.user_db, api.factory_db, flow_id) is None:
@@ -685,10 +673,10 @@ class ApiServer:
                     if len(existing) >= MAX_SCHEDULES and schedule.full_name(name) not in existing:
                         return self._send(409, {"error": f"There are already {MAX_SCHEDULES} schedules. Remove one first."})
                     try:
-                        schedule.create_schedule(name, flow_id, app, at, api._schedule_extra(), runner=runner)
+                        schedule.create_schedule(name, flow_id, at, api._schedule_extra(), runner=runner)
                     except RuntimeError as error:  # schtasks said no: its words, which hold no screen content
                         return self._send(502, {"error": str(error)})
-                    return self._send(201, {"name": name, "flow": flow_id, "app": app, "at": at})
+                    return self._send(201, {"name": name, "flow": flow_id, "at": at})
                 if method == "DELETE":
                     try:
                         name = schedule.full_name(str(body["name"]))
@@ -726,6 +714,11 @@ class ApiServer:
                 self._dispatch("DELETE")
 
         return Handler
+
+
+def _program(technology: str) -> str:
+    """A program as a sentence names it: its process name without the extension."""
+    return technology.removesuffix(".exe")
 
 
 def _parse_flow(flow_id: str, body: dict) -> tuple:

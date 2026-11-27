@@ -118,7 +118,7 @@ def test_a_flow_built_in_the_editor_is_saved_to_sqlite_and_listed(server, tmp_pa
     _, listing, _ = call(server, "/api/flows")
 
     assert status == 200 and [n["id"] for n in flow["nodes"]] == ["a", "b"] and flow["edges"] == [["a", "b"]]
-    assert {"id": "morning", "origin": "local", "title": "morning", "app": ""} in listing
+    assert {"id": "morning", "origin": "local", "title": "morning"} in listing
 
 
 def test_an_invalid_flow_is_refused_with_a_message(server):
