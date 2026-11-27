@@ -121,7 +121,7 @@ export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, sh
 
 function DataRows({ rows, showValues }) {
   const entries = Object.entries(rows ?? {})
-  if (entries.length === 0) return <p className="empty">No data yet. Run the flow or test this box.</p>
+  if (entries.length === 0) return <p className="empty">No data yet. Run the chore or test this box.</p>
   return (
     <dl className="data-rows">
       {entries.map(([name, value]) => (

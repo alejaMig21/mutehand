@@ -82,12 +82,13 @@ def test_try_again_closes_the_doubt_goes_on_from_where_it_stopped_and_says_it_is
         assert "2 steps finished." in fixed.inner_text()  # the one done before counts too
         assert clicked(desktop) == ["Beta"]  # the first box was not done again
         assert [(d.status, d.closed_as) for d in list_doubts(db)] == [("answered", "tried_again")]
-        assert page.get_by_test_id("attention").count() == 0
+        assert page.get_by_test_id("attention-weekly").count() == 0  # the red card is gone: the answer stands where it was
         says(page, "weekly", r"Worked .+ at \d\d:\d\d")
         assert row(page, "weekly").get_by_test_id("run-now-weekly").inner_text().strip() == "Run now"
 
         fixed.get_by_role("button", name="Hide").click()
         assert page.get_by_test_id("tried-weekly").count() == 0
+        assert page.get_by_test_id("attention").count() == 0
 
 
 def test_trying_again_that_stops_for_the_same_reason_says_so_and_the_card_stays(tmp_path):

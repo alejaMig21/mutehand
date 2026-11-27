@@ -32,6 +32,12 @@ test('taking a permission back says which chores and actions stop working, by th
   assert.doesNotMatch(hidden, /Ana|4471/)
 })
 
+test('taking a permission back says how to give it again in words nobody needs to have heard', () => {
+  const words = takeBackWords({ stops: stops([], []) }, false)
+  assert.match(words, /ask the assistant in the chat to teach it/)
+  assert.doesNotMatch(words, /while teaching/)
+})
+
 test('the messages to send name the app and never start anything', () => {
   assert.match(teachMessage('Excel'), /^In Workflow Factory I want to teach another action in Excel\./)
   const update = relearnMessage('Excel')

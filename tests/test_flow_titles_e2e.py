@@ -68,7 +68,7 @@ def test_a_flow_takes_any_words_as_its_name_and_keeps_its_app_after_a_reload_and
     steps_of_two_apps(tmp_path)
     with editor(tmp_path) as (page, apps):
         page.get_by_test_id("palette-open-menu").first.click()
-        assert page.get_by_test_id("flow-title").input_value() == "My flow"
+        assert page.get_by_test_id("flow-title").input_value() == "New chore"
         page.get_by_test_id("flow-title").fill("Morning report: ¿ventas? 50% / week #1")
         page.get_by_test_id("app-name").select_option("word.exe")
         save(page)
@@ -162,13 +162,13 @@ def test_two_flows_with_the_same_name_stay_two_flows_and_can_be_told_apart(tmp_p
         for flow_id in ("morning", "morning-2"):
             page.get_by_test_id(f"flow-{flow_id}").filter(has_text=f"Morning ({flow_id})").wait_for()
         page.get_by_test_id("new-flow").click()
-        page.get_by_test_id("flow-title").fill("My flow")
+        page.get_by_test_id("flow-title").fill("New chore")
         page.get_by_test_id("palette-save-file").click()
         save(page)
         page.get_by_test_id("open-flows").click()
         page.get_by_test_id("flow-my-flow").wait_for()  # the list is read again after a save
         page.get_by_test_id("new-flow").click()
-        assert page.get_by_test_id("flow-title").input_value() == "My flow 2"  # a new flow starts with a free name
+        assert page.get_by_test_id("flow-title").input_value() == "New chore 2"  # a new flow starts with a free name
 
 
 def test_a_blank_name_is_not_kept_and_says_so_and_a_change_made_elsewhere_is_never_replaced_unasked(tmp_path):
@@ -251,7 +251,7 @@ def test_naming_saving_and_reopening_work_with_the_keyboard_alone(tmp_path):
     steps_of_two_apps(tmp_path)
     with editor(tmp_path) as (page, _):
         page.get_by_test_id("palette-open-menu").first.press("Enter")
-        page.get_by_role("textbox", name="Flow name").press("ControlOrMeta+a")
+        page.get_by_role("textbox", name="Chore name").press("ControlOrMeta+a")
         page.keyboard.type("Typed by hand")
         page.get_by_test_id("run-status").filter(has_text=re.compile("^Saved$")).wait_for()
         new_flow(page)

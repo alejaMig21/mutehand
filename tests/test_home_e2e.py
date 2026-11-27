@@ -321,16 +321,16 @@ def test_a_chores_row_opens_the_flow_screen_which_leads_back_home(tmp_path):
 
 def test_new_chore_opens_an_empty_flow_screen_under_a_name_of_its_own(tmp_path):
     chores(tmp_path)
-    chore(tmp_path, "my-flow", "My flow", "open-menu")
+    chore(tmp_path, "my-flow", "New chore", "open-menu")
     with home(tmp_path) as (page, _):
         page.get_by_test_id("new-chore").click()
-        on_the_flow_screen(page, "My flow 2", 0)  # the flow screen had read nothing before this
+        on_the_flow_screen(page, "New chore 2", 0)  # the flow screen had read nothing before this
         page.get_by_test_id("back-home").click()
         page.get_by_role("button", name="Morning report", exact=True).click()
         on_the_flow_screen(page, "Morning report", 2)
         page.get_by_test_id("back-home").click()
         page.get_by_test_id("new-chore").click()
-        on_the_flow_screen(page, "My flow 2", 0)
+        on_the_flow_screen(page, "New chore 2", 0)
 
 
 def test_changes_survive_home_and_what_cannot_be_kept_is_never_dropped_without_asking(tmp_path):
@@ -618,7 +618,7 @@ def test_home_works_with_the_keyboard_alone(tmp_path):
         page.keyboard.press("Shift+Tab")
         assert page.evaluate(FOCUSED) == "new-chore"
         page.keyboard.press("Enter")
-        on_the_flow_screen(page, "My flow", 0)
+        on_the_flow_screen(page, "New chore", 0)
         page.wait_for_function("() => document.activeElement !== document.body")
         page.get_by_test_id("back-home").press("Enter")  # a chore never saved has no row
         page.wait_for_function("() => document.activeElement.dataset.testid === 'new-chore'")

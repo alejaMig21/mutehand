@@ -220,6 +220,7 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .chat-message .chat-text { align-self: stretch; padding: 14px 16px; background: var(--sunk); border: 1.5px dashed var(--line);
   border-radius: 12px; user-select: all; }
 .chat-message button { min-height: 44px; border-radius: 12px; font-weight: 600; }
+.chat-message button.copied { border-color: var(--ok); color: var(--ok); }
 .chat-outcome:empty { display: none; }
 
 /* the node detail: a window over the dimmed canvas with three panes */
@@ -329,6 +330,7 @@ input[type="number"] { width: 70px; }
 .tried.tried-bad > svg, .attention-card > svg { color: var(--bad); }
 .tried.tried-warn { border-color: var(--warn); }
 .tried > svg, .attention-card > svg { flex: none; }
+.attention-card .tried { flex: 1 1 100%; }
 .tried > div, .attention-words { flex: 1 1 240px; min-width: 0; }
 .tried h2, .attention-words h3 { font-size: 17px; }
 .tried p, .attention-words p { margin: 2px 0 0; }
@@ -361,7 +363,10 @@ input[type="number"] { width: 70px; }
 .first-day-teach { padding: 20px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; display: flex; flex-direction: column; gap: 12px; }
 .first-day-teach h2 { font-size: 18px; }
 .stages { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 16px; }
-.stages li { display: flex; flex-direction: column; gap: 4px; padding-top: 12px; border-top: 2px solid var(--line); overflow-wrap: anywhere; }
+.stages li { display: flex; flex-direction: column; gap: 4px; padding-top: 12px; border-top: 2px solid var(--line); overflow-wrap: anywhere; cursor: default; }
+.stages-heading { margin-bottom: 12px; font-size: 18px; }
+/* a plain number, not a button: no fill, no border, round only so that it reads as a count */
+.stage-no { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--muted); }
 .empty-state .primary { margin-top: 16px; }
 
 /* Apps: the search, one row per program, the opened program above the rows */
@@ -396,6 +401,8 @@ input[type="number"] { width: 70px; }
 .app-allowed { border-color: var(--ok); }
 .app-allowed > svg { color: var(--ok); }
 .empty-state .first-day-teach { text-align: left; margin-top: 16px; }
+/* the message that starts teaching is the one clear thing on an empty Apps: full colour, no dashed "switched off" frame */
+.empty-state:has(.first-day-teach) { color: var(--ink); border-style: none; padding: 16px 0; text-align: left; }
 .app-permissions h3 { margin: 0 0 8px; font-size: 16px; }
 .app-permissions ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .app-permissions li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; background: var(--sunk); border-radius: 12px; }

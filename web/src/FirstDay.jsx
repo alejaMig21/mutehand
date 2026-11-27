@@ -5,9 +5,9 @@ import { useLoad } from './useLoad.js'
 
 export const FIRST_DAY_TITLE = 'Show it a computer chore once. Then it does the chore for you.'
 const STAGES = [
-  ['Teach', 'Once, in the chat.'],
-  ['Put in order', 'Pick the actions; they join up by themselves.'],
-  ['Let it repeat', 'Press Run, or choose a time for every day.'],
+  ['Teach', 'Show it the chore once, in the chat.'],
+  ['Choose the steps', 'Pick what it learned, one step after another.'],
+  ['Let it repeat', 'Press Run now, or choose a time for every day.'],
 ]
 
 // The message that starts teaching, for Home and Apps while nothing is learned.
@@ -48,9 +48,14 @@ export default function FirstDay({ onNew, onFirstDay }) {
   return (
     <div className="first-day" data-testid="first-day">
       <TeachFirst />
-      <ol className="stages" data-testid="stages">
-        {STAGES.map(([name, words], i) => <li key={name}><b>{i + 1}. {name}</b><span className="muted">{words}</span></li>)}
-      </ol>
+      <section aria-labelledby="stages-heading">
+        <h2 id="stages-heading" className="stages-heading">How it works</h2>
+        <ol className="stages" data-testid="stages">
+          {STAGES.map(([name, words], i) => (
+            <li key={name}><span className="stage-no" aria-hidden="true">{i + 1}</span><b>{name}</b><span className="muted">{words}</span></li>
+          ))}
+        </ol>
+      </section>
     </div>
   )
 }

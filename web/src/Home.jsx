@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
-import { Attention, TriedResults } from './Attention.jsx'
+import { Attention } from './Attention.jsx'
 import { appLabel, chipFor } from './catalog.js'
 import { changeDaily, DailyForm } from './Daily.jsx'
 import FirstDay, { FIRST_DAY_TITLE } from './FirstDay.jsx'
@@ -43,8 +43,7 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
 
   return (
     <div className="home">
-      <TriedResults tries={tried.tries} hide={tried.hide} />
-      <Attention items={needs.data} tries={tried.tries} tryAgain={tried.tryAgain} onChanged={() => { reload(); reloadNeeds() }}
+      <Attention items={needs.data} tries={tried.tries} hide={tried.hide} tryAgain={tried.tryAgain} onChanged={() => { reload(); reloadNeeds() }}
         running={(id) => following.runs[id]?.status === 'running'} />
       <Screen title={none && bare ? FIRST_DAY_TITLE : 'Your chores'} load={load} isEmpty={false}
         help={none && bare ? 'When you press a button, or by itself every morning.' : undefined}
@@ -82,11 +81,11 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
   const appName = app ? appLabel(app) : 'No app chosen'
   const chip = chipFor(app || title)
   const paused = running && Object.values(run.nodes).includes('paused')
-  const last = lastRunWords(flow.last_run)
+  const ran = !running && !starting && !problem && ranResult(run) // a run that ended here replaces the older line at once
+  const last = ran ? { ...ran, icon: 'check' } : lastRunWords(flow.last_run)
   const line = starting ? { words: 'Running now', tone: 'info', icon: 'spinner' } : !running ? last : paused
     ? { words: PAUSED_WORDS, tone: 'warn', icon: 'pause' }
     : { words: 'Running now', tone: 'info', icon: 'spinner' }
-  const ran = !running && !starting && !problem && ranResult(title, run)
   const wrong = !running && (problem || runNoteWords(run, appName))
   // a chore that stopped is tried again, not run: what it is waiting for is the person's Try again
   const again = Boolean(stopped) && !stopped.rejected_by_person.length
@@ -134,8 +133,7 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
         {/* the button covers the whole row, under the row's other controls */}
         <h2><button className="chore-open" data-testid={`open-chore-${id}`} onClick={onOpen}>{title}</button></h2>
         <p className="muted">{appName}</p>
-        <p className={`chore-line tone-${line.tone}`} role="status"><Icon name={line.icon} size={18} /> {line.words}{again && !running && '. See above.'}</p>
-        {ran && <p className="chore-line tone-ok" role="status" data-testid={`chore-result-${id}`}><Icon name="checkcircle" size={18} /> {ran.words}</p>}
+        <p className={`chore-line tone-${line.tone}`} role="status" data-testid={ran ? `chore-result-${id}` : undefined}><Icon name={line.icon} size={18} /> {line.words}{again && !running && '. See above.'}</p>
         {why && <p className="chore-line tone-warn" id={`why-${id}`} data-testid={`chore-why-${id}`} tabIndex={-1} ref={whyLine}><Icon name="alert" size={18} /> {why}</p>}
         {wrong && <p className="chore-line tone-bad" role="alert"><Icon name="alert" size={18} /> {wrong}</p>}
       </div>

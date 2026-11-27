@@ -29,7 +29,13 @@ export default function Apps() {
   const reloadNeeds = needs.reload
   const stopped = (app) => needs.data.filter((item) => item.kind === 'stopped' && item.app && appKey(item.app) === appKey(app)).length
   // a chore stopped on a program comes before the rest (the server knows only the actions that need the person)
-  const rows = [...load.data].sort((a, b) => !stopped(a.app) - !stopped(b.app))
+  const natural = [...load.data].sort((a, b) => !stopped(a.app) - !stopped(b.app))
+  // what was fixed must not move the program the finger aimed at: the order of one search is kept, new programs go last
+  const places = useRef({ query, order: [] })
+  if (places.current.query !== query) places.current = { query, order: [] }
+  if (!load.loading && !needs.loading) for (const { app } of natural) if (!places.current.order.includes(app)) places.current.order.push(app)
+  const rows = natural.every(({ app }) => places.current.order.includes(app))
+    ? [...natural].sort((a, b) => places.current.order.indexOf(a.app) - places.current.order.indexOf(b.app)) : natural
 
   useEffect(() => { // a lesson in a chat, or a run, may have changed what is true
     const again = () => { reload(); reloadNeeds() }

@@ -28,8 +28,7 @@ def test_with_nothing_learned_home_says_what_it_is_for_and_how_to_start(tmp_path
         first_day(page)
         page.get_by_role("heading", name=SENTENCE).wait_for()
         assert page.get_by_test_id("chat-text").inner_text() == MESSAGE
-        stages = page.get_by_test_id("stages").locator("li")
-        assert [s.split("\n")[0] for s in stages.all_inner_texts()] == ["1. Teach", "2. Put in order", "3. Let it repeat"]
+        assert page.get_by_test_id("stages").locator("li b").all_inner_texts() == ["Teach", "Choose the steps", "Let it repeat"]
         assert page.get_by_test_id("new-chore").count() == 0 and page.get_by_test_id("no-chores").count() == 0
 
 
@@ -68,7 +67,7 @@ def test_with_actions_learned_and_no_chore_new_chore_is_the_main_button(tmp_path
         assert button.count() == 1 and "primary" in button.get_attribute("class")
         button.focus()
         page.keyboard.press("Enter")
-        on_the_flow_screen(page, "My flow", 0)
+        on_the_flow_screen(page, "New chore", 0)
 
 
 def test_an_action_of_the_factory_counts_as_learned(tmp_path):

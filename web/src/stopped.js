@@ -54,9 +54,11 @@ export function triedResult(before, run, after) {
 
 const stepsWords = (n) => `${n} ${n === 1 ? 'step' : 'steps'}`
 
-// How a run started with Run now ended, for the chore's row: {tone, words}, or null while there is nothing to say yet.
-export function ranResult(title, run) {
-  return run?.status === 'finished' ? { tone: 'ok', words: `“${title}” worked: ${stepsWords(finishedSteps(run))} finished.` } : null
+// How a run followed here ended, for the chore's row: {tone, words}, or null while there is nothing to say yet. It is the
+// row's only line about the last run: it says when it worked, as the history line does, and how many steps it did.
+export function ranResult(run, now = new Date()) {
+  return run?.status === 'finished' && run.ended
+    ? { tone: 'ok', words: `Worked ${sinceWords(run.ended, now)}. ${stepsWords(finishedSteps(run))} finished.` } : null
 }
 
 export const titles = (flows) => flows.map((flow) => `“${flow.title}”`).join(', ')
