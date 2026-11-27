@@ -174,6 +174,18 @@ def test_an_unexpected_failure_is_a_json_500_without_details(tmp_path):
     assert status == 500 and body == {"error": "internal error"}
 
 
+def test_an_unexpected_failure_is_written_with_its_traceback_to_the_console_but_not_to_the_browser(tmp_path, capsys):
+    (tmp_path / "factory.db").write_bytes(b"this is not a sqlite file at all, just text" * 10)
+    server = make_server(tmp_path)
+    try:
+        status, body, _ = call(server, "/api/flows")
+    finally:
+        server.stop()
+
+    assert status == 500 and body == {"error": "internal error"}
+    assert "Traceback" in capsys.readouterr().err  # so a person can tell a lost data folder from a bug
+
+
 def test_a_negative_content_length_is_refused_instead_of_blocking_a_thread(server):
     import socket
 

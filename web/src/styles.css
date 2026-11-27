@@ -257,14 +257,19 @@ input[type="number"] { width: 70px; }
 .notice button { min-height: 44px; }
 .notice-stopped, .notice-error { border-left: 4px solid var(--bad); }
 .notice-waiting, .notice-emergency, .notice-busy { border-left: 4px solid var(--warn); }
-.run-log { flex: none; max-height: 30%; overflow: auto; padding: 8px 20px 12px; background: var(--surface); border-top: 1px solid var(--line); }
-.run-log header { display: flex; align-items: center; }
-.run-log h2 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); flex: 1; }
-.run-log ol { margin: 6px 0 0; padding: 0; list-style: none; font-family: var(--mono); font-size: 13px; }
+/* the run log floats over the corner of the canvas: it never takes the boxes' height */
+.run-log { position: absolute; right: 12px; bottom: 12px; z-index: 5; width: min(440px, calc(100% - 24px)); box-sizing: border-box; padding: 6px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 18px rgba(0, 0, 0, .35); }
+.run-log header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.run-log h2 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.run-progress { display: flex; gap: 6px; margin: 0; padding: 0; list-style: none; flex: 1; flex-wrap: wrap; }
+.run-progress li { display: flex; align-items: center; gap: 3px; padding: 2px 8px; border: 1.5px solid currentColor; border-radius: 999px; font-weight: 700; font-size: 13px; }
+.run-log header button { min-height: 44px; }
+.run-log ol { max-height: min(50vh, 320px); overflow: auto; margin: 6px 0 0; padding: 0; list-style: none; font-family: var(--mono); font-size: 13px; }
 .run-log li { padding: 5px 0; border-bottom: 1px solid var(--line); }
+.run-progress li { border-bottom: 1.5px solid currentColor; }
 .run-log time { color: var(--muted); margin-right: 6px; }
 .muted { color: var(--muted); }
-.status-running .card-mark.tone-info svg, .chore-line.tone-info svg { animation: spin 1s linear infinite; }
+.status-running .card-mark.tone-info svg, .run-progress .tone-info svg, .chore-line.tone-info svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .status-running .card-mark.tone-info svg, .chore-line.tone-info svg, .chore-run.busy svg { animation: none; } }
 @media (max-width: 560px) { .home .chore-run { flex: 1 1 100%; } }
@@ -285,7 +290,6 @@ input[type="number"] { width: 70px; }
   .workspace { display: flex; flex-direction: column; flex: none; }
   .stage .canvas { flex: none; height: min(520px, 70vh); min-height: 220px; }
   .search-panel { overflow: visible; border-left: 0; border-top: 1.5px solid var(--line); padding: 16px; }
-  .run-log { max-height: 240px; }
   .detail { max-height: 96vh; overflow: auto; }
   .detail > * { flex: none; } /* the whole window scrolls; nothing shrinks under its neighbour */
   .panes { overflow: visible; }

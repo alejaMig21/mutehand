@@ -13,7 +13,7 @@ function describe(node, meta) {
 }
 
 // Every mark is an icon and a word, never colour alone.
-const RUN_MARKS = {
+export const RUN_MARKS = {
   running: ['spinner', 'Running', 'info'], done: ['check', 'Done', 'ok'], blocked: ['alert', 'Stopped here', 'bad'],
   unreached: ['clock', 'Not reached', 'muted'], continued: ['skip', 'Carried on', 'warn'], paused: ['pause', 'Paused: you moved the mouse', 'warn'],
 }

@@ -8,7 +8,7 @@ must not hold a database yet and its path must be short (Windows limits a schedu
 """
 
 import sys
-import threading
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -125,7 +125,9 @@ def main(argv):
     DATASETS[argv[0]](state / "user.db", server)
     server.start()
     print(f"READY {server.url}", flush=True)
-    threading.Event().wait()
+    while (state / "user.db").exists():  # a cleaned-up temp folder would turn every answer into a 500: stop, and say why
+        time.sleep(5)
+    sys.exit(f"{state / 'user.db'} is gone (the folder was deleted): the server stopped. Start it again on an empty folder.")
 
 
 if __name__ == "__main__":

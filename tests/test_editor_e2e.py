@@ -461,6 +461,7 @@ def test_stop_ends_a_run_at_once_and_the_run_button_comes_back(tmp_path):
             page.get_by_test_id("run-status").filter(has_text="Stopped by you").wait_for(timeout=10_000)
             page.get_by_test_id("run").wait_for()
             assert [c.name for c in desktop.clicks] == ["Alpha"]
+            page.get_by_role("button", name="Show details").click()
             assert "open-menu started" in page.get_by_test_id("run-log").inner_text()
             browser.close()
     finally:
