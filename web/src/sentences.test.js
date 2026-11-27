@@ -6,7 +6,7 @@ import { sentenceOf, workedWords } from './sentences.js'
 const words = (...args) => sentenceOf(...args).join('')
 const meta = (action, extra) => ({ app: 'paint.exe', action, locator: { role: 'button', name: 'Menu' }, ...extra })
 
-test('each action of a step has its own sentence, with the control and the app', () => {
+test('each way a step acts has its own sentence, with the control and the app', () => {
   const said = Object.fromEntries(['click', 'select', 'drag', 'type_value', 'type_secret', 'read_value', 'paste_text', 'press_keys']
     .map((action) => [action, words({ step: 'open-menu' }, meta(action))]))
 
@@ -32,7 +32,7 @@ test('a control with no name, or a name that may be screen content of a private 
   assert.equal(words({ step: 'x' }, meta('click', { locator: { role: 'icon', name: ' ' } })), 'Presses an icon in Paint.')
 })
 
-test('every system box has a sentence of its own, never made of what was typed into it', () => {
+test('every system node has a sentence of its own, never made of what was typed into it', () => {
   const said = SYSTEM_NODES.map((entry) => {
     const typed = Object.fromEntries(Object.entries(entry.node.fields ?? {})
       .map(([name, binding]) => [name, name === 'mode' ? binding : { value: 'typed-secret-value' }]))
@@ -44,24 +44,24 @@ test('every system box has a sentence of its own, never made of what was typed i
     assert.doesNotMatch(sentence, /typed-secret-value|cannot say/)
   }
   assert.equal(new Set(said).size, SYSTEM_NODES.length)
-  assert.equal(words({ kind: 'stop' }), 'Ends the chore here on purpose.')
+  assert.equal(words({ kind: 'stop' }), 'Ends the flow here on purpose.')
   assert.equal(words({ kind: 'if', on: 'a', equals: 'revealed' }),
-    'Takes the yes path or the no path, depending on what an earlier box changed on screen.')
+    'Takes the yes path or the no path, depending on what an earlier node changed on screen.')
 })
 
-test('a repeat that runs one action says which action it repeats', () => {
+test('a repeat that runs one step says which step it repeats', () => {
   assert.equal(words({ kind: 'loop', step: 'open-menu', max_iterations: 7 }, meta('click')),
     'Repeats this until it reaches its limit: presses the Menu button in Paint.')
 })
 
-test('an action nobody taught says so, and names the hole of a recipe', () => {
-  assert.equal(words({ step: 'x' }, { missing: true }, 'word.exe'), 'Nobody has taught this action for Word yet.')
+test('a step nobody taught says so, and names the hole of a recipe', () => {
+  assert.equal(words({ step: 'x' }, { missing: true }, 'word.exe'), 'Nobody has taught this step for Word yet.')
   assert.equal(words({ step: 'x' }, { missing: true, hole: { recipe: 'send-message', hole: 'compose' } }, 'word.exe'),
     'The “compose” part of the recipe “send-message” has not been taught for Word yet.')
-  assert.equal(words({ step: 'x' }, undefined, ''), 'Nobody has taught this action for this app yet.')
+  assert.equal(words({ step: 'x' }, undefined, ''), 'Nobody has taught this step for this app yet.')
 })
 
-test('how often an action has worked is said only where it is counted', () => {
+test('how often a step has worked is said only where it is counted', () => {
   const counts = (successes, failures, counted = true) => workedWords({ successes, failures, counted })
 
   assert.equal(counts(4, 0), 'It has worked 4 times.')

@@ -77,7 +77,7 @@ _HANDLE_KEY = secrets.token_bytes(16)  # lives as long as the process: a handle 
 
 
 def handle(*names: str) -> str:
-    """An opaque stand-in for names the browser must not see (an action or control of a private app). The same names give the
+    """An opaque stand-in for names the browser must not see (a step or control of a private app). The same names give the
     same handle in this process, so a button can send it back; nothing about the names can be read from it."""
     return "h" + hmac.new(_HANDLE_KEY, json.dumps(names).encode(), hashlib.sha256).hexdigest()[:16]
 

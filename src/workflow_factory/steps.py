@@ -471,7 +471,7 @@ def list_steps(user_db: Path, factory_db: Path | None, light: bool = False) -> l
 
 
 def step_reports(user_db: Path, steps: list[Step]) -> list[dict]:
-    """The numbers behind each step's state, for an app's actions. One read, however many steps."""
+    """The numbers behind each step's state, for an app's steps. One read, however many steps."""
     with closing(sqlite3.connect(user_db)) as db, db:
         _prepare(db, STATE_SCHEMA)
         db.execute(SEEN_SCHEMA)

@@ -114,9 +114,9 @@ def test_no_screen_shows_a_file_name_and_each_calls_the_app_the_same(tmp_path, b
     page.get_by_test_id("tab-home").click()
     page.get_by_test_id("daily-morning").click()
     page.get_by_test_id("daily-set-morning").click()
-    chore = page.get_by_test_id("chore-morning")
-    chore.filter(has_text="Every day at").wait_for()
-    assert shown in chore.inner_text()
+    flow = page.get_by_test_id("flow-morning")
+    flow.filter(has_text="Every day at").wait_for()
+    assert shown in flow.inner_text()
     assert_no_file_names(page)
 
 
@@ -168,8 +168,8 @@ def test_the_app_is_chosen_by_keyboard_and_a_long_name_fits_a_narrow_window(tmp_
     before = chooser.input_value()
     page.keyboard.press("ArrowUp" if before == "zzqx.exe" else "ArrowDown")
     assert chooser.input_value() not in ("", before)
-    box = chooser.bounding_box()
-    assert box["x"] >= 0 and box["x"] + box["width"] <= width
+    rect = chooser.bounding_box()
+    assert rect["x"] >= 0 and rect["x"] + rect["width"] <= width
 
     page.get_by_test_id("open-flows").click()
     page.get_by_test_id("flow-morning").click()
@@ -177,7 +177,7 @@ def test_the_app_is_chosen_by_keyboard_and_a_long_name_fits_a_narrow_window(tmp_
     card.wait_for()
     for app in ("zzqx.exe", "vvrt.exe"):
         page.get_by_test_id("app-name").select_option(app)
-    assert card.evaluate("(e) => e.scrollWidth <= e.clientWidth")  # the name stays inside its box
+    assert card.evaluate("(e) => e.scrollWidth <= e.clientWidth")  # the name stays inside its node
     fits = "() => document.querySelector('.screen').scrollWidth <= innerWidth"
     assert page.evaluate(fits), ("flow screen", page.evaluate(STICKS_OUT))
     page.get_by_test_id("tab-apps").click()
@@ -186,11 +186,11 @@ def test_the_app_is_chosen_by_keyboard_and_a_long_name_fits_a_narrow_window(tmp_
     page.wait_for_timeout(300)
     assert page.evaluate(fits), ("apps", page.evaluate(STICKS_OUT))
     page.get_by_test_id("tab-home").click()
-    page.get_by_test_id("chore-morning").wait_for()
+    page.get_by_test_id("flow-morning").wait_for()
     page.wait_for_timeout(300)
     assert page.evaluate(fits), ("home", page.evaluate(STICKS_OUT))
-    page.get_by_test_id("open-chore-morning").click()
-    page.locator(".opening").wait_for(state="detached")  # a box chosen while "Opening…" shows is forgotten when it ends
+    page.get_by_test_id("open-flow-morning").click()
+    page.locator(".opening").wait_for(state="detached")  # a node chosen while "Opening…" shows is forgotten when it ends
     assert page.evaluate(NOTHING_OVERFLOWS, ".search-panel .entry")
     page.get_by_test_id("app-name").select_option("vvrt.exe")
     page.locator('.react-flow__node[data-id="n1"]').press("Space")
@@ -224,7 +224,7 @@ def test_a_run_from_the_editor_shows_the_name_it_has_just_learned(tmp_path, brow
     card.filter(has_text="Quill Ledger").wait_for()
 
 
-def test_a_box_already_drawn_takes_the_name_when_it_arrives_late(tmp_path, browse):
+def test_a_node_already_drawn_takes_the_name_when_it_arrives_late(tmp_path, browse):
     db = one_step_flow(tmp_path)
     observe(db, FakeDesktop(controls=[], app="zzqx.exe", product_name="Quill Ledger"))
     page = browse()
@@ -235,7 +235,7 @@ def test_a_box_already_drawn_takes_the_name_when_it_arrives_late(tmp_path, brows
     page.get_by_test_id("flow-morning").click()
     card = page.get_by_test_id("node-n1")
     card.filter(has_text="Zzqx").wait_for()
-    page.wait_for_timeout(500)  # nothing else is left that would draw the box again
+    page.wait_for_timeout(500)  # nothing else is left that would draw the node again
 
     for route in held:
         route.continue_()
@@ -257,7 +257,7 @@ def test_an_app_is_found_by_its_product_name(tmp_path, browse):
 
 @pytest.mark.parametrize("seen_by", [
     pytest.param(lambda db, desktop: observe(db, desktop), id="observing"),
-    pytest.param(lambda db, desktop: teach_step(db, desktop, "close-box", Locator("button", "Alpha")), id="teaching"),
+    pytest.param(lambda db, desktop: teach_step(db, desktop, "close-node", Locator("button", "Alpha")), id="teaching"),
 ])
 def test_the_tutor_seeing_an_app_records_its_name(tmp_path, browse, seen_by):
     db = one_step_flow(tmp_path)

@@ -138,36 +138,36 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop], factory_d
     def list_known_steps(app: str) -> list[dict]:
         """What the apprentice already knows how to do in an app: each step's name, action and state."""
         known = [step for step in list_steps(user_db, factory_db, light=True) if step.app == app]
-        if tutor.is_private(user_db, app):  # the names of a private app's actions stay out, like what observe_app shows
+        if tutor.is_private(user_db, app):  # the names of a private app's steps stay out, like what observe_app shows
             return [{"private": True, "count": len(known)}] if known else []
         return [{"name": step.name, "action": step.action, "state": report["state"]}
                 for step, report in zip(known, step_reports(user_db, known), strict=True)]
 
     @server.tool(name="list_node_kinds")
     def list_node_kinds() -> dict:
-        """The kinds of box a chore can hold, the data operations a data box can run (with the fields each takes) and the
-        forms a box's field can be written in. Use it before writing nodes for create_flow."""
+        """The kinds of node a flow can hold, the data operations a data node can run (with the fields each takes) and the
+        forms a node's field can be written in. Use it before writing nodes for create_flow."""
         return {
             "kinds": list(KINDS),
             "data_operations": {op: {"required": list(required), "optional": list(optional)}
                                 for op, (required, optional, _) in OPS.items()},
             "field_forms": [
                 {"form": "value", "example": {"value": "any JSON"}},
-                {"form": "ref", "example": {"ref": {"node": "id of another box", "field": "name of its output"}}},
+                {"form": "ref", "example": {"ref": {"node": "id of another node", "field": "name of its output"}}},
                 {"form": "expression", "example": {"expression": "text kept for later: no run uses it yet"}},
             ],
         }
 
     @server.tool(name="create_flow")
     def create_flow(title: str, app: str, nodes: list[dict], edges: list[list[str]] | None = None) -> dict:
-        """Save a chore the person described. Nodes are {id, step, kind?, fields?, inputs?}; edges are [from, to] pairs
+        """Save a flow the person described. Nodes are {id, step, kind?, fields?, inputs?}; edges are [from, to] pairs
         (None: the nodes run in order). A step not taught yet is allowed: the answer's missing_steps lists the lessons
-        still to teach with teach_step, then flow_status says when the chore is ready."""
+        still to teach with teach_step, then flow_status says when the flow is ready."""
         return flows.create_flow(user_db, title, app, nodes, edges, factory_db)
 
     @server.tool(name="flow_status")
     def flow_status(flow_id: str) -> dict:
-        """Whether a chore can run now, why not if it cannot, and which steps are still to be taught."""
+        """Whether a flow can run now, why not if it cannot, and which steps are still to be taught."""
         return flows.flow_readiness(user_db, flow_id, factory_db)
 
     return server

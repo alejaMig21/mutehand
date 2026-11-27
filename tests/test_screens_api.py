@@ -33,7 +33,7 @@ def run_and_wait(server, flow_id, context=None):
 # --- step states: the numbers behind them, and Reject / Restore -----------------------------------
 
 def states(server, app="paint.exe"):
-    return {action["name"]: action["state"] for action in call(server, f"/api/apps/{app}")[1]["actions"]}
+    return {action["name"]: action["state"] for action in call(server, f"/api/apps/{app}")[1]["steps"]}
 
 
 def test_a_step_report_shows_the_numbers_behind_the_confidence(tmp_path):

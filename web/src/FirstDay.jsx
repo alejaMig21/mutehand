@@ -3,9 +3,9 @@ import ChatMessage from './ChatMessage.jsx'
 import { Icon } from './icons.jsx'
 import { useLoad } from './useLoad.js'
 
-export const FIRST_DAY_TITLE = 'Show it a computer chore once. Then it does the chore for you.'
+export const FIRST_DAY_TITLE = 'Show it a computer flow once. Then it does the flow for you.'
 const STAGES = [
-  ['Teach', 'Show it the chore once, in the chat.'],
+  ['Teach', 'Show it the flow once, in the chat.'],
   ['Choose the steps', 'Pick what it learned, one step after another.'],
   ['Let it repeat', 'Press Run now, or choose a time for every day.'],
 ]
@@ -14,14 +14,14 @@ const STAGES = [
 export function TeachFirst() {
   return (
     <section aria-labelledby="teach-heading" className="first-day-teach">
-      <h2 id="teach-heading">Teach it your first chore</h2>
-      <ChatMessage message="I want to teach you a chore: [what you want done, and in which program]" />
+      <h2 id="teach-heading">Teach it your first flow</h2>
+      <ChatMessage message="I want to teach you a flow: [what you want done, and in which program]" />
     </section>
   )
 }
 
-// What Home shows with no chore: the message that starts teaching and the three stages, while nothing is learned,
-// or the way to the first chore once something is. Nothing here starts a lesson: the message is for a chat.
+// What Home shows with no flow: the message that starts teaching and the three stages, while nothing is learned,
+// or the way to the first flow once something is. Nothing here starts a lesson: the message is for a chat.
 export default function FirstDay({ onNew, onFirstDay }) {
   const learned = useLoad('/api/steps')
   const { reload, loading, loadError, data } = learned
@@ -39,9 +39,9 @@ export default function FirstDay({ onNew, onFirstDay }) {
   if (loading) return <p className="empty-state" role="status">Loading…</p>
   if (!nothing) {
     return (
-      <div className="empty-state" data-testid="no-chores">
-        <p>No chores yet. Build your first one from what it has learned.</p>
-        <button className="primary" data-testid="new-chore" onClick={onNew}><Icon name="plus" size={20} /> New chore</button>
+      <div className="empty-state" data-testid="no-flows">
+        <p>No flows yet. Build your first one from what it has learned.</p>
+        <button className="primary" data-testid="new-flow" onClick={onNew}><Icon name="plus" size={20} /> New flow</button>
       </div>
     )
   }

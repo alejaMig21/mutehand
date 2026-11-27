@@ -56,7 +56,7 @@ def test_the_editor_builds_saves_runs_and_shows_live_status_against_the_real_api
     server, tmp_path = editor
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
-        page.get_by_test_id("flow-title").fill("e2e-flow")  # a chore is kept as soon as it has a box, under its name then
+        page.get_by_test_id("flow-title").fill("e2e-flow")  # a flow is kept as soon as it has a node, under its name then
 
         # palette: steps from the user and factory layers
         for name in ("open-menu", "save-file", "factory-only"):
@@ -163,14 +163,14 @@ def test_a_sensitive_step_is_marked_in_words_in_the_palette_not_only_by_colour(e
 
 
 def open_page(playwright, server, screen="editor"):
-    """A new headless page. "editor" opens an empty chore from Home, the way a person reaches the flow screen; "apps" the Apps
+    """A new headless page. "editor" opens an empty flow from Home, the way a person reaches the flow screen; "apps" the Apps
     tab; None leaves it where a person first lands (Home)."""
     browser = playwright.chromium.launch(
         headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
     page = browser.new_page()
     page.goto(f"{server.url}/#token=e2e-token")
     if screen == "editor":
-        page.get_by_test_id("new-chore").click()
+        page.get_by_test_id("new-flow").click()
     elif screen:
         page.get_by_test_id(f"tab-{screen}").click()
     return browser, page
@@ -209,7 +209,7 @@ def test_system_nodes_and_steps_are_added_wired_deleted_saved_and_reopened(edito
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         page.get_by_test_id("flow-title").fill("built")
-        page.get_by_text("Other boxes").click()
+        page.get_by_text("Other nodes").click()
         page.get_by_test_id("system-manual-trigger").click()  # n1
         page.get_by_test_id("palette-open-menu").click()  # n2
         page.get_by_test_id("system-daily-trigger").click()  # n3, deleted again below
@@ -291,7 +291,7 @@ def test_nothing_in_the_editor_starts_a_lesson(editor):
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         sent = []
-        # the chore itself is kept by itself once it has a box: that is the only thing the editor may write
+        # the flow itself is kept by itself once it has a node: that is the only thing the editor may write
         page.on("request", lambda request: sent.append(request.method) if "/api/flows" not in request.url else None)
         page.get_by_test_id("palette-open-menu").click()
         page.get_by_test_id("open-flows").click()
@@ -495,7 +495,7 @@ def test_a_flow_with_a_rejected_step_says_which_one_and_cannot_be_started(tmp_pa
         server.stop()
 
 
-def test_boxes_say_how_far_a_step_is_trusted_and_a_stopped_box_is_explained_not_counted_as_a_doubt(tmp_path):
+def test_nodes_say_how_far_a_step_is_trusted_and_a_stopped_node_is_explained_not_counted_as_a_doubt(tmp_path):
     from playwright.sync_api import sync_playwright
 
     from workflow_factory import Sensitivity, grant_consent, save_flow

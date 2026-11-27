@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { helpMessage, ranResult, rejectedWords, relearnMessage, relearnWords, stoppedWords, triedResult } from './stopped.js'
 
-const item = { flow: 'weekly', title: 'Weekly export', app: 'paint.exe', private: false, node: 'n2', box: 'Close message',
+const item = { flow: 'weekly', title: 'Weekly export', app: 'paint.exe', private: false, node: 'n2', step: 'Close message',
   reason: 'control_not_found', doubt: 12, note: null, at: new Date(2026, 10, 25, 9, 0).toISOString(), rejected_by_person: [] }
 const now = new Date(2026, 10, 26, 18, 0)
 
-test('a stopped chore says which chore, when, at which box and why, in plain words', () => {
+test('a stopped flow says which flow, when, at which node and why, in plain words', () => {
   const says = stoppedWords(item, now)
 
   assert.equal(says.title, '“Weekly export” stopped yesterday at 09:00')
@@ -15,21 +15,21 @@ test('a stopped chore says which chore, when, at which box and why, in plain wor
   assert.doesNotMatch(JSON.stringify(says), /control_not_found|_/)
 })
 
-test('a box in a private app is not named, and a stop with no time is still said', () => {
-  const says = stoppedWords({ ...item, private: true, box: null, at: null }, now)
+test('a node in a private app is not named, and a stop with no time is still said', () => {
+  const says = stoppedWords({ ...item, private: true, step: null, at: null }, now)
 
   assert.equal(says.title, '“Weekly export” stopped')
   assert.match(says.detail, /^At one of its steps: /)
 })
 
-test('a stop the person caused says to allow the action again before anything else', () => {
+test('a stop the person caused says to allow the step again before anything else', () => {
   const says = stoppedWords({ ...item, rejected_by_person: [{ app: 'paint.exe', step: 'close-message' }] }, now)
 
   assert.match(says.hint, /rejected/)
   assert.match(says.hint, /Allow again/)
 })
 
-test('the message to send names the chore, the box and the reason, and carries the note', () => {
+test('the message to send names the flow, the node and the reason, and carries the note', () => {
   const message = helpMessage(item, 'Paint', 'It happens only when Paint is minimised')
 
   assert.match(message, /“Weekly export”/)
@@ -41,8 +41,8 @@ test('the message to send names the chore, the box and the reason, and carries t
   assert.doesNotMatch(helpMessage(item, 'Paint', '  '), /note/i) // no note, no mention of one
 })
 
-test('a private app is named in the message, its box is not', () => {
-  const message = helpMessage({ ...item, private: true, box: null }, 'Chat', '')
+test('a private app is named in the message, its node is not', () => {
+  const message = helpMessage({ ...item, private: true, step: null }, 'Chat', '')
 
   assert.match(message, /Chat/)
   assert.doesNotMatch(message, /Close message/)
@@ -59,7 +59,7 @@ test('trying again that works says it is fixed and how many steps finished', () 
   assert.equal(triedResult(item, run('finished', { a: 'done' }), null).detail, '1 step finished.')
 })
 
-test('trying again that stops at the same box for the same reason is the same problem', () => {
+test('trying again that stops at the same node for the same reason is the same problem', () => {
   const result = triedResult(item, run('stopped', {}, { stopped: 'n2' }), { ...item, doubt: 13 })
 
   assert.equal(result.tone, 'bad')
@@ -68,7 +68,7 @@ test('trying again that stops at the same box for the same reason is the same pr
 })
 
 test('trying again that stops somewhere else, or for another reason, is a new problem', () => {
-  const elsewhere = triedResult(item, run('stopped', {}, { stopped: 'n3' }), { ...item, node: 'n3', box: 'Save picture' })
+  const elsewhere = triedResult(item, run('stopped', {}, { stopped: 'n3' }), { ...item, node: 'n3', step: 'Save picture' })
   const another = triedResult(item, run('stopped', {}, { stopped: 'n2' }), { ...item, reason: 'effect_mismatch' })
 
   assert.match(elsewhere.title, /^A new problem: “Weekly export”/)
@@ -86,23 +86,23 @@ test('a try that ended some other way says so', () => {
 
 const flows = [{ id: 'a', title: 'Morning report' }, { id: 'b', title: 'Evening report' }]
 
-test('an app update names the app and the chores it blocks, never a file name', () => {
+test('an app update names the app and the flows it blocks, never a file name', () => {
   const says = relearnWords({ app: 'paint.exe', flows })
 
   assert.equal(says.title, 'Paint was updated')
-  assert.match(says.detail, /These chores wait for that: “Morning report”, “Evening report”\./)
+  assert.match(says.detail, /These flows wait for that: “Morning report”, “Evening report”\./)
   assert.match(says.message, /Paint was updated .* learned again/)
   assert.doesNotMatch(says.message, /\.exe/)
 })
 
-test('the update message is one text, with or without the chores that wait', () => {
+test('the update message is one text, with or without the flows that wait', () => {
   const alone = relearnMessage('Paint')
-  assert.equal(alone, 'In Mutehand, Paint was updated and its actions have to be learned again. Please find which ones and teach them again.')
+  assert.equal(alone, 'In Mutehand, Paint was updated and its steps have to be learned again. Please find which ones and teach them again.')
   assert.equal(relearnWords({ app: 'paint.exe', flows }).message, relearnMessage('Paint', flows))
-  assert.match(relearnMessage('Paint', flows.slice(0, 1)), /^.*again so this chore can run: “Morning report”\.$/)
+  assert.match(relearnMessage('Paint', flows.slice(0, 1)), /^.*again so this flow can run: “Morning report”\.$/)
 })
 
-test('a rejected action says who rejected it, and a private app is not named', () => {
+test('a rejected step says who rejected it, and a private app is not named', () => {
   assert.equal(rejectedWords({ app: 'paint.exe', step: 'save-file', private: false, why: { kind: 'person' }, flows }).title, '“save-file” is rejected')
   const hidden = rejectedWords({ app: 'vault.exe', step: 'secret-step', private: true, why: { kind: 'different_effect' }, flows })
 

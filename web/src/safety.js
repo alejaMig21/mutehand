@@ -1,5 +1,5 @@
 // What the top bar says about the safety of the flow on the canvas. Pure, so node can test it.
-// Only steps can be rejected or missing. No trust label is ever shown, and a doubt is the chore's, not the safety's.
+// Only steps can be rejected or missing. No trust label is ever shown, and a doubt is the flow's, not the safety's.
 
 export function safetySummary(nodes) {
   const steps = nodes.filter((n) => !n.data.node.kind || n.data.node.kind === 'step')
@@ -21,7 +21,7 @@ export function summaryMarks(summary) {
   return marks
 }
 
-// Why Run now is off, in words, or '' when the chore may start.
+// Why Run now is off, in words, or '' when the flow may start.
 export function whyNotRunnable(summary, app = 'this app') {
   if (summary.missing.length) {
     const named = summary.missing.map((m) => (m.hole ? `the hole '${m.hole.hole}' of the recipe '${m.hole.recipe}'` : `'${m.step}'`)).join(', ')

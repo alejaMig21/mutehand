@@ -5,7 +5,7 @@ import { Icon } from './icons.jsx'
 // What a node is called and drawn as: a system node by its kind (and operation), a step by its app.
 function describe(node, meta) {
   if (node.kind === 'trigger' && node.fields?.mode?.value === 'daily') {
-    return { title: `Start: every day at ${node.fields.at?.value ?? '?'}`, icon: 'clock' } // the first box says when the chore runs
+    return { title: `Start: every day at ${node.fields.at?.value ?? '?'}`, icon: 'clock' } // the first node says when the flow runs
   }
   if (node.kind && node.kind !== 'step') return { title: titleOf(node), icon: systemEntryFor(node)?.icon ?? 'braces' }
   const app = meta?.app
@@ -17,7 +17,7 @@ export const RUN_MARKS = {
   running: ['spinner', 'Running', 'info'], done: ['check', 'Done', 'ok'], blocked: ['alert', 'Stopped here', 'bad'],
   unreached: ['clock', 'Not reached', 'muted'], continued: ['skip', 'Carried on', 'warn'], paused: ['pause', 'Paused: you moved the mouse', 'warn'],
 }
-// A rejected action blocks the flow, so it is said on its box; how far an action is trusted is not.
+// A rejected step blocks the flow, so it is said on its node; how far a step is trusted is not.
 const REJECTED = ['xcircle', 'Rejected', 'bad']
 
 export function marksFor(node, meta, runStatus) {

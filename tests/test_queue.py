@@ -186,7 +186,7 @@ def test_giving_a_stopped_flow_a_daily_time_does_not_make_it_start_over(tmp_path
     desktop = FakeDesktop(controls=[button("Menu"), button("Save")])
     result = run_flow(with_time, desktop=desktop, user_db=user_db)
 
-    assert [c.name for c in desktop.clicks] == ["Save"]  # the first box was not done twice
+    assert [c.name for c in desktop.clicks] == ["Save"]  # the first node was not done twice
     assert result.stopped is None
 
 

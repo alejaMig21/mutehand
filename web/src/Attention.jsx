@@ -6,7 +6,7 @@ import { Icon } from './icons.jsx'
 import { helpMessage, rejectedWords, relearnWords, stoppedWords, titles, triedResult } from './stopped.js'
 
 // Trying again, shared by Home and the flow screen so that a try started on one is reported on both. `tries` holds, by
-// chore, what was tried and, once the run ends, how it went. `ensure` runs first on the flow screen: what is stored
+// flow, what was tried and, once the run ends, how it went. `ensure` runs first on the flow screen: what is stored
 // must be what is on screen.
 export function useTryAgain({ runs, follow, forget }) {
   const [tries, setTries] = useState({})
@@ -31,7 +31,7 @@ export function useTryAgain({ runs, follow, forget }) {
     }
   }, [follow, forget])
 
-  // a try that ended is told how it went: the chore is read again, to see whether it stopped again and where
+  // a try that ended is told how it went: the flow is read again, to see whether it stopped again and where
   useEffect(() => {
     for (const [flow, tried] of Object.entries(tries)) {
       const run = runs[flow]
@@ -86,7 +86,7 @@ const keepTyped = (doubt, note) => {
   } catch { /* the note simply is not remembered */ }
 }
 
-// "Try again" and "Ask for help" for a stopped chore. A step the person rejected is not lifted by trying again: it is
+// "Try again" and "Ask for help" for a stopped flow. A step the person rejected is not lifted by trying again: it is
 // allowed again first. `prefix` and `suffix` keep the test ids of the card and of the strip apart.
 export function StoppedActions({ item, onTry, onChanged, trying, prefix, suffix = '' }) {
   const [asking, setAsking] = useState(false)
@@ -119,7 +119,7 @@ export function StoppedActions({ item, onTry, onChanged, trying, prefix, suffix 
 
   return (
     <>
-      <div className="stopped-actions">
+      <div className="stopped-buttons">
         {blocked
           ? <button className="primary" data-testid={`${prefix}-allow-again${suffix}`} aria-disabled={allowing || undefined} onClick={allow}>Allow again</button>
           : (
@@ -187,7 +187,7 @@ function Rejected({ item, onAllowed }) {
     setProblem('')
     try {
       await api(`/api/steps/${encode(item.app)}/${encode(item.step)}/restore`, { method: 'POST' })
-      onAllowed(item.private ? `An action in ${appLabel(item.app)} is allowed again.` : `“${item.step}” is allowed again.`)
+      onAllowed(item.private ? `A step in ${appLabel(item.app)} is allowed again.` : `“${item.step}” is allowed again.`)
     } catch (e) {
       setProblem(e.message)
       setAllowing(false)
@@ -222,10 +222,10 @@ function Notice({ item, onDismissed }) {
 
 const rejectedKey =(item) => `rejected-${item.app}-${item.step}`
 
-// The things that need the person, first on Home. Absent when there are none. A rejected action that was just allowed again
+// The things that need the person, first on Home. Absent when there are none. A rejected step that was just allowed again
 // stays where it was, saying so, until the person dismisses it: the list below does not jump up under the next press.
 //
-// A try again answers the same way: its answer stands in the card, or where the card was once the chore no longer needs
+// A try again answers the same way: its answer stands in the card, or where the card was once the flow no longer needs
 // the person, until it is hidden. `tries` and `hide` are the ones `useTryAgain` gives.
 export function Attention({ items, tries, hide, tryAgain, onChanged, running }) {
   const [kept, setKept] = useState({}) // key -> {item, at, words}

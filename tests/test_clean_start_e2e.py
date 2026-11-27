@@ -44,9 +44,9 @@ def test_home_tells_once_where_the_copy_is_and_it_can_be_dismissed(tmp_path):
         card = page.get_by_test_id("attention-notice-clean-start")
         card.wait_for()
         assert str(tmp_path / "user-2026-11-27.db") in card.inner_text()
-        assert page.get_by_test_id("chore-weekly").count() == 0  # nothing was imported: no flow from before
+        assert page.get_by_test_id("flow-weekly").count() == 0  # nothing was imported: no flow from before
         page.get_by_test_id("attention-notice-dismiss-clean-start").click()
         card.wait_for(state="detached")
         page.reload()
-        page.get_by_role("heading", name="Your chores").wait_for()
+        page.get_by_role("heading", name="Your flows").wait_for()
         assert page.get_by_test_id("attention-notice-clean-start").count() == 0

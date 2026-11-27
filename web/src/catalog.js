@@ -6,17 +6,17 @@ const system = (key, title, hint, group, icon, node) => ({ key, title, hint, gro
 const data = (op, fields) => ({ kind: 'data', op, fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, fixed(v)])) })
 
 export const SYSTEM_NODES = [
-  system('manual-trigger', 'Manual trigger', 'Starts a chore by hand', 'Triggers', 'play',
+  system('manual-trigger', 'Manual trigger', 'Starts a flow by hand', 'Triggers', 'play',
     { kind: 'trigger', fields: { mode: fixed('manual') } }),
-  system('daily-trigger', 'Daily trigger', 'Starts a chore every day at a time', 'Triggers', 'clock',
+  system('daily-trigger', 'Daily trigger', 'Starts a flow every day at a time', 'Triggers', 'clock',
     { kind: 'trigger', fields: { mode: fixed('daily'), at: fixed('09:00') } }),
-  system('foreach', 'Repeat for each', 'Repeats the first action it connects to, once per item', 'Order', 'repeat',
+  system('foreach', 'Repeat for each', 'Repeats the first step it connects to, once per item', 'Order', 'repeat',
     { kind: 'foreach', fields: { items: fixed([]) } }),
   system('if', 'Two paths: yes or no', 'Chooses a path: the first line is yes, the second is no', 'Order', 'branch',
     { kind: 'if', fields: { condition: fixed(true) } }),
-  system('wait', 'Wait a while', 'Pauses the chore', 'Order', 'clock', { kind: 'wait', fields: { seconds: fixed(5) } }),
+  system('wait', 'Wait a while', 'Pauses the flow', 'Order', 'clock', { kind: 'wait', fields: { seconds: fixed(5) } }),
   system('join', 'Join', 'Waits for every path that leads to it', 'Order', 'merge', { kind: 'join' }),
-  system('stop', 'Stop', 'Ends the chore on purpose', 'Order', 'stop', { kind: 'stop' }),
+  system('stop', 'Stop', 'Ends the flow on purpose', 'Order', 'stop', { kind: 'stop' }),
   system('compare', 'Compare', 'Two values: equal, greater, contains...', 'Logic', 'scale',
     data('compare', { a: 0, b: 0, operator: 'equals' })),
   system('and', 'And', 'True when both are true', 'Logic', 'scale', data('and', { a: true, b: true })),

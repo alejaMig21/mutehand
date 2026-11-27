@@ -20,14 +20,14 @@ function Entry({ title, hint, children, ...props }) {
   )
 }
 
-// The column on the right of the canvas: the app, its actions, then decisions, recipes and the other boxes.
+// The column on the right of the canvas: the app, its steps, then decisions, recipes and the other nodes.
 // It only adds what exists. Nothing in it starts a lesson: lessons happen in an agent chat.
 export default function SearchPanel({ steps, recipes, apps, app, onApp, onAddSystem, onAddStep, onAddRecipe }) {
   const [query, setQuery] = useState('')
   const [teaching, setTeaching] = useState(false)
   // only what the person typed and the app's name: nothing read from the app's screen
-  const message = app ? `I want to teach you a new action in ${appLabel(app)}: ${query.trim() || '[what you want done]'}`
-    : `I want to teach you a chore: ${query.trim() || '[what you want done, and in which program]'}`
+  const message = app ? `I want to teach you a new step in ${appLabel(app)}: ${query.trim() || '[what you want done]'}`
+    : `I want to teach you a flow: ${query.trim() || '[what you want done, and in which program]'}`
   const own = steps.filter((step) => appKey(step.app) === appKey(app))
   const found = searchCatalog(query, own, undefined, recipes)
   const decisions = DECISIONS.map((key) => found.system.find((n) => n.key === key)).filter(Boolean)
@@ -39,17 +39,17 @@ export default function SearchPanel({ steps, recipes, apps, app, onApp, onAddSys
   )
 
   return (
-    <aside className="search-panel" aria-label="Add a box" data-testid="search-panel">
-      <h2>Add a box</h2>
+    <aside className="search-panel" aria-label="Add a node" data-testid="search-panel">
+      <h2>Add a node</h2>
       <div className="panel-app">
         {chip && <span className="chip" style={{ background: chip.colour }} aria-hidden="true">{chip.letter}</span>}
         <AppSelect aria-label="App to run on" data-testid="app-name" apps={apps} value={app} onChange={onApp} />
       </div>
-      <label htmlFor="find-action" className="muted">Find an action</label>
-      <input id="find-action" type="search" data-testid="search" placeholder="for example: save" value={query}
+      <label htmlFor="find-step" className="muted">Find a step</label>
+      <input id="find-step" type="search" data-testid="search" placeholder="for example: save" value={query}
         onChange={(e) => setQuery(e.target.value)} />
 
-      <ul aria-label="Actions">
+      <ul aria-label="Steps">
         {found.apps.map((step) => (
           <Entry key={`${step.app}/${step.name}`} title={step.name} data-testid={`palette-${step.name}`}
             onClick={() => onAddStep(step)} {...draggable({ app: step.app, step: step.name })}>
@@ -87,7 +87,7 @@ export default function SearchPanel({ steps, recipes, apps, app, onApp, onAddSys
       )}
       {others.length > 0 && (
         <details open={query ? true : undefined}>
-          <summary><h3>Other boxes</h3></summary>
+          <summary><h3>Other nodes</h3></summary>
           <ul>{others.map((n) => system(n, n.hint))}</ul>
         </details>
       )}

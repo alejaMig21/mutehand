@@ -284,7 +284,7 @@ class ApiServer:
         return [*(entry["id"] for entry in list_flows(self.user_db, self.factory_db)), *trashed_ids(self.user_db)]
 
     def _running(self, flow_id: str) -> bool:
-        """Is the flow, or a test of one of its boxes, running here or in another process (a scheduled run)?"""
+        """Is the flow, or a test of one of its nodes, running here or in another process (a scheduled run)?"""
         def ours(key: str) -> bool:
             return key == flow_id or key.startswith(f"{flow_id}#test:")
         with self._runs_lock:
@@ -349,17 +349,17 @@ class ApiServer:
             flow = load_flow(self.user_db, self.factory_db, flow_id)
             at = daily.trigger_time(flow)
             if lost and at and at not in [t["at"] for t in tasks if t["name"] not in lost]:
-                # a daily box with no task behind it would say "every day" and never run: take it off the chore
+                # a daily node with no task behind it would say "every day" and never run: take it off the flow
                 before = load_layout(self.user_db, flow_id)
                 self._store(*daily.with_daily(flow, None, before), before)
                 flow = load_flow(self.user_db, self.factory_db, flow_id)
-                return 200, {**self._flow_view(flow), "daily_run_lost": lost, "daily_box_removed": True}
+                return 200, {**self._flow_view(flow), "daily_run_lost": lost, "daily_node_removed": True}
             view = self._flow_view(flow)
             return 200, {**view, "daily_run_lost": lost} if lost else view
 
     def _write_with_daily(self, stored, flow, positions: dict | None, body: dict, ok: int) -> tuple[int, dict]:
-        """Save `flow` (replacing `stored`, None for a new one). A daily trigger box and the Windows task that runs it exist
-        together or not at all: when the save adds, removes or re-times that box, the task follows, or nothing is saved.
+        """Save `flow` (replacing `stored`, None for a new one). A daily trigger node and the Windows task that runs it exist
+        together or not at all: when the save adds, removes or re-times that node, the task follows, or nothing is saved.
         Call with the save lock held."""
         now = daily.trigger_time(flow)
         if (daily.trigger_time(stored) if stored else None) == now:
@@ -384,7 +384,7 @@ class ApiServer:
             save_layout(self.user_db, flow.id, positions)
 
     def _daily_read(self, flow_id: str) -> tuple[int, dict]:
-        """The flow's daily time as Windows has it, and as its first box says. Reading changes nothing."""
+        """The flow's daily time as Windows has it, and as its first node says. Reading changes nothing."""
         with self._save_lock:
             flow = load_flow(self.user_db, self.factory_db, flow_id)
             if flow is None:
@@ -394,7 +394,7 @@ class ApiServer:
             return 200, {"at": at, "node_at": daily.trigger_time(flow)}
 
     def _daily_change(self, flow_id: str, at: str | None) -> tuple[int, dict]:
-        """Set the flow's daily time, or with None stop it: the task and the first box change together, or neither does."""
+        """Set the flow's daily time, or with None stop it: the task and the first node change together, or neither does."""
         with self._save_lock:
             flow = load_flow(self.user_db, self.factory_db, flow_id)
             if flow is None:
@@ -423,7 +423,7 @@ class ApiServer:
                     schedule.delete_schedule(task["name"], runner=runner)
                     stopped.append(task)
                 return ok, commit()
-            except Exception as error:  # noqa: BLE001 - what was stopped runs again: the box is still there
+            except Exception as error:  # noqa: BLE001 - what was stopped runs again: the node is still there
                 self._recreate(flow_id, stopped)
                 if isinstance(error, RuntimeError):
                     return 502, {"error": f"The daily run could not be stopped, so it still runs every day. {error}"}
@@ -613,7 +613,7 @@ class ApiServer:
                 if mark and method == "POST":  # a step name is free text: the browser sends it percent-encoded
                     app, name = urllib.parse.unquote(mark[1]), urllib.parse.unquote(mark[2])
                     found = find_step(api.user_db, api.factory_db, app, name) or next(
-                        (s for s in list_steps(api.user_db, api.factory_db, light=True)  # a private app's action is named by handle
+                        (s for s in list_steps(api.user_db, api.factory_db, light=True)  # a private app's step is named by handle
                          if s.app == app and handle(s.app, s.name) == name), None)
                     if found is None:
                         return self._send(404, {"error": "no such step"})

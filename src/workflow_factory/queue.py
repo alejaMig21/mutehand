@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS run_nodes (  -- what each node did: never any data va
     reason TEXT,
     effect TEXT,
     step TEXT,  -- the step it ran, so the history still reads after the flow changes
-    kind TEXT,  -- what kind of box it was (and, for a data box, its op): node ids are reused when a flow is rebuilt
+    kind TEXT,  -- what kind of node it was (and, for a data node, its op): node ids are reused when a flow is rebuilt
     op TEXT
 );
 CREATE INDEX IF NOT EXISTS run_nodes_by_run ON run_nodes (run_id);

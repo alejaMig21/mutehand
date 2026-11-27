@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { autoLayout, boxNumbers, chainLoose, fromFlowJson, joinBoxes, looseNodes, nextNodeId, toFlowJson, unfinished, withBranch } from './flowjson.js'
+import { autoLayout, nodeNumbers, chainLoose, fromFlowJson, joinNodes, looseNodes, nextNodeId, toFlowJson, unfinished, withBranch } from './flowjson.js'
 
 test('a flow survives the trip from API JSON to the canvas and back', () => {
   const flow = {
@@ -103,7 +103,7 @@ test('a new node id never reuses one that is on the canvas', () => {
   assert.equal(nextNodeId([{ id: 'custom' }, { id: 'n2' }]), 'n3')
 })
 
-test('a stored flow is laid out top to bottom by distance from the start, each box under what leads to it', () => {
+test('a stored flow is laid out top to bottom by distance from the start, each node under what leads to it', () => {
   const at = autoLayout(['a', 'b', 'c'], [['a', 'b'], ['b', 'c']])
 
   assert.ok(at.a.y < at.b.y && at.b.y < at.c.y)
@@ -115,12 +115,12 @@ test('the two paths of a decision sit side by side under it, the first on the le
 
   assert.equal(at.yes.y, at.no.y)
   assert.ok(at.yes.x < at.d.x && at.d.x < at.no.x)
-  assert.ok(at.no.x - at.yes.x >= 260) // wider than a box: they never overlap
+  assert.ok(at.no.x - at.yes.x >= 260) // wider than a node: they never overlap
   assert.equal(at.end.x, at.d.x)
   assert.ok(at.end.y > at.yes.y)
 })
 
-test('boxes that nothing leads to start side by side at the top', () => {
+test('nodes that nothing leads to start side by side at the top', () => {
   const at = autoLayout(['a', 'b'], [])
 
   assert.equal(at.a.y, at.b.y)
@@ -148,13 +148,13 @@ test('connecting in order wires into the for each, never into its body', () => {
   assert.deepEqual(wires(chainLoose(nodes, [body])), [['n3', 'n2', 'body'], ['n1', 'n3', null]])
 })
 
-// a canvas built only by adding boxes, as the panel does
-const built = (...adds) => adds.reduce((canvas, [id, kind, options]) => joinBoxes(canvas.nodes, canvas.edges,
+// a canvas built only by adding nodes, as the panel does
+const built = (...adds) => adds.reduce((canvas, [id, kind, options]) => joinNodes(canvas.nodes, canvas.edges,
   [{ id, type: 'card', data: { node: { id, kind } } }], options), { nodes: [], edges: [] })
 const at = (canvas, id) => canvas.nodes.find((n) => n.id === id).position
 const joined = (canvas) => wires(canvas.edges).sort()
 
-test('a new box joins after the last one and sits under it', () => {
+test('a new node joins after the last one and sits under it', () => {
   const canvas = built(['a'], ['b'], ['c'])
 
   assert.deepEqual(joined(canvas), [['a', 'b', null], ['b', 'c', null]])
@@ -162,7 +162,7 @@ test('a new box joins after the last one and sits under it', () => {
   assert.equal(at(canvas, 'a').x, at(canvas, 'c').x)
 })
 
-test('a new box joins after the chosen one, before what followed it, and what followed moves down', () => {
+test('a new node joins after the chosen one, before what followed it, and what followed moves down', () => {
   const canvas = built(['a'], ['b'], ['c'], ['x', 'step', { after: 'a' }])
 
   assert.deepEqual(joined(canvas), [['a', 'x', null], ['b', 'c', null], ['x', 'b', null]])
@@ -170,73 +170,73 @@ test('a new box joins after the chosen one, before what followed it, and what fo
   assert.equal(at(canvas, 'x').x, at(canvas, 'a').x)
 })
 
-test('a decision takes yes then no, and a third box goes into the yes path', () => {
+test('a decision takes yes then no, and a third node goes into the yes path', () => {
   const two = built(['d', 'if'], ['y'], ['n', 'step', { after: 'd' }])
   assert.deepEqual(joined(two), [['d', 'n', 'otherwise'], ['d', 'y', 'then']])
   assert.ok(at(two, 'y').x < at(two, 'd').x && at(two, 'd').x < at(two, 'n').x)
 
-  const three = joinBoxes(two.nodes, two.edges, [{ id: 'z', data: { node: { id: 'z' } } }], { after: 'd' })
+  const three = joinNodes(two.nodes, two.edges, [{ id: 'z', data: { node: { id: 'z' } } }], { after: 'd' })
   assert.deepEqual(joined(three), [['d', 'n', 'otherwise'], ['d', 'z', 'then'], ['z', 'y', null]])
 })
 
-test('a repeat takes the next action as what it repeats, and the one after that follows the repeat', () => {
+test('a repeat takes the next step as what it repeats, and the one after that follows the repeat', () => {
   const canvas = built(['r', 'foreach'], ['body'], ['after'])
 
   assert.deepEqual(joined(canvas), [['r', 'after', 'next'], ['r', 'body', 'body']])
-  // choosing the repeated action stands for its repeat: it takes no lines of its own
-  const more = joinBoxes(canvas.nodes, canvas.edges, [{ id: 'x', data: { node: { id: 'x' } } }], { after: 'body' })
+  // choosing the repeated step stands for its repeat: it takes no lines of its own
+  const more = joinNodes(canvas.nodes, canvas.edges, [{ id: 'x', data: { node: { id: 'x' } } }], { after: 'body' })
   assert.deepEqual(joined(more), [['r', 'body', 'body'], ['r', 'x', 'next'], ['x', 'after', null]])
 })
 
-test('only an action becomes what a repeat repeats, and never one that already has lines', () => {
+test('only a step becomes what a repeat repeats, and never one that already has lines', () => {
   assert.deepEqual(joined(built(['r', 'foreach'], ['w', 'wait'])), [['r', 'w', 'next']])
   const inserted = built(['a'], ['b'], ['r', 'foreach', { after: 'a' }])
   assert.deepEqual(joined(inserted), [['a', 'r', null], ['r', 'b', 'next']])
 })
 
-test('a start box is joined before the first box, never after the last one', () => {
+test('a start node is joined before the first node, never after the last one', () => {
   const canvas = built(['a'], ['b'], ['t', 'trigger'])
 
   assert.deepEqual(joined(canvas), [['a', 'b', null], ['t', 'a', null]])
   assert.ok(at(canvas, 't').y < at(canvas, 'a').y)
-  const next = joinBoxes(canvas.nodes, canvas.edges, [{ id: 'c', data: { node: { id: 'c' } } }])
+  const next = joinNodes(canvas.nodes, canvas.edges, [{ id: 'c', data: { node: { id: 'c' } } }])
   assert.ok(joined(next).some(([source, target]) => source === 'b' && target === 'c'))
 })
 
-test('the first box after two start boxes is led to by both, so nothing is left unconnected', () => {
+test('the first node after two start nodes is led to by both, so nothing is left unconnected', () => {
   const canvas = built(['manual', 'trigger'], ['daily', 'trigger'], ['a'])
 
   assert.deepEqual(joined(canvas), [['daily', 'a', null], ['manual', 'a', null]])
 })
 
-test('start boxes with nothing to lead to are not called unconnected', () => {
+test('start nodes with nothing to lead to are not called unconnected', () => {
   assert.deepEqual(looseNodes([bare('t', 'trigger'), bare('u', 'trigger')], []), [])
   assert.deepEqual(looseNodes([bare('t', 'trigger'), bare('a')], []).map((n) => n.id), ['t', 'a'])
 })
 
-test('connecting in order leads from a loose start box, never into it', () => {
+test('connecting in order leads from a loose start node, never into it', () => {
   const nodes = [bare('n1'), bare('n2'), bare('t', 'trigger')]
 
   assert.deepEqual(wires(chainLoose(nodes, [{ id: 'n1-n2', source: 'n1', target: 'n2' }])), [['n1', 'n2', null], ['t', 'n1', null]])
   assert.deepEqual(wires(chainLoose([bare('a'), bare('t', 'trigger'), bare('b')], [])), [['t', 'a', null], ['a', 'b', null]])
 })
 
-test('a dropped box stays where it was dropped and still joins', () => {
+test('a dropped node stays where it was dropped and still joins', () => {
   const canvas = built(['a'], ['b', 'step', { at: { x: 900, y: 20 } }])
 
   assert.deepEqual(at(canvas, 'b'), { x: 900, y: 20 })
   assert.deepEqual(joined(canvas), [['a', 'b', null]])
 })
 
-test('several boxes added at once join as one chain', () => {
+test('several nodes added at once join as one chain', () => {
   const start = built(['a'])
-  const canvas = joinBoxes(start.nodes, start.edges, ['h1', 'h2'].map((id) => ({ id, data: { node: { id } } })))
+  const canvas = joinNodes(start.nodes, start.edges, ['h1', 'h2'].map((id) => ({ id, data: { node: { id } } })))
 
   assert.deepEqual(joined(canvas), [['a', 'h1', null], ['h1', 'h2', null]])
   assert.ok(at(canvas, 'h1').y < at(canvas, 'h2').y)
 })
 
-test('a decision never gets a third line, and a repeated box none of its own', () => {
+test('a decision never gets a third line, and a repeated node none of its own', () => {
   const canvas = built(['d', 'if'], ['y'], ['n', 'step', { after: 'd' }], ['r', 'foreach', { after: 'n' }], ['b'])
   const extra = [...canvas.nodes, { id: 'e', data: { node: { id: 'e' } } }]
 
@@ -245,17 +245,17 @@ test('a decision never gets a third line, and a repeated box none of its own', (
   assert.equal(withBranch(extra, canvas.edges, { source: 'b', target: 'e' }), null)
 })
 
-test('boxes are numbered in the order they are read, and the start box is not counted', () => {
+test('nodes are numbered in the order they are read, and the start node is not counted', () => {
   const canvas = built(['t', 'trigger'], ['a'], ['d', 'if'], ['y'], ['n', 'step', { after: 'd' }])
 
-  assert.deepEqual(boxNumbers(canvas.nodes, canvas.edges), { a: 1, d: 2, y: 3, n: 4 })
+  assert.deepEqual(nodeNumbers(canvas.nodes, canvas.edges), { a: 1, d: 2, y: 3, n: 4 })
 })
 
 test('a choice with no yes path and a repeat with nothing to repeat cannot be kept yet', () => {
   assert.match(unfinished([{ id: 'a', kind: 'if', then: null }]), /yes/)
   assert.match(unfinished([{ id: 'a', kind: 'foreach', body: null }]), /repeats/)
-  // and the box is named by the number the person sees on it
-  assert.match(unfinished([{ id: 'a', step: 'x' }, { id: 'b', kind: 'if', then: null }], { a: 1, b: 2 }), /^Box 2:/)
-  assert.match(unfinished([{ id: 'a', step: 'x' }, { id: 'b', kind: 'foreach', body: null }], { a: 1, b: 2 }), /^Box 2:/)
+  // and the node is named by the number the person sees on it
+  assert.match(unfinished([{ id: 'a', step: 'x' }, { id: 'b', kind: 'if', then: null }], { a: 1, b: 2 }), /^Node 2:/)
+  assert.match(unfinished([{ id: 'a', step: 'x' }, { id: 'b', kind: 'foreach', body: null }], { a: 1, b: 2 }), /^Node 2:/)
   assert.equal(unfinished([{ id: 'a', kind: 'if', then: 'b' }, { id: 'b', kind: 'foreach', body: 'c' }, { id: 'c', step: 'x' }]), '')
 })

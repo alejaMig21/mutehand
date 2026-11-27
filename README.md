@@ -47,9 +47,9 @@ real exe, not the npm `.cmd` shim).
 
 ## Status
 
-The editor is rebuilt around chores (14 tickets, `.scratch/editor-rethink/`): Home lists the chores with a daily time and what needs
-attention, Apps lists the programs it knows, a flow screen draws a chore top to bottom and saves itself, a deleted chore can be undone,
-and a first-day guide shows what to do with nothing taught. The tutor can also build a chore from a description
+The editor is rebuilt around flows (14 tickets, `.scratch/editor-rethink/`): Home lists the flows with a daily time and what needs
+attention, Apps lists the programs it knows, a flow screen draws a flow top to bottom and saves itself, a deleted flow can be undone,
+and a first-day guide shows what to do with nothing taught. The tutor can also build a flow from a description
 (`list_known_steps`, `list_node_kinds`, `create_flow`, `flow_status`). Tests: `uv run pytest -q`, plus opt-in `-m web` (headless browser)
 and `-m live` (real apps; `tests/test_live_excel.py` and `test_live_word.py` need `WF_LIVE_EXCEL=1` / `WF_LIVE_WORD=1`). No lessons are
 taught yet; the data folder starts empty. The example flow Vivaldi -> Word -> Telegram is not built (research in `docs/research/17` to `19`).

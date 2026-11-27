@@ -116,7 +116,7 @@ def test_duplicating_a_template_gives_an_editable_copy_in_the_user_layer(tmp_pat
     assert len(load_flow(user_db, factory_db, "morning-template").nodes) == 1  # the template never changes
 
 
-def test_a_copy_of_a_daily_chore_has_no_daily_box_because_it_has_no_windows_task(tmp_path):
+def test_a_copy_of_a_daily_flow_has_no_daily_node_because_it_has_no_windows_task(tmp_path):
     user_db = tmp_path / "user.db"
     daily = Node("t", kind="trigger", fields={"mode": {"value": "daily"}, "at": {"value": "09:00"}})
     save_flow(user_db, Flow(id="morning", nodes=[daily, Node("a", "open-menu")], edges=[("t", "a")]))
@@ -125,7 +125,7 @@ def test_a_copy_of_a_daily_chore_has_no_daily_box_because_it_has_no_windows_task
 
     assert [n.id for n in copy.nodes] == ["a"]
     assert [n.id for n in load_flow(user_db, None, "evening").nodes] == ["a"]
-    assert len(load_flow(user_db, None, "morning").nodes) == 2  # the original keeps its box
+    assert len(load_flow(user_db, None, "morning").nodes) == 2  # the original keeps its node
 
 
 def test_duplicating_refuses_an_existing_name_or_an_unknown_template(tmp_path):

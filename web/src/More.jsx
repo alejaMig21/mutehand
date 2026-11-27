@@ -3,7 +3,7 @@ import { api, encode } from './api.js'
 import { historyWords } from './history.js'
 import { Icon } from './icons.jsx'
 
-// What a chore row offers besides Run: rename it, read its past runs, delete it. Deleting is undone from the notice that
+// What a flow row offers besides Run: rename it, read its past runs, delete it. Deleting is undone from the notice that
 // `useDeleted` keeps on Home, so nothing here asks "are you sure".
 export default function More({ flow, title, reload, onDeleted, place }) {
   const { id } = flow
@@ -39,17 +39,17 @@ export default function More({ flow, title, reload, onDeleted, place }) {
 
   return (
     <>
-      <button className="chore-more" data-testid={`more-${id}`} ref={toggle} aria-expanded={open} aria-controls={`more-panel-${id}`}
+      <button className="flow-more" data-testid={`more-${id}`} ref={toggle} aria-expanded={open} aria-controls={`more-panel-${id}`}
         aria-label={`More: ${title}`} onClick={() => { setRenamed(''); if (open) close(); else setOpen(true) }}>
         More
       </button>
       {renamed && !open && (
-        <p className="chore-line tone-ok" role="status" data-testid={`renamed-${id}`}><Icon name="checkcircle" size={18} /> Renamed to “{renamed}”.</p>
+        <p className="flow-line tone-ok" role="status" data-testid={`renamed-${id}`}><Icon name="checkcircle" size={18} /> Renamed to “{renamed}”.</p>
       )}
       {open && (
         <div className="more-panel" id={`more-panel-${id}`} data-testid={`more-panel-${id}`}
           onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); close() } }}>
-          <div className="more-actions">
+          <div className="more-buttons">
             <button data-testid={`more-rename-${id}`} ref={renameButton} aria-label={`Rename ${title}`}
               onClick={() => { setProblem(''); setMode('rename') }}>Rename</button>
             <button data-testid={`more-history-${id}`} aria-expanded={mode === 'history'} aria-label={`History of ${title}`}
@@ -63,7 +63,7 @@ export default function More({ flow, title, reload, onDeleted, place }) {
               done={(name) => { close(); setRenamed(name) }} cancel={() => { setMode('menu'); renameButton.current?.focus() }} />
           )}
           {mode === 'history' && <History id={id} />}
-          {problem && <p className="chore-line tone-bad" role="alert"><Icon name="alert" size={18} /> {problem}</p>}
+          {problem && <p className="flow-line tone-bad" role="alert"><Icon name="alert" size={18} /> {problem}</p>}
         </div>
       )}
     </>
@@ -100,12 +100,12 @@ function Rename({ id, title, reload, done, cancel }) {
         aria-invalid={problem ? true : undefined} onChange={(e) => setText(e.target.value)} />
       <button className="primary" type="submit" data-testid={`rename-save-${id}`} aria-disabled={saving || undefined}>Save name</button>
       <button type="button" onClick={cancel}>Cancel</button>
-      {problem && <p className="chore-line tone-bad" role="alert"><Icon name="alert" size={18} /> {problem}</p>}
+      {problem && <p className="flow-line tone-bad" role="alert"><Icon name="alert" size={18} /> {problem}</p>}
     </form>
   )
 }
 
-// The runs of one flow, newest first. The server keeps the name each box had when it ran.
+// The runs of one flow, newest first. The server keeps the name each node had when it ran.
 function History({ id }) {
   const [state, setState] = useState({ runs: null, error: '' })
   useEffect(() => {
@@ -128,7 +128,7 @@ function History({ id }) {
                   <li key={run.id} data-testid={`history-run-${run.id}`}>
                     <h3>{run.title}</h3>
                     <ul>
-                      {run.boxes.map((box, i) => <li key={i} className={`tone-${box.tone}`}>{box.words}</li>)}
+                      {run.nodes.map((node, i) => <li key={i} className={`tone-${node.tone}`}>{node.words}</li>)}
                     </ul>
                   </li>
                 ))}
@@ -138,7 +138,7 @@ function History({ id }) {
   )
 }
 
-// The notice after a delete, with Undo, shown where the chore was. Kept until it is dismissed, another flow is deleted or Home is left: there is no
+// The notice after a delete, with Undo, shown where the flow was. Kept until it is dismissed, another flow is deleted or Home is left: there is no
 // timer to race a keyboard or screen reader user. `flows` is Home's list, to give the focus back to the restored row.
 export function useDeleted(reload, flows) {
   const [deleted, setDeleted] = useState(null) // {id, title, daily_runs, at} or, once undone, {back: true, lost}; `at` is its place in the list
@@ -147,13 +147,13 @@ export function useDeleted(reload, flows) {
   const undo = useRef(null)
   const restored = useRef(null)
 
-  useEffect(() => { // a chore deleted a moment ago, before this page was loaded again, can still be undone
+  useEffect(() => { // a flow deleted a moment ago, before this page was loaded again, can still be undone
     api('/api/deleted').then((recent) => { if (recent[0]) setDeleted((now) => now ?? { ...recent[0], at: 0 }) }).catch(() => {})
   }, [])
   useEffect(() => { if (deleted && !deleted.back) undo.current?.focus() }, [deleted])
   useEffect(() => {
     if (restored.current && flows.some((flow) => flow.id === restored.current)) {
-      document.querySelector(`[data-testid="open-chore-${restored.current}"]`)?.focus()
+      document.querySelector(`[data-testid="open-flow-${restored.current}"]`)?.focus()
       restored.current = null
     }
   }, [flows])
@@ -166,7 +166,7 @@ export function useDeleted(reload, flows) {
       const back = await api(`/api/flows/${encode(deleted.id)}/restore`, { method: 'POST' })
       restored.current = deleted.id
       reload()
-      if (back.daily_run_lost) setDeleted({ ...deleted, back: true, lost: back.daily_run_lost.length, boxOff: back.daily_box_removed })
+      if (back.daily_run_lost) setDeleted({ ...deleted, back: true, lost: back.daily_run_lost.length, nodeOff: back.daily_node_removed })
       else setDeleted(null)
     } catch (e) {
       setProblem(e.message)
@@ -176,7 +176,7 @@ export function useDeleted(reload, flows) {
   }
 
   const sum = deleted && (deleted.back
-    ? `“${deleted.title}” is back, but its daily run could not be set again${deleted.boxOff ? ', so its daily start box was taken off' : ''}.`
+    ? `“${deleted.title}” is back, but its daily run could not be set again${deleted.nodeOff ? ', so its daily start node was taken off' : ''}.`
     : `“${deleted.title}” was deleted${deleted.daily_runs ? ', and its daily run stopped' : ''}.`)
   const notice = deleted && (
     <div className="undo-notice" data-testid="deleted-notice" role="status">

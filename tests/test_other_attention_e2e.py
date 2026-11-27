@@ -1,11 +1,11 @@
 """Other things that need the person (editor rethink, ticket 10): actions to learn again after an app update, a rejected
-action that blocks a chore, and a missing piece of setup. Driven in the built editor against the real API, with the
+action that blocks a flow, and a missing piece of setup. Driven in the built editor against the real API, with the
 stand-in desktop and Windows scheduler. Opt-in: `pytest -m web`."""
 
 import pytest
 from test_canvas_e2e import stub_clipboard
 from test_editor_safety_e2e import CONTRAST
-from test_home_e2e import NO_SIDEWAYS_SCROLL, chore, chores, home, row, says
+from test_home_e2e import NO_SIDEWAYS_SCROLL, home, put_flow, put_flows, row, says
 
 from workflow_factory import reject_step, save_step
 from workflow_factory.steps import list_steps, revalidate_changed_versions, step_report
@@ -28,12 +28,12 @@ def state_of(db, name):
 
 
 def an_updated_app(tmp_path):
-    chores(tmp_path)
-    chore(tmp_path, "evening", "Evening report", "open-menu")
+    put_flows(tmp_path)
+    put_flow(tmp_path, "evening", "Evening report", "open-menu")
     revalidate_changed_versions(tmp_path / "user.db", "paint.exe", "2.0")  # what a run records when it meets another version
 
 
-def test_an_app_update_is_one_card_naming_the_app_and_the_blocked_chores_with_the_message_to_send(tmp_path):
+def test_an_app_update_is_one_card_naming_the_app_and_the_blocked_flows_with_the_message_to_send(tmp_path):
     an_updated_app(tmp_path)
     with home(tmp_path) as (page, _):
         stub_clipboard(page)
@@ -51,8 +51,8 @@ def test_an_app_update_is_one_card_naming_the_app_and_the_blocked_chores_with_th
         assert page.evaluate("() => window.copied") == message
 
 
-def test_an_action_that_blocks_no_chore_raises_no_card(tmp_path):
-    chores(tmp_path)
+def test_an_action_that_blocks_no_flow_raises_no_card(tmp_path):
+    put_flows(tmp_path)
     save_step(tmp_path / "user.db", step("unused", "Gamma"))
     reject_step(tmp_path / "user.db", "paint.exe", "unused")
     with home(tmp_path) as (page, _):
@@ -61,8 +61,8 @@ def test_an_action_that_blocks_no_chore_raises_no_card(tmp_path):
         assert attention(page).count() == 0
 
 
-def test_a_rejected_action_that_blocks_a_chore_says_why_and_allow_again_lifts_it(tmp_path):
-    chores(tmp_path)
+def test_a_rejected_action_that_blocks_a_flow_says_why_and_allow_again_lifts_it(tmp_path):
+    put_flows(tmp_path)
     reject_step(tmp_path / "user.db", "paint.exe", "save-file")
     with home(tmp_path) as (page, _):
         card = page.get_by_test_id("attention-rejected-paint.exe-save-file")
@@ -81,7 +81,7 @@ def test_a_rejected_action_that_blocks_a_chore_says_why_and_allow_again_lifts_it
 
 
 def test_a_missing_required_setup_piece_shows_how_to_fix_it_and_a_working_setup_shows_nothing(tmp_path, monkeypatch):
-    chores(tmp_path)
+    put_flows(tmp_path)
     monkeypatch.setattr("workflow_factory.attention.run_checks", lambda data_dir: [MISSING])
     with home(tmp_path) as (page, _):
         card = page.get_by_test_id("attention-setup-agent-desktop")
@@ -97,7 +97,7 @@ def test_a_missing_required_setup_piece_shows_how_to_fix_it_and_a_working_setup_
 
 
 def test_the_cards_work_from_the_keyboard_alone(tmp_path):
-    chores(tmp_path)
+    put_flows(tmp_path)
     reject_step(tmp_path / "user.db", "paint.exe", "save-file")
     with home(tmp_path) as (page, _):
         page.get_by_test_id("attention-rejected-paint.exe-save-file").wait_for()
@@ -122,8 +122,8 @@ def test_no_screen_content_of_a_private_app_reaches_these_cards_or_their_message
     db = tmp_path / "user.db"
     save_step(db, step("open-chat", "Chat with Ana Ruiz", app="telegram.exe"))
     save_step(db, step("send-it", "Bank code 4471", app="telegram.exe"))
-    chore(tmp_path, "greet", "Say hello", "open-chat", app="telegram.exe")
-    chore(tmp_path, "pay", "Pay", "send-it", app="telegram.exe")
+    put_flow(tmp_path, "greet", "Say hello", "open-chat", app="telegram.exe")
+    put_flow(tmp_path, "pay", "Pay", "send-it", app="telegram.exe")
     mark_private(db, "telegram.exe")
     reject_step(db, "telegram.exe", "send-it")
     revalidate_changed_versions(db, "telegram.exe", "2.0")
@@ -142,16 +142,16 @@ def test_no_screen_content_of_a_private_app_reaches_these_cards_or_their_message
 
 @pytest.mark.parametrize("width,height", [(683, 384), (390, 740)])
 def test_the_cards_fit_a_narrow_window_with_readable_buttons(tmp_path, width, height, monkeypatch):
-    chores(tmp_path)
-    chore(tmp_path, "evening", "Evening-report-" + "x" * 60, "open-menu")
+    put_flows(tmp_path)
+    put_flow(tmp_path, "evening", "Evening-report-" + "x" * 60, "open-menu")
     save_step(tmp_path / "user.db", step("print-it", "Gamma", app="notes.exe"))
-    chore(tmp_path, "notes", "Notes", "print-it", app="notes.exe")
+    put_flow(tmp_path, "notes", "Notes", "print-it", app="notes.exe")
     reject_step(tmp_path / "user.db", "notes.exe", "print-it")
     revalidate_changed_versions(tmp_path / "user.db", "paint.exe", "2.0")
     monkeypatch.setattr("workflow_factory.attention.run_checks", lambda data_dir: [MISSING])
     buttons = """(width) => [...document.querySelectorAll('.attention button')].filter((b) => b.offsetParent).map((b) => {
-        const box = b.getBoundingClientRect()
-        return [b.innerText.trim(), box.left >= 0 && box.right <= width && box.height >= 44 && b.scrollWidth <= b.clientWidth]
+        const rect = b.getBoundingClientRect()
+        return [b.innerText.trim(), rect.left >= 0 && rect.right <= width && rect.height >= 44 && b.scrollWidth <= b.clientWidth]
       }).filter(([, fits]) => !fits)"""
     with home(tmp_path) as (page, _):
         page.set_viewport_size({"width": width, "height": height})

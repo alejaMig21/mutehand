@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { blockedWords, timeWords, boxState, effectWords, flowTitle, freshTitle, lastRunWords, PAUSED_WORDS, reasonWords, runNoteWords, runWords, whenWords, whyWords } from './words.js'
+import { blockedWords, timeWords, nodeState, effectWords, flowTitle, freshTitle, lastRunWords, PAUSED_WORDS, reasonWords, runNoteWords, runWords, whenWords, whyWords } from './words.js'
 
-test('a box says how far the run got with it, and nothing is left running after a run ends', () => {
+test('a node says how far the run got with it, and nothing is left running after a run ends', () => {
   const run = (status, nodes) => ({ status, nodes })
 
-  assert.equal(boxState(undefined, 'a'), undefined) // nothing ran
-  assert.equal(boxState(run('running', { a: 'running' }), 'a'), 'running')
-  assert.equal(boxState(run('running', { a: 'pending' }), 'a'), 'unreached')
-  assert.equal(boxState(run('finished', { a: 'skipped' }), 'a'), 'unreached') // the path not taken
-  assert.equal(boxState(run('emergency', { a: 'running' }), 'a'), 'blocked')
-  assert.equal(boxState(run('error', { a: 'paused' }), 'a'), 'blocked')
-  assert.equal(boxState(run('finished', { a: 'done' }), 'a'), 'done')
-  assert.equal(boxState(run('finished', { a: 'done' }), 'added-later'), undefined)
+  assert.equal(nodeState(undefined, 'a'), undefined) // nothing ran
+  assert.equal(nodeState(run('running', { a: 'running' }), 'a'), 'running')
+  assert.equal(nodeState(run('running', { a: 'pending' }), 'a'), 'unreached')
+  assert.equal(nodeState(run('finished', { a: 'skipped' }), 'a'), 'unreached') // the path not taken
+  assert.equal(nodeState(run('emergency', { a: 'running' }), 'a'), 'blocked')
+  assert.equal(nodeState(run('error', { a: 'paused' }), 'a'), 'blocked')
+  assert.equal(nodeState(run('finished', { a: 'done' }), 'a'), 'done')
+  assert.equal(nodeState(run('finished', { a: 'done' }), 'added-later'), undefined)
 })
 
 test('every reason a run can stop for is said in a sentence, never as a code', () => {
@@ -37,8 +37,8 @@ test('a time is shown in the local short form, and anything else is left as it i
 })
 
 test('a new flow never starts with the name of an existing one, whatever the capitals', () => {
-  assert.equal(freshTitle([]), 'New chore')
-  assert.equal(freshTitle([{ title: 'new CHORE' }, { title: 'New chore 2' }]), 'New chore 3')
+  assert.equal(freshTitle([]), 'New flow')
+  assert.equal(freshTitle([{ title: 'new FLOW' }, { title: 'New flow 2' }]), 'New flow 3')
   assert.equal(freshTitle([{ title: 'Report copy' }], 'Report copy'), 'Report copy 2')
 })
 
@@ -67,18 +67,18 @@ test('a run that left no record says what happened, and never repeats a code', (
   for (const run of [undefined, { status: 'finished' }, { status: 'running' }, { status: 'stopped' }]) assert.equal(runNoteWords(run, 'Paint'), '')
 })
 
-test('why a chore cannot run is said with its actions and its app, never as a code', () => {
+test('why a flow cannot run is said with its steps and its app, never as a code', () => {
   const words = (why, steps = []) => blockedWords({ why, steps }, 'Paint')
 
   for (const why of ['empty', 'expression', 'question', 'unreadable', 'something_new']) assert.match(words(why), /^[A-Z][^_]*\.$/, why)
   assert.equal(words('not_learned', ['a', 'b']), '“a”, “b” are not learned for Paint yet.')
   assert.equal(blockedWords({ why: 'not_learned', steps: ['a'] }, ''), '“a” is not learned yet.')
-  assert.equal(words('rejected', ['a', 'b']), '“a”, “b” are rejected. To run this chore, press “Allow again”: on Home, in “Needs your attention”, or on Apps.')
+  assert.equal(words('rejected', ['a', 'b']), '“a”, “b” are rejected. To run this flow, press “Allow again”: on Home, in “Needs your attention”, or on Apps.')
   assert.equal(words('to_revalidate', ['a', 'b']), 'Paint was updated: “a”, “b” have to be learned again.')
   assert.equal(blockedWords(null, 'Paint'), '')
 })
 
-test('how the last run of a chore went is said with the day and the time', () => {
+test('how the last run of a flow went is said with the day and the time', () => {
   const now = new Date(2026, 10, 26, 18, 0)
   const at = (...when) => new Date(...when).toISOString()
   const words = (status, when) => lastRunWords({ status, at: when }, now).words
@@ -114,6 +114,17 @@ test('no screen the product no longer has is named in what a person reads', asyn
   }
 })
 
-test('a chore with nothing in it says steps, the word the screens use', () => {
+test('the screens say flow, node and step: never chore, box or action', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs')
+  const old = /\b(?:chores?|box(?:es)?)\b/i // viewBox and checkbox are not these words
+  const inText = /(['"`])[^'"`\n]*(?<![.\w])actions?\b[^'"`\n]*\1/i // a step's `action` field is data; a quoted sentence is a screen
+  for (const file of readdirSync(new URL('.', import.meta.url)).filter((name) => /\.jsx?$/.test(name) && !name.includes('.test.'))) {
+    const text = readFileSync(new URL(file, import.meta.url), 'utf8')
+    assert.doesNotMatch(text, old, file)
+    assert.doesNotMatch(text, inText, file)
+  }
+})
+
+test('a flow with nothing in it says steps, the word the screens use', () => {
   assert.equal(blockedWords({ why: 'empty', steps: [] }, ''), 'It has no steps yet. Open it to add some.')
 })
