@@ -10,11 +10,11 @@ from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
 
-from workflow_factory import recipes, tutor
+from workflow_factory import flows, recipes, tutor
 from workflow_factory.agent_desktop import AgentDesktop, AgentDesktopError
 from workflow_factory.desktop import Desktop
 from workflow_factory.paths import default_user_db
-from workflow_factory.steps import Locator, Sensitivity
+from workflow_factory.steps import Locator, Sensitivity, list_steps, step_reports
 
 
 def _code_only(tool):
@@ -129,6 +129,25 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop]) -> MCPSer
         if control == "*":
             raise ValueError("a broad consent can only be granted by the user, not through the tutor tools")
         tutor.record_consent(user_db, app, control, action)
+
+    @server.tool(name="list_known_steps")
+    def list_known_steps(app: str) -> list[dict]:
+        """What the apprentice already knows how to do in an app: each step's name, action and state."""
+        known = [step for step in list_steps(user_db, None, light=True) if step.app == app]
+        return [{"name": step.name, "action": step.action, "state": report["state"]}
+                for step, report in zip(known, step_reports(user_db, known), strict=True)]
+
+    @server.tool(name="create_flow")
+    def create_flow(title: str, app: str, nodes: list[dict], edges: list[list[str]] | None = None) -> dict:
+        """Save a chore the person described. Nodes are {id, step, kind?, fields?, inputs?}; edges are [from, to] pairs
+        (None: the nodes run in order). A step not taught yet is allowed: the answer's missing_steps lists the lessons
+        still to teach with teach_step, then flow_status says when the chore is ready."""
+        return flows.create_flow(user_db, title, app, nodes, edges)
+
+    @server.tool(name="flow_status")
+    def flow_status(flow_id: str) -> dict:
+        """Whether a chore can run now, why not if it cannot, and which steps are still to be taught."""
+        return flows.flow_readiness(user_db, flow_id)
 
     return server
 

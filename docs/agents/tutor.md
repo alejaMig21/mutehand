@@ -84,6 +84,16 @@ When the same sequence will exist in several apps (open chat, write, send), save
    are not repeated.
 4. A sensitive hole returns `consent_required`: ask, record, apply again.
 
+## Build a chore from what the person describes
+
+The person may only describe the chore ("every morning open the report and save it"). Turn the words into boxes, in this order:
+
+1. `list_known_steps(app)` shows what the apprentice already does in that app. Match each part of the description to a known step by its name and action.
+2. `create_flow(title, app, nodes, edges)` saves the chore even when some steps are not taught yet. Nodes are `{id, step}`; a node may carry `inputs` (as many `[name, type]` pairs as it needs) and `fields`. The answer says `ready`, and `missing_steps` lists the lessons still to teach.
+3. For each missing step, teach it as in "A lesson, in order", with the person watching. Then `flow_status(flow_id)` says when it is ready. Never promise the chore works before it ran once with the person watching.
+
+A chore is not a new kind of box: steps are the boxes, kept small (ADR 0006). If the description needs something no step or basic operation can do, say so and offer the nearest steps.
+
 ## Doubts
 
 The apprentice leaves a doubt when a step fails during a run. `list_open_doubts` shows them (flow, node, step, reason, detail, and
