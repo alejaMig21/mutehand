@@ -15,6 +15,15 @@ uv run workflow-factory    # opens the editor in your browser; Ctrl+C here or â€
 A second `uv run workflow-factory` while one is running opens the same editor. Nothing in the editor starts a
 lesson; where teaching is needed, it shows the message to send in a chat.
 
+## Package it
+
+```text
+cd web && npm ci && npm run build   # the editor is built into src/workflow_factory/web (tracked, so a plain checkout runs)
+uv build                            # dist/workflow_factory-<version>-py3-none-any.whl, editor included
+```
+
+The wheel needs Python 3.14 and Windows (the desktop adapter and `pywin32`); it installs the `workflow-factory` command.
+
 ## Teach it (an agent chat)
 
 Open Claude Code in this folder (`claude`). The first time it asks you to approve the `workflow-factory` MCP

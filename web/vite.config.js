@@ -5,5 +5,6 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: './',
-  build: { outDir: 'dist', emptyOutDir: true },
+  // the built editor goes inside the Python package, so a wheel carries it
+  build: { outDir: '../src/workflow_factory/web', emptyOutDir: true },
 })

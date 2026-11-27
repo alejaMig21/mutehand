@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 
-DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
+DIST = Path(__file__).resolve().parent.parent / "src" / "workflow_factory" / "web"
 
 
 @pytest.fixture
 def editor_process(tmp_path):
     if not (DIST / "index.html").exists():
-        pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
+        pytest.fail("src/workflow_factory/web is missing: run `npm install && npm run build` in web/")
     env = {**os.environ, "WORKFLOW_FACTORY_USER_DB": str(tmp_path / "user.db")}
     process = subprocess.Popen(
         [sys.executable, "-m", "workflow_factory.editor", "--no-hotkey"],
@@ -40,3 +40,11 @@ def test_the_editor_command_prints_a_tokened_loopback_url_and_serves_the_built_e
         urllib.request.urlopen(url + "api/steps", timeout=5)
     refused.value.close()
     assert refused.value.code == 401
+
+
+def test_the_built_editor_lives_inside_the_package_so_an_installed_copy_finds_it():
+    import workflow_factory
+    from workflow_factory.editor import DEFAULT_WEB_DIR
+
+    assert DEFAULT_WEB_DIR == Path(workflow_factory.__file__).resolve().parent / "web"
+    assert (DEFAULT_WEB_DIR / "index.html").is_file()

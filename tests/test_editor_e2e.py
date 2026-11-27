@@ -1,6 +1,6 @@
 """The built editor in a headless browser, against the real local API. Opt-in: `pytest -m web`.
 
-Needs web/dist (cd web && npm install && npm run build). The browser is this test's own headless
+Needs src/workflow_factory/web (cd web && npm install && npm run build). The browser is this test's own headless
 instance: it never opens a window or touches the person's mouse and keyboard.
 """
 
@@ -21,7 +21,7 @@ pytestmark = pytest.mark.web
 SAVED = re.compile("^Saved$")  # "Unsaved changes" holds the word too: match the whole badge
 
 
-DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
+DIST = Path(__file__).resolve().parent.parent / "src" / "workflow_factory" / "web"
 HEADLESS_SHELL = glob.glob(os.path.expanduser(
     "~/AppData/Local/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell.exe"))
 
@@ -29,7 +29,7 @@ HEADLESS_SHELL = glob.glob(os.path.expanduser(
 @pytest.fixture
 def editor(tmp_path):
     if not (DIST / "index.html").exists():
-        pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
+        pytest.fail("src/workflow_factory/web is missing: run `npm install && npm run build` in web/")
     save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
     save_step(tmp_path / "user.db", step("save-file", "Beta"))
     save_step(tmp_path / "factory.db", step("factory-only", "Gamma", origin="factory"))
@@ -182,7 +182,7 @@ def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editab
     from workflow_factory import build_factory
 
     if not (DIST / "index.html").exists():
-        pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
+        pytest.fail("src/workflow_factory/web is missing: run `npm install && npm run build` in web/")
     build_factory(tmp_path / "factory.db", {"version": 1, "steps": [], "flows": [
         {"id": "morning-template", "nodes": [{"id": "n1", "step": "open-menu"}], "edges": None}]})
     server = ApiServer(tmp_path / "user.db", tmp_path / "factory.db", lambda app: None, token="e2e-token", web_dir=DIST)

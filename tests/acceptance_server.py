@@ -22,7 +22,7 @@ from workflow_factory.steps import record_app_name, revalidate_changed_versions 
 
 from fake_desktop import FakeDesktop, button, step  # noqa: E402
 
-DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
+DIST = Path(__file__).resolve().parent.parent / "src" / "workflow_factory" / "web"
 TOKEN = "acceptance-token"
 NAMES: dict[str, str] = {}  # app -> the name the program calls itself
 ACTIONS: dict[str, list[str]] = {}  # app -> the actions learned on it
