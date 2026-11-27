@@ -201,6 +201,7 @@ def test_the_app_is_chosen_by_keyboard_and_a_long_name_fits_a_narrow_window(tmp_
     page.wait_for_timeout(300)
     assert page.evaluate(fits), ("home", page.evaluate(STICKS_OUT))
     page.get_by_test_id("open-chore-morning").click()
+    page.locator(".opening").wait_for(state="detached")  # a box chosen while "Opening…" shows is forgotten when it ends
     assert page.evaluate(NOTHING_OVERFLOWS, ".search-panel .entry")
     page.get_by_test_id("app-name").select_option("vvrt.exe")
     page.locator('.react-flow__node[data-id="n1"]').press("Space")
