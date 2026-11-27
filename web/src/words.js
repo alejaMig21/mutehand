@@ -20,7 +20,6 @@ const REASONS = {
   user_active: 'You kept using the mouse or keyboard.',
   precondition_not_met: 'Something the step needs was not ready.',
 }
-const STATES = { trusted: 'Trusted', suspect: 'On trial', rejected: 'Rejected', to_revalidate: 'Needs a re-check' }
 const RUNS = { finished: 'Finished', stopped: 'Stopped', waiting: 'Waiting', emergency: 'Stopped by you', error: 'Failed', running: 'Running' }
 const EFFECTS = {
   closed_dialog: 'a dialog closed', revealed: 'something new appeared', value_changed: 'a value changed',
@@ -41,20 +40,12 @@ export function flowTitle(id, flows) {
   return flows.some((f) => f !== flow && f.title === flow.title) ? `${flow.title} (${id})` : flow.title
 }
 
-// A test of one node is kept apart from its flow, under "<flow>#test:<node>".
-export function flowWords(id, flows) {
-  const flow = id.replace(/#test:.*$/, '')
-  return flow === id ? flowTitle(id, flows) : `${flowTitle(flow, flows)} (one node tested)`
-}
+// A run that waits for the person to stop using the mouse and keyboard says so, wherever it is shown.
+export const PAUSED_WORDS = 'Paused: you moved the mouse. It resumes when you stop using the PC.'
 
 export const reasonWords = (code) => REASONS[code] ?? `Stopped: ${spaced(code)}.`
-export const stateWords = (state) => STATES[state] ?? spaced(state)
 export const runWords = (status) => RUNS[status] ?? spaced(status)
 export const effectWords = (effect) => EFFECTS[effect] ?? spaced(effect)
-
-// {button: 2, textfield: 1} -> '2 buttons, 1 text field'
-export const doubtWords = (capture) => Object.entries(capture)
-  .map(([role, count]) => `${count} ${ROLES[role] ?? role}${count === 1 ? '' : 's'}`).join(', ') || 'nothing'
 
 export function whenWords(iso) {
   const when = new Date(iso)

@@ -17,11 +17,6 @@ from fake_desktop import FakeDesktop, button, step
 pytestmark = pytest.mark.web
 
 
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
-
-
 def apps_screen(page):
     page.get_by_test_id("tab-apps").click()
     page.get_by_role("heading", name="Programs it knows").wait_for()

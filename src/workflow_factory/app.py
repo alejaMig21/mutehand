@@ -1,7 +1,7 @@
 """The product's front door: start the editor, open it in the browser, reuse one that is already running.
 
 `uv run workflow-factory` runs this. A second run finds the running editor through `app.json` and just opens it
-again; Ctrl+C in its terminal or the Quit button in the editor (`POST /api/quit`) ends it.
+again; Ctrl+C in its terminal or the “Close the program” button in the editor (`POST /api/quit`) ends it.
 """
 
 import json
@@ -70,7 +70,7 @@ def run(data_dir: Path | None = None, open_browser: Callable[[str], object] = we
     pending.write_text(json.dumps({"url": address}), encoding="utf-8")
     pending.replace(state)  # a second launch never reads a half-written file
     announce(f"Workflow Factory is running at {address}\n"
-             "It opens in your browser. Press Ctrl+C here, or use Quit in the editor, to stop it.")
+             "It opens in your browser. Press Ctrl+C here, or use “Close the program” in the editor, to stop it.")
     try:
         open_browser(address)
         server.quit_requested.wait()

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { blockedWords, boxState, doubtWords, effectWords, flowTitle, flowWords, freshTitle, lastRunWords, reasonWords, runNoteWords, runWords, stateWords, whenWords, whyWords } from './words.js'
+import { blockedWords, boxState, effectWords, flowTitle, freshTitle, lastRunWords, PAUSED_WORDS, reasonWords, runNoteWords, runWords, whenWords, whyWords } from './words.js'
 
 test('a box says how far the run got with it, and nothing is left running after a run ends', () => {
   const run = (status, nodes) => ({ status, nodes })
@@ -26,12 +26,9 @@ test('every reason a run can stop for is said in a sentence, never as a code', (
   assert.match(reasonWords('something_new'), /something new/) // an unknown one still reads as words
 })
 
-test('states, effects and doubts are plain words', () => {
-  assert.deepEqual(['trusted', 'suspect', 'rejected', 'to_revalidate'].map(stateWords), ['Trusted', 'On trial', 'Rejected', 'Needs a re-check'])
+test('run results and effects are plain words', () => {
   assert.deepEqual(['finished', 'stopped', 'waiting', 'emergency', 'error'].map(runWords), ['Finished', 'Stopped', 'Waiting', 'Stopped by you', 'Failed'])
   assert.equal(effectWords('no_change'), 'nothing changed on screen')
-  assert.equal(doubtWords({ button: 2, textfield: 1 }), '2 buttons, 1 text field')
-  assert.equal(doubtWords({}), 'nothing')
 })
 
 test('a time is shown in the local short form, and anything else is left as it is', () => {
@@ -59,13 +56,6 @@ test('a flow is called by its name, and two with one name are told apart', () =>
   assert.equal(flowTitle('m', flows), 'Morning report')
   assert.equal(flowTitle('a', flows), 'Twin (a)')
   assert.equal(flowTitle('gone', flows), 'gone') // a flow that is no longer stored keeps its identifier
-})
-
-test('a test of one node is named after its flow', () => {
-  const flows = [{ id: 'morning', title: 'Morning report' }]
-
-  assert.equal(flowWords('morning#test:n2', flows), 'Morning report (one node tested)')
-  assert.equal(flowWords('morning', flows), 'Morning report')
 })
 
 test('a run that left no record says what happened, and never repeats a code', () => {
@@ -102,4 +92,9 @@ test('how the last run of a chore went is said with the day and the time', () =>
   assert.deepEqual(lastRunWords(null, now), { words: 'Never run', tone: 'muted', icon: 'help' })
   assert.deepEqual(['finished', 'stopped', 'emergency', 'error'].map((s) => lastRunWords({ status: s, at: 'x' }, now).tone),
     ['ok', 'bad', 'warn', 'bad'])
+})
+
+test('a paused run says why: you used the mouse', () => {
+  assert.match(PAUSED_WORDS, /you moved the mouse/)
+  assert.match(PAUSED_WORDS, /resumes when you stop/)
 })

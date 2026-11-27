@@ -17,11 +17,6 @@ from fake_desktop import FakeDesktop, button, step
 pytestmark = pytest.mark.web
 
 
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
-
-
 @contextmanager
 def editor(tmp_path, desktop=None):
     """A page on the built editor: (page, apps) where apps lists every app the server asked a desktop for."""
@@ -29,13 +24,15 @@ def editor(tmp_path, desktop=None):
 
     desktop = desktop or FakeDesktop(controls=[button("Alpha"), button("Beta")])
     apps = []
+    scheduler = FakeScheduler()
     server = ApiServer(tmp_path / "user.db", tmp_path / "factory.db", lambda app: apps.append(app) or desktop,
-                       token="e2e-token", web_dir=DIST, schedule_runner=FakeScheduler())
+                       token="e2e-token", web_dir=DIST, schedule_runner=scheduler)
     server.start()
     try:
         with sync_playwright() as playwright:
             browser, page = open_page(playwright, server)
             page.set_default_timeout(8_000)
+            page.scheduler = scheduler  # for the tests that look at the Windows task a daily time makes
             yield page, apps
             browser.close()
     finally:
@@ -122,11 +119,12 @@ def test_an_app_remembered_in_another_spelling_is_the_taught_one_and_is_listed_o
         page.get_by_test_id("run-status").filter(has_text="Finished").wait_for()
         assert set(apps) == {"word.exe"}
 
-        page.get_by_test_id("tab-schedules").click()
-        page.get_by_test_id("schedule-flow").select_option("old-one")
-        scheduled = page.get_by_test_id("schedule-app")
-        page.wait_for_function("() => document.querySelector('[data-testid=schedule-app]').value === 'word.exe'")
-        assert scheduled.locator("option").all_inner_texts() == ["Paint", "Word"]
+        page.get_by_test_id("tab-home").click()  # the daily run takes the app the chore remembers
+        page.get_by_test_id("daily-old-one").click()
+        page.get_by_test_id("daily-set-old-one").click()
+        page.get_by_test_id("daily-old-one").filter(has_text="Every day at").wait_for()
+        [task] = [t for name, t in page.scheduler.tasks.items() if "old-one" in name]
+        assert "--app word.exe" in task["arguments"]
 
 
 def test_a_flow_opened_before_the_steps_arrive_has_nothing_unsaved_once_they_do(tmp_path):
@@ -216,28 +214,23 @@ def stopped_flow(tmp_path, flow_id="m-1", title="Morning sales report"):
     run_flow(flow, desktop=FakeDesktop(controls=[button("Alpha")]), user_db=tmp_path / "user.db")
 
 
-def test_the_history_the_tutor_queue_and_the_schedules_show_the_name(tmp_path):
+def test_the_home_row_its_history_its_stop_card_and_its_daily_run_show_the_name(tmp_path):
     stopped_flow(tmp_path)
     with editor(tmp_path) as (page, _):
-        asked = []
-        page.on("dialog", lambda dialog: (asked.append(dialog.message), dialog.accept()))
-        for tab, row in (("history", "run-1"), ("queue", "doubt-1")):
-            page.get_by_test_id(f"tab-{tab}").click()
-            page.get_by_test_id(row).filter(has_text="Morning sales report").wait_for()
-            assert "m-1" not in page.get_by_test_id(row).inner_text()
+        page.get_by_test_id("tab-home").click()
+        card = page.get_by_test_id("attention-m-1")
+        card.filter(has_text="Morning sales report").wait_for()
+        assert "m-1" not in card.inner_text()
 
-        page.get_by_test_id("tab-schedules").click()
-        page.get_by_test_id("schedule-flow").select_option(label="Morning sales report")
-        page.wait_for_function("() => document.querySelector('[data-testid=schedule-app]').value === 'paint.exe'")
-        page.get_by_test_id("schedule-add").click()
-        row = page.get_by_test_id("schedule-row-m-1 daily 0900")
-        row.filter(has_text="Morning sales report").wait_for()
-        assert "m-1" not in row.inner_text()
-        page.get_by_test_id("announce").filter(has_text="'Morning sales report' will run").wait_for()
-        remove = page.get_by_role("button", name="Remove the daily run of Morning sales report at 09:00")
-        remove.click()
-        page.get_by_test_id("no-schedules").wait_for()
-        assert "'Morning sales report'" in asked[-1]
+        page.get_by_test_id("more-m-1").click()
+        page.get_by_test_id("more-history-m-1").click()
+        page.get_by_test_id("history-m-1").wait_for()
+
+        page.get_by_test_id("daily-m-1").click()
+        page.get_by_test_id("daily-set-m-1").click()
+        row = page.get_by_test_id("chore-m-1")
+        row.filter(has_text="Every day at").wait_for()
+        assert "Morning sales report" in row.inner_text() and "m-1" not in row.inner_text()
 
 
 def test_a_flow_running_elsewhere_is_named_by_its_name(tmp_path):
@@ -297,17 +290,15 @@ def test_long_names_fit_a_narrow_window_and_stay_readable(tmp_path, width, heigh
         no_sideways_scroll()
         page.keyboard.press("Escape")
 
-        page.get_by_test_id("tab-history").click()
-        page.get_by_test_id("run-1").filter(has_text=long).wait_for()
+        page.get_by_test_id("tab-home").click()
+        page.get_by_test_id("attention-long-1").filter(has_text=long).wait_for()
         no_sideways_scroll()
-        page.get_by_test_id("tab-queue").click()
-        page.get_by_test_id("doubt-1").filter(has_text=long).wait_for()
-        no_sideways_scroll()
-        page.get_by_test_id("tab-schedules").click()
-        page.get_by_test_id("schedule-flow").select_option("long-1")
-        page.wait_for_function("() => !document.querySelector('[data-testid=schedule-add]').disabled")
-        page.get_by_test_id("schedule-add").click()
-        page.get_by_test_id("schedule-row-long-1 daily 0900").filter(has_text=long).wait_for()
-        for test_id in ("schedule-flow", "schedule-app", "schedule-add", "schedule-remove-long-1 daily 0900"):
+        page.get_by_test_id("daily-long-1").click()
+        page.get_by_test_id("daily-set-long-1").click()
+        page.get_by_test_id("chore-long-1").filter(has_text="Every day at").wait_for()
+        for test_id in ("daily-long-1", "run-now-long-1", "more-long-1"):
             fits(page.get_by_test_id(test_id))
         no_sideways_scroll()
+        page.get_by_test_id("more-long-1").click()
+        page.get_by_test_id("more-history-long-1").click()
+        page.get_by_test_id("history-long-1").wait_for()

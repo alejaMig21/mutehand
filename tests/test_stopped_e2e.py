@@ -17,11 +17,6 @@ from fake_desktop import FakeDesktop, button, step
 pytestmark = pytest.mark.web
 
 
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
-
-
 def stopped(tmp_path, title="Weekly export", *, third=False):
     """A chore that did its first box and stopped at its second: Paint did not show the button."""
     db = tmp_path / "user.db"

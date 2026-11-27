@@ -22,13 +22,8 @@ from fake_desktop import FakeDesktop, button, step
 pytestmark = pytest.mark.web
 
 
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
-
-
 @contextmanager
-def editor(tmp_path, desktop=None, size=(1280, 860)):
+def editor(tmp_path, desktop=None, size=(1280, 860), screen="editor"):
     """A headless page on the built editor over this test's database."""
     from playwright.sync_api import sync_playwright
 
@@ -38,7 +33,7 @@ def editor(tmp_path, desktop=None, size=(1280, 860)):
     server.start()
     try:
         with sync_playwright() as playwright:
-            browser, page = open_page(playwright, server)
+            browser, page = open_page(playwright, server, screen)
             page.set_viewport_size({"width": size[0], "height": size[1]})
             page.set_default_timeout(8_000)
             yield page
@@ -395,7 +390,9 @@ def test_a_missing_action_offers_the_message_to_send_in_a_chat_and_nothing_is_st
 
 
 def test_with_nothing_learned_the_panel_still_says_how_to_teach(tmp_path):
-    with editor(tmp_path) as page:
+    save_flow(tmp_path / "user.db", Flow(id="old", nodes=[Node("a", "open-menu")]))  # a chore whose action is not known here
+    with editor(tmp_path, screen=None) as page:
+        page.get_by_test_id("open-chore-old").click()
         panel(page).get_by_text("Nothing learned yet.").wait_for()
         page.get_by_role("button", name="It is not here: teach it").click()
 
@@ -506,9 +503,10 @@ def test_a_run_that_ends_while_another_screen_is_open_leaves_every_box_in_sight(
     with editor(tmp_path, desktop) as page:
         open_flow(page, "row", "c")
         page.get_by_test_id("run").click()
-        page.get_by_test_id("tab-library").click()
+        page.get_by_test_id("tab-apps").click()
         page.wait_for_timeout(2_500)  # the run ends while the canvas is not on screen
-        page.get_by_test_id("tab-editor").click()
+        page.get_by_test_id("tab-home").click()
+        page.get_by_test_id("open-chore-row").click()
         page.get_by_test_id("run-status").filter(has_text="Finished").wait_for()
         page.wait_for_timeout(800)
 

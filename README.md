@@ -9,7 +9,7 @@ model involved. Terms are in `GLOSSARY.md`, decisions in `docs/adr/`, research n
 
 ```text
 uv sync                    # once
-uv run workflow-factory    # opens the editor in your browser; Ctrl+C here or Quit in the editor stops it
+uv run workflow-factory    # opens the editor in your browser; Ctrl+C here or “Close the program” in the editor stops it
 ```
 
 A second `uv run workflow-factory` while one is running opens the same editor. Nothing in the editor starts a

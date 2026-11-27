@@ -86,7 +86,7 @@ def test_the_launcher_tells_where_the_editor_is_and_how_to_stop_it(tmp_path, cap
     thread.join(timeout=10)
 
     said = capsys.readouterr().out
-    assert opened[0] in said and "Ctrl+C" in said and "Quit" in said
+    assert opened[0] in said and "Ctrl+C" in said and "Close the program" in said
 
 
 def test_ctrl_c_stops_the_editor_cleanly(tmp_path):

@@ -19,11 +19,6 @@ MISSING = {"id": "agent-desktop", "title": "Desktop control (agent-desktop)", "w
            "ok": False, "fix": "Install it with npm: npm install -g agent-desktop", "optional": False}
 
 
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
-
-
 def attention(page):
     return page.get_by_test_id("attention")
 

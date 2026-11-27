@@ -20,11 +20,6 @@ pytestmark = pytest.mark.web
 FOCUSED = "() => document.activeElement.dataset.testid"
 
 
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
-
-
 @contextmanager
 def served(tmp_path, desktop=None):
     """(page, desktop, scheduler) on Home, with the stand-in desktop and the stand-in Windows scheduler."""

@@ -23,11 +23,6 @@ from fake_desktop import FakeDesktop, button, step
 pytestmark = pytest.mark.web
 
 
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
-
-
 @contextmanager
 def home(tmp_path, desktop=None, desktop_for=None):
     """A page on the built editor as a person first finds it: (page, desktop)."""
@@ -68,13 +63,12 @@ def says(page, flow_id, words):
     row(page, flow_id).filter(has_text=re.compile(words)).wait_for()
 
 
-def test_home_is_the_first_screen_and_the_old_screens_stay_reachable(tmp_path):
+def test_home_is_the_first_screen_and_apps_is_the_only_other_place(tmp_path):
     chores(tmp_path)
     with home(tmp_path) as (page, _):
         page.get_by_role("heading", name="Your chores").wait_for()
         assert page.title() == "Home · Workflow Factory"
-        for tab, title in (("library", "Steps"), ("queue", "Tutor queue"), ("history", "Run history"), ("schedules", "Schedules"),
-                           ("consents", "Consents"), ("checks", "Setup check"), ("editor", "Flow editor"), ("home", "Home")):
+        for tab, title in (("apps", "Apps"), ("home", "Home")):
             page.get_by_test_id(f"tab-{tab}").click()
             page.wait_for_function("(t) => document.title.startsWith(t)", arg=title)
             assert page.get_by_test_id(f"tab-{tab}").get_attribute("aria-current") == "page"
@@ -466,7 +460,7 @@ def test_leaving_the_flow_screen_as_a_run_ends_leaves_the_boxes_in_sight(tmp_pat
         page.get_by_test_id("run").click()
         says(page, "morning", "Worked")
         page.wait_for_timeout(500)
-        page.get_by_test_id("tab-editor").click()
+        page.get_by_test_id("open-chore-morning").click()  # the flow screen is reached from its row
         page.wait_for_timeout(500)
         assert complaints == []
         canvas = page.locator(".canvas").bounding_box()
@@ -485,7 +479,7 @@ def test_a_run_stays_followed_across_screens_and_a_reload(tmp_path):
         page.get_by_test_id("open-chore-morning").click()
         page.get_by_test_id("stop").wait_for()  # the flow screen follows the same run
         page.get_by_test_id("back-home").click()
-        page.get_by_test_id("tab-history").click()
+        page.get_by_test_id("tab-apps").click()
         page.get_by_test_id("tab-home").click()
         run_button(page, "morning").filter(has_text="Stop").wait_for()
         page.reload()
@@ -628,7 +622,7 @@ def test_home_works_with_the_keyboard_alone(tmp_path):
         page.wait_for_function("() => document.activeElement !== document.body")
         page.get_by_test_id("back-home").press("Enter")  # a chore never saved has no row
         page.wait_for_function("() => document.activeElement.dataset.testid === 'new-chore'")
-        page.get_by_test_id("tab-history").click()
+        page.get_by_test_id("tab-apps").click()
         page.get_by_test_id("tab-home").click()
         says(page, "morning", "You stopped it")
         assert page.evaluate(FOCUSED) == "tab-home"  # choosing a screen leaves the focus on its tab
@@ -677,18 +671,6 @@ def test_home_fits_a_narrow_window_and_stays_readable(tmp_path, width, height):
         back = page.get_by_test_id("back-home").bounding_box()
         assert back["x"] >= 0 and back["x"] + back["width"] <= width and back["y"] >= 0
         assert page.evaluate(CONTRAST) == []
-
-
-def test_the_first_run_stays_on_home_when_nothing_is_missing(tmp_path, monkeypatch):
-    checks = [{"id": "agent-desktop", "title": "Desktop control", "why": "Needed.", "ok": True, "fix": None, "optional": False},
-              {"id": "second-monitor", "title": "A second monitor", "why": "Optional.", "ok": False, "fix": "None.", "optional": True}]
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: False)
-    monkeypatch.setattr("workflow_factory.api.run_checks", lambda data_dir: checks)
-    chores(tmp_path)
-    with home(tmp_path) as (page, _):
-        says(page, "morning", "Never run")
-        page.wait_for_timeout(500)
-        at_home(page)
 
 
 def test_an_app_remembered_in_another_spelling_runs_on_the_taught_one(tmp_path):

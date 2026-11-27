@@ -4,6 +4,8 @@ The built editor in a headless browser against the real API, with the stand-in d
 names are invented: nothing in the product knows a particular app.
 """
 
+import re
+
 import pytest
 from fake_scheduler import FakeScheduler
 from test_editor_e2e import DIST, open_page
@@ -16,11 +18,6 @@ from workflow_factory.tutor import observe, teach_step
 from fake_desktop import FakeDesktop, button, step
 
 pytestmark = pytest.mark.web
-
-
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
 
 
 def closed(app):
@@ -64,8 +61,8 @@ def test_the_name_seen_in_a_run_is_what_the_screens_say_once_the_app_is_closed(t
     page = browse()  # the app is closed now
     page.get_by_test_id("palette-open-menu").wait_for()  # the actions of the app chosen beside them
     page.wait_for_function("() => document.querySelector('[data-testid=app-name]').selectedOptions[0].text === 'Quill Ledger'")
-    page.get_by_test_id("tab-library").click()
-    page.get_by_role("heading", name="Quill Ledger").wait_for()
+    page.get_by_test_id("tab-apps").click()
+    page.get_by_test_id("app-row-zzqx.exe").filter(has_text="Quill Ledger").wait_for()
     assert ".exe" not in page.locator("body").inner_text().lower()
 
 
@@ -91,10 +88,8 @@ def test_no_screen_shows_a_file_name_and_each_calls_the_app_the_same(tmp_path, b
     save_flow(db, Flow(id="mixed", nodes=[Node("n1", "open-menu"), Node("n2", "stamp")]))  # one step is another app's
     grant_consent(db, "zzqx.exe", "Send", "click")
     observe(db, FakeDesktop(controls=[], app="zzqx.exe", product_name=product_name))
-    asked = []
 
     page = browse()
-    page.on("dialog", lambda dialog: (asked.append(dialog.message), dialog.dismiss()))
     page.get_by_test_id("open-flows").click()
     page.get_by_test_id("flow-mixed").click()
     page.locator('.react-flow__node[data-id="n2"]').wait_for()
@@ -108,31 +103,30 @@ def test_no_screen_shows_a_file_name_and_each_calls_the_app_the_same(tmp_path, b
     assert shown in page.get_by_test_id("strip-says").inner_text()
     assert_no_file_names(page)
 
-    page.get_by_test_id("tab-library").click()
-    page.get_by_role("heading", name=shown).wait_for()
+    page.get_by_test_id("tab-apps").click()
+    row = page.get_by_test_id("app-row-zzqx.exe")
+    row.filter(has_text=shown).wait_for()
+    row.click()
+    card = page.get_by_test_id("app-card-zzqx.exe")
+    card.get_by_role("heading", name=shown).wait_for()
+    card.get_by_test_id("app-permission-Send-click").wait_for()
     assert_no_file_names(page)
-    page.get_by_test_id("tab-consents").click()
-    page.get_by_test_id("consent").filter(has_text=f"in {shown}").wait_for()
+    page.get_by_test_id("tab-home").click()
+    page.get_by_test_id("daily-morning").click()
+    page.get_by_test_id("daily-set-morning").click()
+    chore = page.get_by_test_id("chore-morning")
+    chore.filter(has_text="Every day at").wait_for()
+    assert shown in chore.inner_text()
     assert_no_file_names(page)
-    page.get_by_test_id("tab-schedules").click()
-    page.get_by_test_id("schedule-flow").select_option("morning")
-    page.get_by_test_id("schedule-app").select_option(label=shown)
-    page.get_by_test_id("schedule-add").click()
-    page.get_by_test_id("schedule-row-morning daily 0900").filter(has_text=shown).wait_for()
-    assert_no_file_names(page)
-    page.get_by_test_id("schedule-add").click()  # the same flow and time again: the question names the app
-    page.wait_for_timeout(300)
-    assert shown in asked[-1] and ".exe" not in asked[-1].lower()
 
 
 def test_a_refused_schedule_names_the_app_without_an_extension(tmp_path, browse):
     one_step_flow(tmp_path, app="zz qx.exe")  # a space: Windows Task Scheduler is never given such a name
 
     page = browse()
-    page.get_by_test_id("tab-schedules").click()
-    page.get_by_test_id("schedule-flow").select_option("morning")
-    page.get_by_test_id("schedule-app").select_option(label="Zz qx")
-    page.get_by_test_id("schedule-add").click()
+    page.get_by_test_id("tab-home").click()
+    page.get_by_test_id("daily-morning").click()
+    page.get_by_test_id("daily-set-morning").click()
     page.get_by_text("the app name may only use").wait_for()
     assert_no_file_names(page)
 
@@ -144,9 +138,9 @@ def test_apps_that_declare_the_same_name_can_still_be_told_apart(tmp_path, brows
         observe(db, FakeDesktop(controls=[], app=app, product_name="Quill Suite"))
 
     page = browse()
-    page.get_by_test_id("tab-library").click()
-    page.get_by_role("heading", name="Quill Suite (Zzqx)").wait_for()
-    page.get_by_role("heading", name="Quill Suite (Vvrt)").wait_for()
+    page.get_by_test_id("tab-apps").click()
+    page.get_by_test_id("app-row-zzqx.exe").filter(has_text="Quill Suite (Zzqx)").wait_for()
+    page.get_by_test_id("app-row-vvrt.exe").filter(has_text="Quill Suite (Vvrt)").wait_for()
     assert_no_file_names(page)
 
 
@@ -156,8 +150,8 @@ def test_a_declared_name_is_shown_without_an_extension_or_stray_spaces(tmp_path,
     observe(db, FakeDesktop(controls=[], app="zzqx.exe", product_name=declared))
 
     page = browse()
-    page.get_by_test_id("tab-library").click()
-    page.get_by_role("heading", name=shown, exact=True).wait_for()
+    page.get_by_test_id("tab-apps").click()
+    page.get_by_test_id("app-row-zzqx.exe").locator("b").filter(has_text=re.compile(f"^{shown}$")).wait_for()
     assert_no_file_names(page)
 
 
@@ -179,20 +173,15 @@ def test_the_app_is_chosen_by_keyboard_and_a_long_name_fits_a_narrow_window(tmp_
 
     page = browse()
     page.set_viewport_size({"width": width, "height": 800})
-    for screen, control in (("editor", "app-name"), ("schedules", "schedule-app")):
-        page.get_by_test_id(f"tab-{screen}").click()
-        if screen == "schedules":
-            page.get_by_test_id("schedule-flow").select_option("morning")
-        chooser = page.get_by_test_id(control)
-        chooser.locator("option", has_text=LONG).wait_for(state="attached")
-        chooser.focus()
-        before = chooser.input_value()
-        page.keyboard.press("ArrowUp" if before == "zzqx.exe" else "ArrowDown")
-        assert chooser.input_value() not in ("", before)
-        box = chooser.bounding_box()
-        assert box["x"] >= 0 and box["x"] + box["width"] <= width, screen
+    chooser = page.get_by_test_id("app-name")
+    chooser.locator("option", has_text=LONG).wait_for(state="attached")
+    chooser.focus()
+    before = chooser.input_value()
+    page.keyboard.press("ArrowUp" if before == "zzqx.exe" else "ArrowDown")
+    assert chooser.input_value() not in ("", before)
+    box = chooser.bounding_box()
+    assert box["x"] >= 0 and box["x"] + box["width"] <= width
 
-    page.get_by_test_id("tab-editor").click()
     page.get_by_test_id("open-flows").click()
     page.get_by_test_id("flow-morning").click()
     card = page.get_by_test_id("node-n1")
@@ -200,11 +189,18 @@ def test_the_app_is_chosen_by_keyboard_and_a_long_name_fits_a_narrow_window(tmp_
     for app in ("zzqx.exe", "vvrt.exe"):
         page.get_by_test_id("app-name").select_option(app)
     assert card.evaluate("(e) => e.scrollWidth <= e.clientWidth")  # the name stays inside its box
-    for screen in ("editor", "library", "schedules", "consents"):
-        page.get_by_test_id(f"tab-{screen}").click()
-        page.wait_for_timeout(300)
-        assert page.evaluate("() => document.querySelector('.screen').scrollWidth <= innerWidth"), (screen, page.evaluate(STICKS_OUT))
-    page.get_by_test_id("tab-editor").click()
+    fits = "() => document.querySelector('.screen').scrollWidth <= innerWidth"
+    assert page.evaluate(fits), ("flow screen", page.evaluate(STICKS_OUT))
+    page.get_by_test_id("tab-apps").click()
+    page.get_by_test_id("app-row-zzqx.exe").click()
+    page.get_by_test_id("app-card-zzqx.exe").wait_for()
+    page.wait_for_timeout(300)
+    assert page.evaluate(fits), ("apps", page.evaluate(STICKS_OUT))
+    page.get_by_test_id("tab-home").click()
+    page.get_by_test_id("chore-morning").wait_for()
+    page.wait_for_timeout(300)
+    assert page.evaluate(fits), ("home", page.evaluate(STICKS_OUT))
+    page.get_by_test_id("open-chore-morning").click()
     assert page.evaluate(NOTHING_OVERFLOWS, ".search-panel .entry")
     page.get_by_test_id("app-name").select_option("vvrt.exe")
     page.locator('.react-flow__node[data-id="n1"]').press("Space")
@@ -213,15 +209,15 @@ def test_the_app_is_chosen_by_keyboard_and_a_long_name_fits_a_narrow_window(tmp_
     assert page.evaluate(NOTHING_OVERFLOWS, ".strip, .strip *")
 
 
-def test_the_steps_screen_orders_the_apps_by_the_names_it_shows(tmp_path, browse):
+def test_the_apps_screen_orders_the_apps_by_the_names_it_shows(tmp_path, browse):
     db = one_step_flow(tmp_path)
     save_step(db, step("stamp", "Stamp", app="vvrt.exe"))
     observe(db, FakeDesktop(controls=[], app="zzqx.exe", product_name="Atlas"))
 
     page = browse()
-    page.get_by_test_id("tab-library").click()
-    page.get_by_role("heading", name="Atlas").wait_for()
-    assert page.locator(".group h2").all_inner_texts() == ["Atlas", "Vvrt"]
+    page.get_by_test_id("tab-apps").click()
+    page.get_by_test_id("app-row-zzqx.exe").filter(has_text="Atlas").wait_for()
+    assert page.locator(".app-row b").all_inner_texts() == ["Atlas", "Vvrt"]
 
 
 def test_a_run_from_the_editor_shows_the_name_it_has_just_learned(tmp_path, browse):
@@ -278,5 +274,5 @@ def test_the_tutor_seeing_an_app_records_its_name(tmp_path, browse, seen_by):
     seen_by(db, FakeDesktop(controls=[button("Alpha")], app="zzqx.exe", product_name="Quill Ledger"))
 
     page = browse()
-    page.get_by_test_id("tab-library").click()
-    page.get_by_role("heading", name="Quill Ledger").wait_for()
+    page.get_by_test_id("tab-apps").click()
+    page.get_by_test_id("app-row-zzqx.exe").filter(has_text="Quill Ledger").wait_for()

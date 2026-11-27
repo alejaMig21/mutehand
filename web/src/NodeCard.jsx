@@ -15,12 +15,12 @@ function describe(node, meta) {
 // Every mark is an icon and a word, never colour alone.
 const RUN_MARKS = {
   running: ['spinner', 'Running', 'info'], done: ['check', 'Done', 'ok'], blocked: ['alert', 'Stopped here', 'bad'],
-  unreached: ['clock', 'Not reached', 'muted'], continued: ['skip', 'Carried on', 'warn'], paused: ['pause', 'Paused for you', 'warn'],
+  unreached: ['clock', 'Not reached', 'muted'], continued: ['skip', 'Carried on', 'warn'], paused: ['pause', 'Paused: you moved the mouse', 'warn'],
 }
 // A rejected action blocks the flow, so it is said on its box; how far an action is trusted is not.
 const REJECTED = ['xcircle', 'Rejected', 'bad']
 
-export function marksFor(node, meta, runStatus, doubts) {
+export function marksFor(node, meta, runStatus) {
   const marks = []
   if (RUN_MARKS[runStatus]) marks.push(RUN_MARKS[runStatus])
   if (!node.kind || node.kind === 'step') {
@@ -31,14 +31,13 @@ export function marksFor(node, meta, runStatus, doubts) {
     if (meta?.consent === 'missing') marks.push(['lock', 'Needs consent', 'warn'])
     if (meta?.private) marks.push(['eyeoff', 'Private app', 'muted'])
   }
-  if (doubts > 0) marks.push(['help', doubts === 1 ? '1 doubt' : `${doubts} doubts`, 'warn'])
   return marks
 }
 
 export default function NodeCard({ id, data, selected }) {
-  const { node, meta, number, runStatus, doubts } = data
+  const { node, meta, number, runStatus } = data
   const { title, subtitle, icon, chip } = describe(node, meta)
-  const marks = marksFor(node, meta, runStatus, doubts)
+  const marks = marksFor(node, meta, runStatus)
   const daily = node.kind === 'trigger' && node.fields?.mode?.value === 'daily'
   if (daily && !data.scheduled) marks.push(['alert', 'Not set up in Windows yet', 'warn'])
   if (Object.values(data.drafts ?? {}).some(Boolean)) marks.push(['alert', 'Not saved: a value is not valid yet', 'bad'])
@@ -56,17 +55,10 @@ export default function NodeCard({ id, data, selected }) {
       </div>
       {marks.length > 0 && (
         <div className="card-marks">
-          {marks.map(([glyph, word, tone]) => (glyph === 'help' && data.onDoubts
-            ? (
-              <button key={word} type="button" className={`card-mark nodrag tone-${tone}`} title="Open the Tutor queue" onClick={data.onDoubts}>
-                <Icon name={glyph} size={14} /> {word}
-              </button>
-            )
-            : (
-              <div key={word} className={`card-mark tone-${tone}`}>
-                <Icon name={glyph} size={14} /> {word}
-              </div>
-            )
+          {marks.map(([glyph, word, tone]) => (
+            <div key={word} className={`card-mark tone-${tone}`}>
+              <Icon name={glyph} size={14} /> {word}
+            </div>
           ))}
         </div>
       )}

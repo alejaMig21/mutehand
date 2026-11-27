@@ -24,14 +24,6 @@ from fake_desktop import FakeDesktop, button, step
 
 pytestmark = pytest.mark.web
 
-SCREENS = ("library", "queue", "history", "schedules", "consents", "checks", "editor", "home")
-
-
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
-
-
 @pytest.fixture
 def app(tmp_path):
     """A seeded editor and a headless page on it: (page, folder, desktop)."""
@@ -106,11 +98,20 @@ def test_every_button_on_every_screen_can_be_read(app):
     run_flow(load_flow(folder / "user.db", None, "weekly"), desktop=FakeDesktop(controls=[button("Alpha")]),
              user_db=folder / "user.db")
     unreadable = {}
-    for screen in SCREENS:
-        page.get_by_test_id(f"tab-{screen}").click()
+
+    def look(screen):
         page.wait_for_timeout(500)
         if found := page.evaluate(CONTRAST):
             unreadable[screen] = found
+
+    look("flow screen")
+    page.get_by_test_id("tab-home").click()
+    page.get_by_test_id("attention").wait_for()
+    look("home")
+    page.get_by_test_id("tab-apps").click()
+    page.get_by_test_id("app-row-paint.exe").click()
+    page.get_by_test_id("app-card-paint.exe").get_by_test_id("app-permission-Send-click").wait_for()
+    look("apps")
 
     assert unreadable == {}
 
@@ -201,75 +202,56 @@ def test_a_run_that_cannot_start_says_why_and_where_to_go(app):
     assert "not on the screen" in reason.inner_text() and "control_not_found" not in reason.inner_text()
 
 
-def test_the_editor_notices_what_changed_on_the_other_screens(app):
+def test_the_flow_screen_notices_what_was_changed_in_apps(app):
     page, folder, _ = app
-    open_flow(page, "morning")
-    page.get_by_test_id("tab-library").click()
-    page.get_by_test_id("reject-save-file").click()
-    page.get_by_test_id("restore-save-file").wait_for()
-    page.get_by_test_id("tab-editor").click()
-
+    reject_step(folder / "user.db", "paint.exe", "save-file")  # another window, or the tutor, did it
+    page.get_by_test_id("tab-home").click()
+    page.get_by_test_id("open-chore-morning").click()
     page.get_by_test_id("node-n2").filter(has_text="Rejected").wait_for()
     assert page.get_by_test_id("run").is_disabled()
 
+    page.get_by_role("button", name="Open Apps").click()  # the notice says where to go
+    page.get_by_test_id("app-row-paint.exe").click()
+    page.get_by_test_id("app-allow-again-save-file").click()
+    page.get_by_test_id("app-problem-save-file").wait_for(state="detached")
+    page.get_by_test_id("tab-home").click()
+    page.get_by_test_id("open-chore-morning").click()
 
-def test_actions_that_cannot_be_undone_ask_first_and_say_what_happened(app):
-    page, folder, _ = app
-    grant_consent(folder / "user.db", "paint.exe", "Send", "click")
-    run_flow(load_flow(folder / "user.db", None, "weekly"), desktop=FakeDesktop(controls=[button("Alpha")]),
-             user_db=folder / "user.db")
-    accept = {"now": False}
-    asked = answer_dialogs(page, accept)
-
-    page.get_by_test_id("tab-consents").click()
-    page.get_by_test_id("revoke-Send").click()
-    page.wait_for_timeout(400)
-    assert "Send" in asked[-1] and page.get_by_test_id("consent").count() == 1
-    accept["now"] = True
-    page.get_by_test_id("revoke-Send").click()
-    page.get_by_test_id("no-consents").wait_for()
-    assert "revoked" in page.get_by_test_id("announce").inner_text().lower()
-
-    accept["now"] = False
-    page.get_by_test_id("tab-queue").click()
-    assert page.get_by_test_id("answer-1").is_disabled()  # an empty answer is not an answer
-    page.get_by_test_id("dismiss-1").click()
-    page.wait_for_timeout(400)
-    assert page.get_by_test_id("doubt-1").count() == 1
+    page.get_by_test_id("node-n2").wait_for()
+    page.get_by_test_id("node-n2").filter(has_not_text="Rejected").wait_for()  # read again as the screen comes back
+    assert page.get_by_test_id("run").is_enabled()
 
 
-def test_restoring_a_step_far_down_the_list_keeps_the_place_and_says_so_in_view(app):
+def test_allowing_an_action_far_down_an_app_keeps_the_place_and_says_so_in_view(app):
     page, folder, _ = app
     for number in range(30):
         save_step(folder / "user.db", step(f"step-{number:02}", "Alpha"))
     reject_step(folder / "user.db", "paint.exe", "step-29")
-    page.get_by_test_id("tab-library").click()
-    restore = page.get_by_test_id("restore-step-29")
-    restore.scroll_into_view_if_needed()
-    before = page.evaluate("() => document.querySelector('main').scrollTop")
+    page.get_by_test_id("tab-apps").click()
+    page.get_by_test_id("app-row-paint.exe").click()
+    allow = page.get_by_test_id("app-allow-again-step-29")
+    allow.scroll_into_view_if_needed()
 
-    restore.click()
-    page.get_by_test_id("reject-step-29").wait_for()
+    allow.click()
+    page.get_by_test_id("app-problem-step-29").wait_for(state="detached")
     said = page.get_by_test_id("announce")
-    said.filter(has_text="can run again").wait_for()
+    said.filter(has_text="is allowed again").wait_for()
     page.wait_for_timeout(300)
 
-    assert before > 0  # the list was scrolled; the explanation under the row is gone, so the page may be a bit shorter
-    for shown in (said, page.get_by_test_id("step-row-step-29")):
-        box = shown.bounding_box()
-        assert 0 <= box["y"] and box["y"] + box["height"] <= 768
+    box = said.bounding_box()
+    assert 0 <= box["y"] and box["y"] + box["height"] <= 768  # said where the person looks, wherever the page is scrolled
 
 
 def test_a_screen_that_could_not_load_never_claims_there_is_nothing(app):
     page, _, _ = app
-    page.route(re.compile(r"/api/consents"), lambda route: route.abort())
-    page.get_by_test_id("tab-consents").click()
+    page.route(re.compile(r"/api/apps"), lambda route: route.abort())
+    page.get_by_test_id("tab-apps").click()
     page.get_by_test_id("load-error").wait_for()
-    assert page.get_by_test_id("no-consents").count() == 0
+    assert page.get_by_test_id("apps-empty").count() == 0
 
-    page.unroute(re.compile(r"/api/consents"))
+    page.unroute(re.compile(r"/api/apps"))
     page.get_by_test_id("retry").click()
-    page.get_by_test_id("no-consents").wait_for()
+    page.get_by_test_id("app-row-paint.exe").wait_for()
 
 
 def test_a_flow_is_built_and_its_node_opened_with_the_keyboard_alone(app):
@@ -308,7 +290,7 @@ def test_at_double_zoom_the_main_actions_stay_on_screen_and_the_canvas_is_not_co
     page.reload()
     page.get_by_test_id("search").wait_for()
     assert page.locator(".canvas").bounding_box()["height"] >= 220  # the boxes to add go under it, not over it
-    for test_id in ("undo", "run", "tab-checks", "quit"):
+    for test_id in ("undo", "run", "tab-apps", "quit"):
         box = page.get_by_test_id(test_id).bounding_box()
         assert box["x"] >= 0 and box["x"] + box["width"] <= 683, test_id
     assert page.evaluate("() => document.querySelector('main').scrollWidth <= 683")
@@ -328,25 +310,30 @@ def test_in_a_narrow_window_no_notice_covers_the_panel_of_nodes(app, width):
     page.locator('.react-flow__node[data-id="n3"]').wait_for()
 
 
-def test_history_and_steps_speak_plain_words(app):
+def test_history_and_apps_speak_plain_words(app):
     page, folder, _ = app
     run_flow(load_flow(folder / "user.db", None, "weekly"), desktop=FakeDesktop(controls=[button("Alpha")]),
              user_db=folder / "user.db")
-    page.get_by_test_id("tab-history").click()
-    row = page.get_by_test_id("run-1")
-    row.filter(has_text="Close dialog").wait_for()  # the node names arrive with the flow
-    text = row.inner_text()
+    page.get_by_test_id("tab-home").click()
+    page.get_by_test_id("more-weekly").click()
+    page.get_by_test_id("more-history-weekly").click()
+    run = page.locator('[data-testid^="history-run-"]').first
+    run.filter(has_text="Close dialog").wait_for()
+    text = run.inner_text()
     assert "Close dialog" in text and "not on the screen" in text
     assert not re.search(r"control_not_found|no_change|\bn[12]\b|T\d\d:", text)
-    assert page.title().startswith("Run history")
 
-    page.get_by_test_id("tab-library").click()
-    page.get_by_test_id("state-open-menu").filter(has_text="On trial").wait_for()
+    page.get_by_test_id("tab-apps").click()
+    page.wait_for_function("() => document.title.startsWith('Apps')")
+    page.get_by_test_id("app-row-paint.exe").click()
+    words = page.get_by_test_id("app-card-paint.exe").inner_text()
+    assert "Trusted" not in words and "On trial" not in words  # how far an action is trusted is never a label
 
 
 def test_a_wrong_link_says_so_instead_of_showing_an_empty_editor(tmp_path):
     from playwright.sync_api import sync_playwright
 
+    save_step(tmp_path / "user.db", step("open-menu", "Alpha"))  # something is learned: Home offers a new chore
     server = serve(tmp_path, FakeDesktop(controls=[]))
     try:
         with sync_playwright() as playwright:
@@ -356,7 +343,7 @@ def test_a_wrong_link_says_so_instead_of_showing_an_empty_editor(tmp_path):
             page.get_by_test_id("locked").wait_for()
             assert page.get_by_test_id("search-panel").count() == 0
             page.goto(server.url + "/#token=e2e-token")  # the right link, pasted in the same tab
-            page.get_by_test_id("search-panel").wait_for()
+            page.get_by_test_id("search-panel").wait_for()  # the same tab still remembers it was on the flow screen
             browser.close()
     finally:
         server.stop()
@@ -442,25 +429,24 @@ def test_at_double_zoom_the_node_window_stacks_without_covering_its_own_controls
     assert settings["y"] + settings["height"] <= out["y"] <= out["y"] + out["height"] <= footer["y"]
 
 
-def test_the_steps_screen_explains_the_states_why_a_step_is_blocked_and_what_restore_does(app):
+def test_an_app_says_why_an_action_is_blocked_and_what_allowing_it_again_does(app):
     page, folder, _ = app
-    run_flow(Flow(id="teach", nodes=[Node("n1", "Menu opens")]),
-             desktop=FakeDesktop(controls=[button("Alpha")]), user_db=_taught(folder, "Menu opens"))
+    teach = Flow(id="teach", nodes=[Node("n1", "Menu opens")])
+    save_flow(folder / "user.db", teach)
+    run_flow(teach, desktop=FakeDesktop(controls=[button("Alpha")]), user_db=_taught(folder, "Menu opens"))
     reject_step(folder / "user.db", "paint.exe", "save-file")
-    page.get_by_test_id("tab-library").click()
+    page.get_by_test_id("tab-apps").click()
+    page.get_by_test_id("app-row-paint.exe").click()
 
-    legend = page.get_by_test_id("state-help").inner_text()
-    for words in ("On trial", "Trusted", "Rejected", "Needs a re-check", "will not run"):
-        assert words in legend, words
-    failed = page.get_by_test_id("why-Menu opens").inner_text()
-    assert "learned" in failed and "something new appeared" in failed and "nothing changed on screen" in failed
-    assert "does not fix" in failed
-    assert "You rejected it" in page.get_by_test_id("why-save-file").inner_text()
-    assert page.get_by_test_id("why-open-menu").count() == 0  # only a blocked step needs a reason
+    failed = page.get_by_test_id("app-problem-Menu opens").inner_text()
+    assert "is rejected" in failed and "something new appeared" in failed and "nothing changed on screen" in failed
+    assert "You rejected it" in page.get_by_test_id("app-problem-save-file").inner_text()
+    assert page.get_by_test_id("app-problem-open-menu").count() == 0  # only a blocked action needs a reason
 
-    page.get_by_test_id("tab-history").click()
-    row = page.get_by_test_id("run-1")
-    row.filter(has_text="did not change the way it did").wait_for()
+    page.get_by_test_id("tab-home").click()
+    page.get_by_test_id("more-teach").click()
+    page.get_by_test_id("more-history-teach").click()
+    page.locator('[data-testid^="history-run-"]').first.filter(has_text="did not change the way it did").wait_for()
 
 
 def _taught(folder, name):
@@ -492,32 +478,15 @@ def test_a_notice_appearing_does_not_move_what_is_under_the_pointer(app):
     assert entry.bounding_box() == before
 
 
-def test_a_schedule_takes_the_program_of_the_chosen_flow(app):
+def test_where_the_person_was_survives_a_reload(app):
     page, folder, _ = app
-    save_step(folder / "user.db", step("A first step", "Alpha", app="aaa.exe"))
-    page.get_by_test_id("tab-schedules").click()
-    field = page.get_by_test_id("schedule-app")
-    assert field.input_value() == ""
-    page.get_by_test_id("schedule-flow").select_option("morning")
-
-    page.wait_for_function("() => document.querySelector('[data-testid=schedule-app]').value === 'paint.exe'")
-
-
-def test_what_was_typed_and_where_the_person_was_survive_leaving_and_reloading(app):
-    page, folder, _ = app
-    run_flow(load_flow(folder / "user.db", None, "weekly"), desktop=FakeDesktop(controls=[button("Alpha")]),
-             user_db=folder / "user.db")
     open_flow(page, "morning")
-    page.get_by_test_id("tab-queue").click()
-    page.get_by_test_id("note-1").fill("half an answer")
-    page.get_by_test_id("tab-history").click()
-    page.get_by_test_id("tab-queue").click()
-    assert page.get_by_test_id("note-1").input_value() == "half an answer"
-    page.get_by_test_id("answer-1").click()
-    page.get_by_test_id("announce").filter(has_text="stops in the same place").wait_for()
+    page.get_by_test_id("tab-apps").click()
+    page.get_by_test_id("tab-home").click()
 
-    page.get_by_test_id("tab-editor").click()
+    page.get_by_test_id("open-chore-morning").click()
     page.reload()
+
     page.locator('.react-flow__node[data-id="n2"]').wait_for()
     assert page.get_by_test_id("flow-title").input_value() == "morning"
 

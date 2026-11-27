@@ -24,7 +24,6 @@ from pathlib import Path
 from workflow_factory import daily, schedule
 from workflow_factory.apps import app_detail, app_rows
 from workflow_factory.attention import attention_items, rejected_by_person
-from workflow_factory.checks import mark_seen, run_checks, seen_before
 from workflow_factory.consent import consents, covers, effective_sensitivity, revoke_consent
 from workflow_factory.desktop import Desktop, DesktopError
 from workflow_factory.flow import clear_emergency_stop, emergency_stop, rejected_steps, run_flow
@@ -53,7 +52,6 @@ from workflow_factory.knowledge import duplicate_flow
 from workflow_factory.nodedata import present, single_node_flow, snapshot
 from workflow_factory.paths import default_user_db
 from workflow_factory.queue import (
-    answer_doubt,
     close_as_tried_again,
     dismiss_doubt,
     leave_note,
@@ -184,7 +182,7 @@ class ApiServer:
                 raise ValueError(f"You rejected {names}, so trying again would not run {'them' if many else 'it'}. "
                                  "Allow it again first, then try again.")
             raise ValueError(f"This flow will not start: {names} {'is' if len(refused) == 1 else 'are'} rejected. "
-                             "Restore the step in the Steps screen first.")
+                             "Allow it again on Home or in Apps first.")
 
         def prepare() -> None:  # with the run about to start and nothing else holding the flow: doubts close, rejections lift
             for step in lift:
@@ -527,12 +525,6 @@ class ApiServer:
                     return self._send(200, app) if app else self._send(404, {"error": "no such app"})
                 if method == "GET" and path == "/api/app-names":
                     return self._send(200, app_names(api.user_db))
-                if method == "GET" and path == "/api/checks":
-                    data_dir = api.user_db.parent
-                    return self._send(200, {"first_run": not seen_before(data_dir), "checks": run_checks(data_dir)})
-                if method == "POST" and path == "/api/checks/seen":
-                    mark_seen(api.user_db.parent)
-                    return self._send(200, {"seen": True})
                 if path == "/api/schedules":
                     return self._schedules(method)
                 if method == "GET" and path == "/api/recipes":
@@ -593,10 +585,6 @@ class ApiServer:
                         return self._send(202, {"run_id": run_id})
                     return self._send(code, {"error": {404: "no such flow", 409: "this flow is already running",
                                                        429: "too many runs at once"}[code]})
-                if method == "GET" and path == "/api/library":
-                    steps = list_steps(api.user_db, api.factory_db)
-                    return self._send(200, [{**_step_view(step), **report} for step, report in
-                                            zip(steps, step_reports(api.user_db, steps), strict=True)])
                 mark = re.fullmatch(r"/api/steps/([^/]+)/([^/]+)/(reject|restore)", path)
                 if mark and method == "POST":  # a step name is free text: the browser sends it percent-encoded
                     app, name = urllib.parse.unquote(mark[1]), urllib.parse.unquote(mark[2])
@@ -604,8 +592,6 @@ class ApiServer:
                         return self._send(404, {"error": "no such step"})
                     (reject_step if mark[3] == "reject" else restore_step)(api.user_db, app, name)
                     return self._send(200, {"step": name, "action": mark[3]})
-                if path == "/api/consents" and method == "GET":
-                    return self._send(200, [asdict(consent) for consent in consents(api.user_db)])
                 if path == "/api/consents" and method == "DELETE":  # revoke only: granting happens at teaching time
                     body = self._body()
                     if not revoke_consent(api.user_db, body["app"], body["control"], body["action"]):
@@ -620,14 +606,6 @@ class ApiServer:
                     note = str(self._body().get("note") or "")[:MAX_NOTE_CHARS]
                     leave_note(api.user_db, int(help_match[1]), note)
                     return self._send(200, {"doubt": int(help_match[1]), "note": note or None})
-                doubt = re.fullmatch(r"/api/doubts/(\d+)/(answer|dismiss)", path)
-                if doubt and method == "POST":
-                    if doubt[2] == "answer":
-                        note = str(self._body().get("note") or "")[:MAX_NOTE_CHARS] or None
-                        answer_doubt(api.user_db, int(doubt[1]), note)
-                    else:
-                        dismiss_doubt(api.user_db, int(doubt[1]))
-                    return self._send(200, {"doubt": int(doubt[1]), "action": doubt[2]})
                 if path == "/api/history" and method == "GET":
                     return self._send(200, list_runs(api.user_db, (self.query.get("flow") or [None])[0]))
                 stop_match = re.fullmatch(r"/api/runs/(\w+)/stop", path)

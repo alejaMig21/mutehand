@@ -13,7 +13,7 @@ import ExplanationStrip from './ExplanationStrip.jsx'
 import RunLog from './RunLog.jsx'
 import SearchPanel, { DRAG_TYPE } from './SearchPanel.jsx'
 import { safetySummary, summaryMarks, whyNotRunnable } from './safety.js'
-import { boxState, flowTitle, freshTitle, reasonWords, runWords } from './words.js'
+import { boxState, flowTitle, freshTitle, PAUSED_WORDS, reasonWords, runWords } from './words.js'
 
 const NODE_TYPES = { card: NodeCard }
 const EDGE_LOOK = { labelBgPadding: [10, 4], labelBgBorderRadius: 999 } // yes and no on a pill
@@ -569,11 +569,6 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const tryAgain = (item) => tried.tryAgain(item, async () => {
     if (!(await ensureStored())) throw new Error('The chore on screen could not be kept first, so it was not tried again.')
   })
-  const doubtCounts = useMemo(() => {
-    const counts = {}
-    for (const d of flowDoubts) counts[d.node_id] = (counts[d.node_id] ?? 0) + 1
-    return counts
-  }, [flowDoubts])
 
   // What is known about each step, for the app the flow runs on: how far it is trusted, where it was adapted from, or
   // that nobody taught it for this app (a recipe hole left open).
@@ -610,13 +605,13 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       const state = boxState(shownRun, n.id) ?? (n.id === stoppedHere?.node ? 'blocked' : undefined) // a stop from earlier is red too
       return {
         ...n, className: `status-${state ?? 'pending'}`,
-        data: { ...n.data, number: numbers[n.id], runStatus: state, doubts: doubtCounts[n.id] ?? 0, onDoubts: () => onOpen('queue'),
+        data: { ...n.data, number: numbers[n.id], runStatus: state,
           onDaily: () => setSettingDaily((open) => !open), scheduled: Boolean(daily?.at) },
       }
     }),
-    [viewNodes, numbers, shownRun, doubtCounts, onOpen, daily, stoppedHere],
+    [viewNodes, numbers, shownRun, daily, stoppedHere],
   )
-  const safety = useMemo(() => safetySummary(viewNodes, doubtCounts), [viewNodes, doubtCounts])
+  const safety = useMemo(() => safetySummary(viewNodes), [viewNodes])
   const blocked = whyNotRunnable(safety, appName ? appLabel(appName) : undefined)
   const paused = running && Object.values(shownRun.nodes).includes('paused')
   const loose = looseNodes(nodes, edges)
@@ -745,7 +740,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
         {blocked && (
           <div className="notice" role="status">
             <span data-testid="cannot-start">{blocked}</span>
-            {safety.rejected.length > 0 && <button className="small" onClick={() => onOpen('library')}>Open Steps</button>}
+            {safety.rejected.length > 0 && <button className="small" onClick={() => onOpen('apps')}>Open Apps</button>}
           </div>
         )}
         {outcome && (
@@ -759,7 +754,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
         {tried.tries[flowId] && <TriedResults tries={{ [flowId]: tried.tries[flowId] }} hide={tried.hide} />}
         {elsewhere.map(([name, r]) => (
           <div key={name} className="notice" data-testid="running-elsewhere" role="status">
-            <span><b>{flowTitle(name, flows)}</b> is running now.</span>
+            <span><b>{flowTitle(name, flows)}</b> is running now.{Object.values(r.nodes).includes('paused') && ` ${PAUSED_WORDS}`}</span>
             <button className="small" onClick={() => openFlow(name)}>Show it</button>
             <button className="danger small" disabled={!r.armed} onClick={() => stop(r.runId)}>Stop it</button>
           </div>
@@ -773,7 +768,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
         <p className="sr-only" data-testid="editor-announce" role="status">{said}</p>
         {paused && (
           <div className="notice" data-testid="paused" role="status">
-            <Icon name="pause" size={15} /> Paused: you moved the mouse. It resumes when you stop using the PC.
+            <Icon name="pause" size={15} /> {PAUSED_WORDS}
           </div>
         )}
         {offline && <div className="notice" role="status">{UNREACHABLE} Trying again…</div>}

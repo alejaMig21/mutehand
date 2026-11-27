@@ -33,11 +33,6 @@ pytestmark = pytest.mark.web
 TASK = "\\Workflow factory - morning daily "
 
 
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
-
-
 @contextmanager
 def served(tmp_path, scheduler=None, desktop=None):
     """(page, scheduler, desktop) on Home of the built editor."""

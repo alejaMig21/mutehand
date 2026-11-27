@@ -15,11 +15,6 @@ pytestmark = pytest.mark.web
 SAVED = re.compile("^Saved$")
 
 
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
-
-
 def seed(tmp_path):
     db = three_actions(tmp_path)
     save_flow(db, Flow(id="morning", nodes=[Node("n1", "open-menu"), Node("n2", "save-file")]))
@@ -57,8 +52,7 @@ def test_a_change_is_stored_without_a_button_and_a_reload_shows_it(tmp_path):
         status(page, "Saved")
         assert stored(db) == ["open-menu", "save-file", "wait"]
 
-        page.reload()
-        page.get_by_test_id("tab-editor").click()
+        page.reload()  # the flow screen comes back with the chore
         node(page, "n1").wait_for()
         assert count(page) == 3
 
@@ -76,8 +70,7 @@ def test_moving_a_box_and_naming_the_chore_are_kept_too(tmp_path):
         page.mouse.up()
         page.wait_for_timeout(1200)
         status(page, "Saved")
-        page.reload()
-        page.get_by_test_id("tab-editor").click()
+        page.reload()  # the flow screen comes back with the chore
         node(page, "n2").wait_for()
         assert page.get_by_test_id("flow-title").input_value() == "Early start"
         after = node(page, "n2").bounding_box()

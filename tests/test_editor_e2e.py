@@ -21,10 +21,6 @@ pytestmark = pytest.mark.web
 SAVED = re.compile("^Saved$")  # "Unsaved changes" holds the word too: match the whole badge
 
 
-@pytest.fixture(autouse=True)
-def not_the_first_run(monkeypatch):
-    """Every screen test starts as a later run, so the editor is what shows; the first-run test turns this off."""
-    monkeypatch.setattr("workflow_factory.api.seen_before", lambda data_dir: True)
 DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 HEADLESS_SHELL = glob.glob(os.path.expanduser(
     "~/AppData/Local/ms-playwright/chromium_headless_shell-*/*/chrome-headless-shell.exe"))
@@ -167,70 +163,17 @@ def test_a_sensitive_step_is_marked_in_words_in_the_palette_not_only_by_colour(e
 
 
 def open_page(playwright, server, screen="editor"):
-    """A new headless page on `screen`; None leaves it where a person first lands (Home)."""
+    """A new headless page. "editor" opens an empty chore from Home, the way a person reaches the flow screen; "apps" the Apps
+    tab; None leaves it where a person first lands (Home)."""
     browser = playwright.chromium.launch(
         headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
     page = browser.new_page()
     page.goto(f"{server.url}/#token=e2e-token")
-    if screen:
+    if screen == "editor":
+        page.get_by_test_id("new-chore").click()
+    elif screen:
         page.get_by_test_id(f"tab-{screen}").click()
     return browser, page
-
-
-def test_the_four_other_screens_show_their_data_and_their_actions_work(tmp_path):
-    from playwright.sync_api import sync_playwright
-
-    from workflow_factory import grant_consent, run_flow
-
-    if not (DIST / "index.html").exists():
-        pytest.fail("web/dist is missing: run `npm install && npm run build` in web/")
-    user_db, factory_db = tmp_path / "user.db", tmp_path / "factory.db"
-    save_step(factory_db, step("open-menu", "Menu", origin="factory", factory_successes=50))
-    save_step(user_db, step("save-file", "Save"))
-    grant_consent(user_db, app="paint.exe", control="Send", action="click")
-    flow = Flow(id="morning", nodes=[Node("a", "save-file"), Node("b", "open-menu")])
-    # Menu is missing on screen: the flow stops at b, leaving a doubt and a history row
-    run_flow(flow, desktop=FakeDesktop(controls=[button("Save")]), user_db=user_db, factory_db=factory_db)
-    server = ApiServer(user_db, factory_db, lambda app: FakeDesktop(controls=[]), token="e2e-token", web_dir=DIST)
-    server.start()
-    try:
-        with sync_playwright() as playwright:
-            browser, page = open_page(playwright, server)
-            page.on("dialog", lambda dialog: dialog.accept())  # revoking asks first
-
-            page.get_by_test_id("tab-library").click()
-            row = page.get_by_test_id("step-row-open-menu")
-            row.wait_for()
-            assert "factory" in row.inner_text() and page.get_by_test_id("state-open-menu").inner_text() == "On trial"
-            page.get_by_test_id("reject-open-menu").click()
-            page.get_by_test_id("restore-open-menu").wait_for()
-            assert page.get_by_test_id("state-open-menu").inner_text() == "Rejected"
-            page.get_by_test_id("restore-open-menu").click()
-            page.get_by_test_id("reject-open-menu").wait_for()
-
-            page.get_by_test_id("tab-consents").click()
-            page.get_by_test_id("consent").wait_for()
-            assert page.get_by_role("button", name="Grant").count() == 0  # revoke only
-            page.get_by_test_id("revoke-Send").click()
-            page.get_by_test_id("no-consents").wait_for()
-
-            page.get_by_test_id("tab-queue").click()
-            page.get_by_test_id("doubt-1").wait_for()
-            assert "not on the screen" in page.get_by_test_id("doubt-1").inner_text()
-            page.get_by_test_id("note-1").fill("the button is called Main menu now")
-            page.get_by_test_id("answer-1").click()
-            page.get_by_test_id("no-doubts").wait_for()
-            page.get_by_test_id("doubt-filter").select_option("answered")
-            page.get_by_test_id("doubt-1").wait_for()
-            assert "answer: the button is called Main menu now" in page.get_by_test_id("doubt-1").inner_text()
-
-            page.get_by_test_id("tab-history").click()
-            page.get_by_test_id("run-1").wait_for()
-            text = page.get_by_test_id("run-1").inner_text()
-            assert "Stopped" in text and "save-file: done" in text and "open-menu: stopped — The button or field" in text
-            browser.close()
-    finally:
-        server.stop()
 
 
 def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editable_copy(tmp_path):
@@ -257,30 +200,6 @@ def test_a_factory_template_is_duplicated_from_the_editor_and_opens_as_an_editab
             browser.close()
     finally:
         server.stop()
-
-
-def test_the_quit_button_asks_first_then_ends_the_server_and_says_so_on_screen(editor):
-    from playwright.sync_api import sync_playwright
-
-    server, _ = editor
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(
-            headless=True, executable_path=HEADLESS_SHELL[0] if HEADLESS_SHELL else None)
-        page = browser.new_page()
-        asked, accept = [], {"now": False}
-        page.on("dialog", lambda dialog: (asked.append(dialog.message), dialog.accept() if accept["now"] else dialog.dismiss()))
-        page.goto(server.url + "/#token=e2e-token")
-
-        page.get_by_test_id("quit").click()
-        page.wait_for_timeout(500)
-        assert len(asked) == 1 and not server.quit_requested.is_set()  # asked, and "cancel" changed nothing
-
-        accept["now"] = True
-        page.get_by_test_id("quit").click()
-        page.get_by_test_id("closed").wait_for()
-        assert server.quit_requested.is_set()
-        assert "closed" in page.get_by_test_id("closed").inner_text().lower()
-        browser.close()
 
 
 def test_system_nodes_and_steps_are_added_wired_deleted_saved_and_reopened(editor):
@@ -575,7 +494,7 @@ def test_a_flow_with_a_rejected_step_says_which_one_and_cannot_be_started(tmp_pa
         server.stop()
 
 
-def test_cards_say_how_far_a_step_is_trusted_and_doubts_are_counted_but_cannot_be_answered_here(tmp_path):
+def test_boxes_say_how_far_a_step_is_trusted_and_a_stopped_box_is_explained_not_counted_as_a_doubt(tmp_path):
     from playwright.sync_api import sync_playwright
 
     from workflow_factory import Sensitivity, grant_consent, save_flow
@@ -599,9 +518,10 @@ def test_cards_say_how_far_a_step_is_trusted_and_doubts_are_counted_but_cannot_b
             page.get_by_test_id("app-name").select_option("telegram.exe")
             page.get_by_test_id("run").click()
             page.get_by_test_id("run-status").filter(has_text="stopped").wait_for(timeout=10_000)
-            page.get_by_text("1 doubt").first.wait_for()
-            assert "1 doubt" in page.get_by_test_id("node-b").inner_text()
-            assert "1 doubt" in page.get_by_test_id("safety-summary").inner_text()
+            page.get_by_test_id("node-b").filter(has_text="Stopped here").wait_for()
+            assert "doubt" not in page.get_by_test_id("node-b").inner_text().lower()  # no mark that points to a screen that is gone
+            assert "doubt" not in page.get_by_test_id("safety-summary").inner_text().lower()
+            page.get_by_test_id("strip-reason").wait_for()
             words = " ".join(button_.inner_text() for button_ in page.get_by_role("button").all())
             assert not any(word in words.lower() for word in ("answer", "dismiss", "resolve"))
             browser.close()
@@ -666,71 +586,6 @@ def test_a_recipe_with_an_unfilled_hole_cannot_run_and_says_which(tmp_path):
             assert "the hole 'send'" in note.inner_text()
             assert "Hole not filled: compose" in page.get_by_test_id("node-n2").inner_text()
             assert page.get_by_test_id("run").is_disabled()
-            browser.close()
-    finally:
-        server.stop()
-
-
-def test_a_schedule_is_added_listed_and_removed_from_the_screen_and_other_tasks_stay_hidden(tmp_path):
-    from fake_scheduler import FOREIGN, FakeScheduler
-    from playwright.sync_api import sync_playwright
-
-    from workflow_factory import save_flow
-
-    save_step(tmp_path / "user.db", step("stamp", "Stamp", app="vvrt.exe"))
-    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=[Node("a", "open-menu")]))
-    scheduler = FakeScheduler()
-    server = ApiServer(tmp_path / "user.db", None, lambda app: None, token="e2e-token", web_dir=DIST, schedule_runner=scheduler)
-    server.start()
-    try:
-        with sync_playwright() as playwright:
-            browser, page = open_page(playwright, server)
-            page.on("dialog", lambda dialog: dialog.accept())  # removing asks first
-            page.get_by_test_id("tab-schedules").click()
-            page.get_by_test_id("no-schedules").wait_for()  # the foreign task is not shown
-            assert page.get_by_test_id("schedule-add").is_disabled()  # no flow is chosen for the person
-            page.get_by_test_id("schedule-flow").select_option("morning")
-            page.get_by_test_id("schedule-app").select_option("vvrt.exe")
-            page.get_by_test_id("schedule-time").fill("07:45")
-            page.get_by_test_id("schedule-add").click()
-            row = page.get_by_test_id("schedule-row-morning daily 0745")
-            row.wait_for()
-            assert "morning" in row.inner_text() and "Vvrt" in row.inner_text() and "07:45" in row.inner_text()
-            created = next(task for name, task in scheduler.tasks.items() if name != FOREIGN)
-            assert "--app vvrt.exe" in created["arguments"]  # the screen names the app, Windows gets its file name
-            page.get_by_test_id("schedule-remove-morning daily 0745").click()
-            page.get_by_test_id("no-schedules").wait_for()
-            assert list(scheduler.tasks) == [FOREIGN]
-            browser.close()
-    finally:
-        server.stop()
-
-
-def test_a_first_run_with_something_missing_opens_on_the_setup_check_and_it_can_be_reopened_later(tmp_path, monkeypatch):
-    from playwright.sync_api import sync_playwright
-
-    from workflow_factory.checks import run_checks, seen_before
-
-    monkeypatch.setattr("workflow_factory.api.seen_before", seen_before)  # the real one: this is a first run
-    monkeypatch.setattr("workflow_factory.api.run_checks",
-                        lambda data_dir: run_checks(data_dir, which=lambda program: None))  # nothing installed
-    server = serve(tmp_path, FakeDesktop(controls=[]))
-    try:
-        with sync_playwright() as playwright:
-            browser, page = open_page(playwright, server, screen=None)
-            summary = page.get_by_test_id("checks-summary")
-            summary.wait_for()
-            page.get_by_test_id("check-agent-desktop").wait_for()
-            text = page.get_by_test_id("check-data-folder").inner_text()
-            assert "Ready" in text or "Missing" in text  # always a word, never colour alone
-            assert page.get_by_test_id("first-day").count() == 0  # Home is not under it
-
-            page.reload()  # it was shown once: the next visit opens Home (nothing is learned: its first day)
-            page.get_by_test_id("first-day").wait_for()
-            page.wait_for_timeout(500)
-            assert page.get_by_test_id("checks-summary").count() == 0
-            page.get_by_test_id("tab-checks").click()
-            page.get_by_test_id("checks-summary").wait_for()
             browser.close()
     finally:
         server.stop()

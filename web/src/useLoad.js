@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from './api.js'
 
 // Load a list from the API. A response that arrives after the path changed (or after unmount) is ignored,
@@ -23,30 +23,4 @@ export function useLoad(path, { keep = false } = {}) {
 
   const loading = state.path !== path
   return { data: loading ? [] : state.data, loading, loadError: loading ? '' : state.loadError, error, reload, setError }
-}
-
-// Run a change on the server, then reload the list. One change at a time, so a double click sends one request;
-// `said` tells the person what happened.
-export function useAction(reload, setError) {
-  const lock = useRef(false)
-  const [busy, setBusy] = useState(false)
-  const [said, setSaid] = useState('')
-  const act = useCallback(async (request, done) => {
-    if (lock.current) return
-    lock.current = true
-    setBusy(true)
-    setSaid('')
-    setError('')
-    try {
-      await request()
-      setSaid(done)
-      reload()
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      lock.current = false
-      setBusy(false)
-    }
-  }, [reload, setError])
-  return { act, busy, said }
 }

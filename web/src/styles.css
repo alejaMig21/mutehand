@@ -27,6 +27,8 @@ summary { cursor: pointer; }
 .tabs button:hover { color: var(--ink); }
 .tabs button[aria-current="page"] { background: var(--surface); color: var(--ink); border-color: var(--line); }
 .tabs .tabs-end { margin-left: auto; }
+.tabs .brand { align-self: center; padding: 0 12px 0 4px; font-weight: 700; }
+.tabs button { min-height: 44px; }
 .screen { flex: 1; min-height: 0; overflow: auto; }
 .notice-page { max-width: 560px; margin: 80px auto; padding: 0 16px; }
 
@@ -41,34 +43,6 @@ summary { cursor: pointer; }
   box-shadow: 0 12px 32px rgba(0, 0, 0, .45); color: var(--ok); font-weight: 600; }
 .announce:empty { display: none; }
 .empty-state { padding: 32px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
-.cards { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
-.cards > li { padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
-.row-card { display: flex; align-items: center; gap: 16px; }
-.card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
-.card-body h2 { font-size: 16px; }
-.card-body ol { margin: 4px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; }
-.answer { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
-.answer label { font-size: 12px; color: var(--muted); }
-.answer textarea { resize: vertical; }
-.answer-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.answer-actions small { margin-right: auto; }
-.badge { display: inline-block; padding: 2px 8px; border: 1px solid currentColor; border-radius: 999px; font-size: 12px; font-weight: 600; }
-.group h2 { font-size: 16px; margin-bottom: 8px; overflow-wrap: anywhere; }
-.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-table { width: 100%; border-collapse: collapse; table-layout: fixed; min-width: 520px; }
-.col-state { width: 150px; } .col-number { width: 80px; } .col-action { width: 110px; }
-th, td { padding: 8px 12px; border-bottom: 1px solid var(--line); text-align: left; overflow-wrap: anywhere; }
-th { font-size: 12px; color: var(--muted); }
-tbody tr:last-child td { border-bottom: 0; }
-tr.blocked td { border-bottom: 0; }
-tr.why td { padding-top: 0; background: rgba(255, 122, 122, .08); }
-tr.why small { display: block; margin-top: 4px; }
-.state-help { padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
-.state-help dl { margin: 0 0 8px; display: flex; flex-direction: column; gap: 8px; }
-.state-help dl > div { display: grid; grid-template-columns: 140px 1fr; align-items: center; gap: 8px; }
-.state-help dd { margin: 0; }
-td small { display: block; }
-.cell-action { text-align: right; }
 
 /* Home: the list of chores, with the larger type and targets of the mockup */
 .home .page { max-width: 1160px; font-size: 16px; }
@@ -131,9 +105,7 @@ td small { display: block; }
 .small { padding: 5px 10px; font-size: 13px; }
 .icon-button { flex: none; width: 32px; height: 32px; padding: 0; border-color: transparent; background: transparent; color: var(--muted); }
 .icon-button:hover:not(:disabled) { color: var(--ink); background: var(--sunk); }
-.field-inline { display: flex; align-items: center; gap: 6px; color: var(--muted); }
 input, select, textarea { background: var(--sunk); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
-.field-inline select { max-width: 220px; } /* a long product name is cut short, never wider than the window */
 .menu-anchor { position: relative; }
 .menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 240px; max-width: min(420px, 90vw); max-height: 60vh;
   overflow-y: auto; padding: 6px; display: flex; flex-direction: column; gap: 4px;
@@ -293,17 +265,6 @@ input[type="number"] { width: 70px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .status-running .card-mark.tone-info svg, .chore-line.tone-info svg { animation: none; } }
 @media (max-width: 560px) { .home .chore-run { flex: 1 1 100%; } }
-
-/* the schedules screen */
-.schedule-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
-.schedule-form label { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: min(320px, 100%); color: var(--muted); font-size: 12px; }
-.schedule-form select { max-width: 100%; } /* a long flow name must not widen the page */
-.schedule-form input, .schedule-form select, .schedule-form button { height: 40px; box-sizing: border-box; font-size: 14px; }
-
-/* the setup check */
-.check-list li { display: flex; gap: 16px; }
-.check-state { flex: none; width: 96px; display: flex; align-items: flex-start; gap: 4px; font-weight: 700; }
-.check-fix { margin-top: 4px; font-family: var(--mono); font-size: 13px; }
 
 /* narrow windows and 200% zoom */
 @media (max-width: 860px) {

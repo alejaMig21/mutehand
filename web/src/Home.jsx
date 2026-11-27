@@ -8,7 +8,7 @@ import { Icon } from './icons.jsx'
 import More, { useDeleted } from './More.jsx'
 import Screen from './Screen.jsx'
 import { useLoad } from './useLoad.js'
-import { blockedWords, flowTitle, lastRunWords, runNoteWords } from './words.js'
+import { blockedWords, flowTitle, lastRunWords, PAUSED_WORDS, runNoteWords } from './words.js'
 
 // The first screen: the person's flows ("chores" on screen), how each went, and Run now. `onOpen` shows a flow on the
 // flow screen, `onNew` an empty one; `left` holds the flow the person has just come back from, if any.
@@ -79,7 +79,7 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
   const paused = running && Object.values(run.nodes).includes('paused')
   const last = lastRunWords(flow.last_run)
   const line = !running ? last : paused
-    ? { words: 'Paused: you moved the mouse. It resumes when you stop using the PC.', tone: 'warn', icon: 'pause' }
+    ? { words: PAUSED_WORDS, tone: 'warn', icon: 'pause' }
     : { words: 'Running now', tone: 'info', icon: 'spinner' }
   const wrong = !running && (problem || runNoteWords(run, appName))
   // a chore that stopped is tried again, not run: what it is waiting for is the person's Try again

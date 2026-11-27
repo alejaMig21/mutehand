@@ -3,33 +3,25 @@ import { api, loadAppNames, LOCKED } from './api.js'
 import Apps from './Apps.jsx'
 import { useTryAgain } from './Attention.jsx'
 import { getAppNames, onAppNames } from './catalog.js'
-import Checks from './Checks.jsx'
-import Consents from './Consents.jsx'
 import Editor from './Editor.jsx'
-import History from './History.jsx'
 import Home from './Home.jsx'
-import Library from './Library.jsx'
-import Queue from './Queue.jsx'
-import Schedules from './Schedules.jsx'
 import { useRuns } from './useRuns.js'
 
+// Home and Apps are the places; the flow screen is reached from Home and has no tab of its own
 const SCREENS = [
   ['home', 'Home', null],
   ['apps', 'Apps', Apps],
-  ['editor', 'Flow editor', null],
-  ['library', 'Steps', Library],
-  ['queue', 'Tutor queue', Queue],
-  ['history', 'Run history', History],
-  ['schedules', 'Schedules', Schedules],
-  ['consents', 'Consents', Consents],
-  ['checks', 'Setup check', Checks],
+  ['editor', 'Flow screen', null],
 ]
+const TABS = SCREENS.filter(([id]) => id !== 'editor')
 
-// the screen survives a reload of this tab, except the setup check: it is shown once
+// the screen survives a reload of this tab (the flow screen brings back the chore it showed)
 const remembered = () => {
   const id = sessionStorage.getItem('wf-screen')
-  return id !== 'checks' && SCREENS.some(([known]) => known === id) ? id : 'home'
+  return SCREENS.some(([known]) => known === id) ? id : 'home'
 }
+
+const OPEN_AGAIN = 'To open it again, run “uv run workflow-factory” in the project folder.'
 
 export default function App() {
   const [screen, setScreen] = useState(remembered)
@@ -46,9 +38,6 @@ export default function App() {
   useEffect(() => {
     const lock = () => setLocked(true)
     window.addEventListener(LOCKED, lock)
-    // the first time, a setup that lacks something says so before anything else; a working one stays on Home
-    api('/api/checks').then((r) => r.first_run && r.checks.some((c) => !c.ok && !c.optional)
-      && setScreen((now) => (now === 'home' ? 'checks' : now))).catch(() => {})
     return () => window.removeEventListener(LOCKED, lock)
   }, [])
   const [, label, Current] = SCREENS.find(([id]) => id === screen)
@@ -63,9 +52,11 @@ export default function App() {
     document.title = `${label} · Workflow Factory`
   }, [screen, label])
 
+  // it asks only when something would be lost: a run in progress or a change not kept. Nothing is lost otherwise.
+  const running = Object.values(following.runs).some((run) => run.status === 'running')
   async function quit() {
-    const lost = unsaved ? ' Changes to the flow that are not saved will be lost.' : ''
-    if (!window.confirm(`Close Workflow Factory? Flows that are running will be stopped.${lost}`)) return
+    const lost = [running && 'The chore that is running will be stopped.', unsaved && 'Changes that are not saved will be lost.'].filter(Boolean)
+    if (lost.length && !window.confirm(`Close the program? ${lost.join(' ')} ${OPEN_AGAIN}`)) return
     await api('/api/quit', { method: 'POST' }).catch(() => {})
     setClosed(true)
   }
@@ -84,12 +75,15 @@ export default function App() {
   return (
     <div className="shell">
       <nav className="tabs" aria-label="screens">
-        {SCREENS.map(([id, name]) => (
-          <button key={id} data-testid={`tab-${id}`} aria-current={id === screen ? 'page' : undefined} onClick={() => setScreen(id)}>
+        <span className="brand">Workflow Factory</span>
+        {/* the flow screen belongs to Home: its tab stays the current one */}
+        {TABS.map(([id, name]) => (
+          <button key={id} data-testid={`tab-${id}`} aria-current={id === screen || (id === 'home' && screen === 'editor') ? 'page' : undefined}
+            onClick={() => setScreen(id)}>
             {name}
           </button>
         ))}
-        <button data-testid="quit" onClick={quit} className="tabs-end">Quit</button>
+        <button data-testid="quit" onClick={quit} className="tabs-end" title={`Closes the program. ${OPEN_AGAIN}`}>Close the program</button>
       </nav>
       <main className="screen">
         {/* the editor stays mounted so unsaved nodes, edges and run context survive a tab change */}

@@ -67,11 +67,24 @@ export function TriedResults({ tries, hide }) {
   )
 }
 
+// What is half typed in a note stays while the person looks at another screen or reloads, until it is kept on the doubt.
+const NOTES = 'wf-notes'
+const typed = (doubt) => { try { return JSON.parse(sessionStorage.getItem(NOTES))?.[doubt] } catch { return undefined } }
+const keepTyped = (doubt, note) => {
+  try {
+    const all = JSON.parse(sessionStorage.getItem(NOTES)) ?? {}
+    if (note) all[doubt] = note
+    else delete all[doubt]
+    sessionStorage.setItem(NOTES, JSON.stringify(all))
+  } catch { /* the note simply is not remembered */ }
+}
+
 // "Try again" and "Ask for help" for a stopped chore. A step the person rejected is not lifted by trying again: it is
 // allowed again first. `prefix` and `suffix` keep the test ids of the card and of the strip apart.
 export function StoppedActions({ item, onTry, onChanged, trying, prefix, suffix = '' }) {
   const [asking, setAsking] = useState(false)
-  const [note, setNote] = useState(item.note ?? '')
+  const [note, setNote] = useState(() => typed(item.doubt) ?? item.note ?? '')
+  const write = (text) => { setNote(text); keepTyped(item.doubt, text === (item.note ?? '') ? '' : text) }
   const [problem, setProblem] = useState('')
   const [allowing, setAllowing] = useState(false)
   const help = useRef(null)
@@ -93,7 +106,7 @@ export function StoppedActions({ item, onTry, onChanged, trying, prefix, suffix 
 
   // what the person wrote stays on the doubt, which stays open; the tutor reads it there
   const keepNote = () => api(`/api/doubts/${item.doubt}/help`, { method: 'POST', body: { note } })
-    .then(onChanged, (e) => setProblem(e.message))
+    .then(() => { keepTyped(item.doubt, ''); onChanged() }, (e) => setProblem(e.message))
 
   useEffect(() => { if (asking) help.current?.querySelector('textarea')?.focus() }, [asking])
 
@@ -118,7 +131,7 @@ export function StoppedActions({ item, onTry, onChanged, trying, prefix, suffix 
         <div className="help-panel" ref={help} data-testid={`${prefix}-help${suffix}`}>
           <label>
             Add a note for whoever helps, if you like
-            <textarea value={note} maxLength={500} rows={2} data-testid={`${prefix}-note${suffix}`} onChange={(e) => setNote(e.target.value)} />
+            <textarea value={note} maxLength={500} rows={2} data-testid={`${prefix}-note${suffix}`} onChange={(e) => write(e.target.value)} />
           </label>
           <ChatMessage message={helpMessage(item, appLabel(item.app || 'the app'), note)} onCopy={keepNote} />
         </div>

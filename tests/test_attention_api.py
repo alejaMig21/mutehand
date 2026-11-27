@@ -9,7 +9,7 @@ from test_api import call
 
 from workflow_factory import Flow, Node, list_doubts, reject_step, run_flow, save_flow, save_step
 from workflow_factory.api import ApiServer
-from workflow_factory.queue import record_run
+from workflow_factory.queue import answer_doubt, record_run
 from workflow_factory.steps import list_steps, step_report
 from workflow_factory.tutor import list_open_doubts, mark_private
 
@@ -210,7 +210,7 @@ def test_a_long_note_is_cut_and_a_closed_doubt_takes_none(setup):
     call(setup.server, "/api/doubts/1/help", "POST", {"note": "x" * 900})
     assert len(list_doubts(setup.db)[0].note) == 500
 
-    call(setup.server, "/api/doubts/1/answer", "POST", {})
+    answer_doubt(setup.db, 1)
     assert call(setup.server, "/api/doubts/1/help", "POST", {"note": "late"})[0] == 400
     assert call(setup.server, "/api/doubts/99/help", "POST", {"note": "x"})[0] == 400
 
