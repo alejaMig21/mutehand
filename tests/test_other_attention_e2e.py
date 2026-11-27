@@ -132,11 +132,12 @@ def test_no_screen_content_of_a_private_app_reaches_these_cards_or_their_message
         page.on("response", lambda r: said.append(r) if "/api/attention" in r.url else None)
         page.get_by_test_id("attention-relearn-telegram.exe").wait_for()
         page.get_by_test_id("attention-message-relearn-telegram.exe").click()
-        assert page.get_by_test_id("attention-rejected-telegram.exe-send-it").count() == 1
+        assert page.locator('[data-testid^="attention-rejected-telegram.exe-"]').count() == 1  # named by a handle, not by the action
         words = attention(page).inner_text() + page.get_by_test_id("chat-text").inner_text()
         for secret in ("Ana Ruiz", "4471", "open-chat", "send-it"):
             assert secret not in words, secret
-        assert "Ana Ruiz" not in "".join(r.text() for r in said) and "4471" not in "".join(r.text() for r in said)
+        sent = "".join(r.text() for r in said)
+        assert "Ana Ruiz" not in sent and "4471" not in sent and "send-it" not in sent and "open-chat" not in sent
 
 
 @pytest.mark.parametrize("width,height", [(683, 384), (390, 740)])
