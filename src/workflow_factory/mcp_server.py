@@ -18,6 +18,7 @@ from workflow_factory.desktop import Desktop
 from workflow_factory.flow import KINDS
 from workflow_factory.paths import default_user_db
 from workflow_factory.steps import Locator, Sensitivity, list_steps, step_reports
+from workflow_factory.upgrade import start_user_db
 
 
 def _code_only(tool):
@@ -175,6 +176,7 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop], factory_d
 def main() -> None:
     user_db = default_user_db()
     user_db.parent.mkdir(parents=True, exist_ok=True)
+    start_user_db(user_db)
     factory = os.environ.get("WORKFLOW_FACTORY_FACTORY_DB")
     build_server(user_db, AgentDesktop, Path(factory) if factory else None).run()
 

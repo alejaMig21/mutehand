@@ -72,6 +72,7 @@ from workflow_factory.steps import (
     step_reports,
 )
 from workflow_factory.tutor import handle, is_private, private_apps
+from workflow_factory.upgrade import dismiss_notice
 
 LOOPBACK_HOSTS = ("127.0.0.1", "localhost")  # the only names this server can be bound to
 MAX_BODY_BYTES = 1_000_000
@@ -546,6 +547,10 @@ class ApiServer:
                                             zip(steps, _safety(api.user_db, steps), strict=True)])
                 if method == "GET" and path == "/api/attention":
                     return self._send(200, attention_items(api.user_db, api.factory_db, api.user_db.parent))
+                notice_match = re.fullmatch(r"/api/notices/([\w.-]+)/dismiss", path)
+                if notice_match and method == "POST":
+                    dismiss_notice(api.user_db, notice_match[1])
+                    return self._send(200, {"ok": True})
                 if method == "GET" and path == "/api/apps":
                     return self._send(200, app_rows(api.user_db, api.factory_db, (self.query.get("q") or [""])[0]))
                 app_match = re.fullmatch(r"/api/apps/([^/]+)", path)

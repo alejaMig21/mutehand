@@ -11,6 +11,7 @@ from workflow_factory.flows import flow_overview, flow_summaries, load_flow, tau
 from workflow_factory.queue import last_runs, list_doubts
 from workflow_factory.steps import Status, list_steps, step_reports
 from workflow_factory.tutor import handle, is_private, private_apps
+from workflow_factory.upgrade import list_notices
 
 
 def rejected_by_person(report: dict) -> bool:
@@ -24,7 +25,8 @@ def attention_items(user_db: Path, factory_db: Path | None, data_dir: Path | Non
     missing setup. `data_dir` is where the setup check looks; without it no setup item is listed."""
     steps = list_steps(user_db, factory_db)
     stopped = _stopped(user_db, factory_db, steps)
-    return [*stopped, *_blocking(user_db, factory_db, steps, {item["flow"] for item in stopped}), *_setup(data_dir)]
+    notices = [{"kind": "notice", **notice} for notice in list_notices(user_db)]
+    return [*notices, *stopped, *_blocking(user_db, factory_db, steps, {item["flow"] for item in stopped}), *_setup(data_dir)]
 
 
 def _stopped(user_db: Path, factory_db: Path | None, steps: list) -> list[dict]:
