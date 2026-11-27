@@ -27,9 +27,12 @@ def _words(text: str) -> list[str]:
     return re.sub(r"[-_]+", " ", text.lower()).split()
 
 
-def _matches(words: list[str], *texts: str) -> bool:
+_SMALL = {"the", "and", "for", "with", "into", "from", "this", "that", "what", "how", "you", "your"}
+
+
+def _matches(words: list[str], *texts: str, every: bool = True) -> bool:
     text = " ".join(_words(" ".join(texts)))
-    return all(word in text for word in words)
+    return (all if every else any)(word in text for word in words)
 
 
 def _known(user_db: Path, factory_db: Path | None) -> tuple[dict[str, str], list, list[dict]]:
@@ -46,22 +49,32 @@ def app_rows(user_db: Path, factory_db: Path | None, query: str | None = None) -
     name, or by an action (`found` names them; never for a private app, whose action names stay out of every search)."""
     spelling, steps, reports = _known(user_db, factory_db)
     names, private, granted = app_names(user_db), private_apps(user_db), consents(user_db)
-    rows = {key: {"app": app, "private": is_private(user_db, app, private), "actions": 0, "problems": 0, "found": [],
-                  "permissions": sum(plain_app(c.app) == key for c in granted)} for key, app in spelling.items()}
     words = _words(query or "")
-    for step, report in zip(steps, reports, strict=True):
-        row = rows[plain_app(step.app)]
-        row["actions"] += 1
-        row["problems"] += report["state"] in PROBLEMS
-        label = _label(step.app, names)
-        # words that all name the app list the app itself, not each of its actions
-        if words and not row["private"] and not _matches(words, step.app, label) and _matches(words, step.name, step.app, label):
-            row["found"].append(step.name)
-    shown = [row for row in rows.values() if not words or row["found"] or _matches(words, row["app"], _label(row["app"], names))]
-    for row in shown:
-        row["found"].sort()
-        if not words:
-            del row["found"]
+
+    def search(words: list[str], every: bool) -> list[dict]:
+        rows = {key: {"app": app, "private": is_private(user_db, app, private), "actions": 0, "problems": 0, "found": [],
+                      "permissions": sum(plain_app(c.app) == key for c in granted)} for key, app in spelling.items()}
+        for step, report in zip(steps, reports, strict=True):
+            row = rows[plain_app(step.app)]
+            row["actions"] += 1
+            row["problems"] += report["state"] in PROBLEMS
+            label = _label(step.app, names)
+            # words that all name the app list the app itself, not each of its actions
+            if (words and not row["private"] and not _matches(words, step.app, label, every=every)
+                    and _matches(words, step.name, step.app, label, every=every)):
+                row["found"].append(step.name)
+        shown = [row for row in rows.values()
+                 if not words or row["found"] or _matches(words, row["app"], _label(row["app"], names), every=every)]
+        for row in shown:
+            row["found"].sort()
+            if not words:
+                del row["found"]
+        return shown
+
+    shown = search(words, True)
+    if not shown:  # nobody has every word: the words that carry meaning are tried one by one ("save a spreadsheet" finds "Save")
+        meaningful = [word for word in words if len(word) > 2 and word not in _SMALL]
+        shown = search(meaningful, False) if meaningful else []
     return sorted(shown, key=lambda row: (not row["problems"], _label(row["app"], names).casefold()))
 
 
