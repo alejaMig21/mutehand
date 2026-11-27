@@ -93,8 +93,9 @@ def app_detail(user_db: Path, factory_db: Path | None, app: str) -> dict | None:
                for step, report in mine]
     learned.sort(key=lambda step: (step["state"] not in PROBLEMS, step["name"]))
     by_name = {step.name: step for step, _ in mine}
-    flows = [(entry, {node.step for node in load_flow(user_db, factory_db, entry["id"]).nodes if node.kind in ("step", "loop")})
-              for entry in flow_summaries(user_db, factory_db) if plain_app(entry["app"] or "") == key]
+    flows = [(entry, {node.step for node in load_flow(user_db, factory_db, entry["id"]).nodes
+                       if node.kind in ("step", "loop") and plain_app(node.technology) == key})
+             for entry in flow_summaries(user_db, factory_db)]
     permissions = []
     for granted in consents(user_db):
         if plain_app(granted.app) != key:

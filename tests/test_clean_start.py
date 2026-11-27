@@ -4,13 +4,13 @@ from datetime import date
 
 from test_api import call
 
-from workflow_factory import Flow, Node, list_steps, save_flow, save_step
+from workflow_factory import Flow, Node, list_steps, save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.attention import attention_items
 from workflow_factory.flows import flow_summaries
 from workflow_factory.upgrade import dismiss_notice, start_user_db
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 DAY = date(2026, 11, 27)
 COPY = "user-2026-11-27.db"
@@ -20,7 +20,7 @@ def old_database(tmp_path):
     """A database as the previous version left it: a step and a flow, no marker of the new model."""
     db = tmp_path / "user.db"
     save_step(db, step("open-menu", "Alpha"))
-    save_flow(db, Flow(id="weekly", nodes=[Node("n1", "open-menu")]), "Weekly export", "paint.exe")
+    save_flow_on(db, Flow(id="weekly", nodes=[Node("n1", "open-menu")]), "Weekly export", "paint.exe")
     return db
 
 

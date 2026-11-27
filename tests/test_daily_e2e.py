@@ -22,11 +22,11 @@ from test_home_e2e import (
     tab_to,
 )
 
-from workflow_factory import Flow, Node, load_flow, save_flow
+from workflow_factory import Flow, Node, load_flow
 from workflow_factory.api import ApiServer
 from workflow_factory.schedule import create_schedule
 
-from fake_desktop import FakeDesktop, button
+from fake_desktop import FakeDesktop, button, save_flow_on
 
 pytestmark = pytest.mark.web
 
@@ -177,7 +177,7 @@ def test_a_schedule_made_before_shows_on_its_flow_and_on_the_canvas_without_rewr
     put_flows(tmp_path)
     scheduler = FakeScheduler()
     # a task made by the old Schedules screen, which put no start node on the flow
-    create_schedule("morning daily 0645", "morning", "paint.exe", "06:45", ["--user-db", str(tmp_path / "user.db")],
+    create_schedule("morning daily 0645", "morning", "06:45", ["--user-db", str(tmp_path / "user.db")],
                     runner=scheduler)
     with served(tmp_path, scheduler=scheduler) as (page, _, _):
         page.get_by_test_id("daily-morning").filter(has_text="Every day at 6:45 AM").wait_for()
@@ -274,7 +274,7 @@ def test_a_template_flow_cannot_be_given_a_time_and_says_why(tmp_path):
     from fake_desktop import step
 
     save_step(tmp_path / "factory.db", step("open-menu", "Alpha", origin="factory", factory_successes=50))
-    save_flow(tmp_path / "factory.db", Flow(id="template", nodes=[Node("a", "open-menu")]), "Template", "paint.exe")
+    save_flow_on(tmp_path / "factory.db", Flow(id="template", nodes=[Node("a", "open-menu")]), "Template", "paint.exe")
     with served(tmp_path) as (page, scheduler, _):
         at_home(page)
         set_on_home(page, "template", "07:30")

@@ -219,7 +219,8 @@ def test_only_open_doubts_are_listed_and_answering_by_teaching_lets_the_flow_res
 
     (doubt,) = list_open_doubts(user_db)
     assert doubt == {"id": 1, "flow_id": "morning", "node_id": "n1", "step": "open-menu",
-                     "reason": "control_not_found", "detail": "control_not_found", "capture": {"button": 1},
+                     "technology": "paint.exe", "reason": "control_not_found", "detail": "control_not_found",
+                     "capture": {"button": 1},
                      "status": "open", "note": None}
 
     desktop = FakeDesktop(controls=[button("Main menu")])

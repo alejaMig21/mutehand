@@ -15,12 +15,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from fake_scheduler import FakeScheduler  # noqa: E402
 
-from workflow_factory import Flow, Node, grant_consent, reject_step, run_flow, save_flow, save_step  # noqa: E402
+from workflow_factory import Flow, Node, grant_consent, reject_step, run_flow, save_step  # noqa: E402
 from workflow_factory.api import ApiServer  # noqa: E402
 from workflow_factory.desktop import AppKey  # noqa: E402
 from workflow_factory.steps import record_app_name, revalidate_changed_versions  # noqa: E402
 
-from fake_desktop import FakeDesktop, button, step  # noqa: E402
+from fake_desktop import FakeDesktop, button, save_flow_on, step  # noqa: E402
 
 DIST = Path(__file__).resolve().parent.parent / "src" / "workflow_factory" / "web"
 TOKEN = "acceptance-token"
@@ -41,7 +41,7 @@ def desktop_for(app):
 
 def put_flow(db, flow_id, title, app, *actions, run=True):
     flow = Flow(id=flow_id, nodes=[Node(f"n{i}", a) for i, a in enumerate(actions, 1)])
-    save_flow(db, flow, title, app)
+    save_flow_on(db, flow, title, app)
     if run is not False:  # True: it works; a list of actions: the screen lacks them, so it stops there
         have = ACTIONS[app] if run is True else [a for a in ACTIONS[app] if a not in run]
         run_flow(flow, desktop=FakeDesktop(controls=[button(a) for a in have], app=app), user_db=db, fired="daily")

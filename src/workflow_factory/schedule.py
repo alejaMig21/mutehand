@@ -24,17 +24,16 @@ def _quote(argument: str) -> str:
     return f'"{argument}"' if " " in argument else argument
 
 
-def workday_command(flow_id: str, app: str, extra: list[str] | None = None) -> str:
+def workday_command(flow_id: str, extra: list[str] | None = None) -> str:
     """The command line the scheduler runs. pythonw (no console window) when it is there."""
-    for label, value in (("flow", flow_id), ("app", app)):
-        if not SAFE_NAME.fullmatch(value):
-            raise ValueError(f"the {label} name may only use letters, digits, '_', '.' and '-': {value.removesuffix('.exe')!r}")
+    if not SAFE_NAME.fullmatch(flow_id):
+        raise ValueError(f"the flow name may only use letters, digits, '_', '.' and '-': {flow_id!r}")
     if any('"' in part for part in (extra or [])):
         raise ValueError("extra arguments may not contain double quotes")
     python = Path(sys.executable)
     windowless = python.with_name("pythonw.exe")
     exe = windowless if windowless.exists() else python
-    parts = ["-m", "workflow_factory.workday", "--flow", flow_id, "--app", app, "--fired", "daily", *(extra or [])]
+    parts = ["-m", "workflow_factory.workday", "--flow", flow_id, "--fired", "daily", *(extra or [])]
     return f'"{exe}" ' + " ".join(_quote(part) for part in parts)
 
 
@@ -46,13 +45,13 @@ def full_name(name: str) -> str:
     return SCHEDULE_PREFIX + bare
 
 
-def create_schedule(name: str, flow_id: str, app: str, daily_at: str, extra: list[str] | None = None,
-                runner=subprocess.run) -> None:
+def create_schedule(name: str, flow_id: str, daily_at: str, extra: list[str] | None = None,
+                    runner=subprocess.run) -> None:
     """A task that runs the workday every day at HH:MM, in the logged-on user's session."""
     name = full_name(name)
     if not CLOCK.fullmatch(daily_at):
         raise ValueError(f"the time must look like HH:MM (24 hours), not {daily_at!r}")
-    command = workday_command(flow_id, app, extra)
+    command = workday_command(flow_id, extra)
     if len(command) > MAX_COMMAND_CHARS:
         raise ValueError(f"the command is {len(command)} characters; Windows Task Scheduler accepts at most "
                          f"{MAX_COMMAND_CHARS} (use shorter paths or the default locations)")
@@ -83,14 +82,14 @@ def _bare(name: str) -> str:
 
 
 def describe_schedules(runner=subprocess.run, with_db: bool = False) -> list[dict]:
-    """What the screen shows for each schedule this tool made: its name, the flow, the app and the daily time. With
+    """What the screen shows for each schedule this tool made: its name, the flow and the daily time. With
     `with_db`, also `db`: the data file the task opens, None for the default one.
 
     The details come from the task's XML, which does not depend on the language of Windows. A task whose XML cannot be read is
     still listed by name."""
     result = []
     for name in list_schedules(runner=runner):
-        info = {"name": _bare(name), "flow": None, "app": None, "at": None}
+        info = {"name": _bare(name), "flow": None, "at": None}
         done = runner(["schtasks", "/Query", "/TN", name, "/XML"], capture_output=True, text=True, timeout=60)
         if done.returncode == 0:
             info.update(_read_task_xml(done.stdout))
@@ -110,10 +109,10 @@ def _read_task_xml(xml: str) -> dict:
         return next((e.text or "" for e in root.iter() if e.tag.endswith(tag)), "")
 
     arguments = text("Arguments")
-    flow, app = re.search(r"--flow (\S+)", arguments), re.search(r"--app (\S+)", arguments)
+    flow = re.search(r"--flow (\S+)", arguments)
     at = re.search(r"T(\d\d:\d\d)", text("StartBoundary"))
     db = re.search(r'--user-db (?:"([^"]+)"|(\S+))', arguments)
-    return {"flow": flow and flow[1], "app": app and app[1], "at": at and at[1], "db": db and (db[1] or db[2])}
+    return {"flow": flow and flow[1], "at": at and at[1], "db": db and (db[1] or db[2])}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -122,7 +121,6 @@ def main(argv: list[str] | None = None) -> int:
     create = commands.add_parser("create", help="run a flow every day at a time")
     create.add_argument("--name", required=True)
     create.add_argument("--flow", required=True)
-    create.add_argument("--app", required=True)
     create.add_argument("--daily-at", required=True, metavar="HH:MM")
     commands.add_parser("list", help="the schedules this tool created")
     delete = commands.add_parser("delete", help="remove a schedule created by this tool")
@@ -130,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "create":
-            create_schedule(args.name, args.flow, args.app, args.daily_at)
+            create_schedule(args.name, args.flow, args.daily_at)
             print(f"task {args.name!r} will run flow {args.flow!r} every day at {args.daily_at}")
         elif args.command == "list":
             print("\n".join(list_schedules()) or "no schedules")

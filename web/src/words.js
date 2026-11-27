@@ -97,7 +97,7 @@ export function runNoteWords(run, app) {
 }
 
 const BLOCKED = {
-  empty: 'It has no steps yet. Open it to add some.', no_app: 'No app is chosen for it. Open it, choose one and press Save.',
+  empty: 'It has no steps yet. Open it to add some.',
   expression: 'It uses an expression, which cannot run yet.', unreadable: 'It cannot be read.',
   question: 'It stopped earlier and is waiting for you.',
 }

@@ -300,7 +300,7 @@ def test_a_daily_run_is_added_seen_and_stopped_on_the_flow_and_no_other_task_is_
 
         page.get_by_test_id("daily-morning").filter(has_text="Every day at 7:45 AM").wait_for()
         created = next(task for name, task in scheduler.tasks.items() if name != FOREIGN)
-        assert "--app paint.exe" in created["arguments"]  # it runs on the app the flow remembers
+        assert "--app" not in created["arguments"]  # the flow's nodes say which program they act on
         assert "Defrag" not in page.locator("body").inner_text()
 
         page.get_by_test_id("daily-morning").click()

@@ -10,11 +10,11 @@ from test_editor_e2e import DIST, open_page
 from test_editor_safety_e2e import CONTRAST
 from test_home_e2e import BUTTONS, NO_SIDEWAYS_SCROLL, put_flow, put_flows, row, run_button, says
 
-from workflow_factory import Flow, Node, run_flow, save_flow, save_step
+from workflow_factory import Flow, Node, run_flow, save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.queue import save_checkpoint
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 pytestmark = pytest.mark.web
 FOCUSED = "() => document.activeElement.dataset.testid"
@@ -165,7 +165,7 @@ def test_history_reads_newest_first_in_plain_words_with_node_names_after_the_flo
     run_flow(first, FakeDesktop(controls=[button("Alpha")]), db)
     # the flow is rebuilt: n2 is now another node, and the old run must still say what it ran
     second = Flow(id="morning", nodes=[Node("n1", "open-menu"), Node("n2", "save-file")])
-    save_flow(db, second, "Morning report", "paint.exe")
+    save_flow_on(db, second, "Morning report", "paint.exe")
     run_flow(second, FakeDesktop(controls=[button("Alpha")]), db)
 
     with served(tmp_path) as (page, _, _):

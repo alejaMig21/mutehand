@@ -11,13 +11,13 @@ import pytest
 from fake_scheduler import FakeScheduler
 from test_api import call
 
-from workflow_factory import Flow, Node, Sensitivity, grant_consent, reject_step, save_flow, save_step
+from workflow_factory import Flow, Node, Sensitivity, grant_consent, reject_step, save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.desktop import AppKey
 from workflow_factory.steps import record_app_name, revalidate_changed_versions
 from workflow_factory.tutor import mark_private
 
-from fake_desktop import FakeDesktop, step
+from fake_desktop import FakeDesktop, save_flow_on, step
 
 
 @pytest.fixture
@@ -155,9 +155,9 @@ def test_a_permission_says_which_flows_and_actions_stop_without_it_by_data(tmp_p
     save_step(db, step("send-two", "Send", app="mail.exe", sensitive=Sensitivity.OUTWARD_ACTION))
     save_step(db, step("pay", "Pay", app="mail.exe", sensitive=Sensitivity.OUTWARD_ACTION))
     save_step(db, step("open", "Open", app="mail.exe"))
-    save_flow(db, Flow(id="report", nodes=[Node("a", "open"), Node("b", "send-it")]), "Weekly report", "mail.exe")
-    save_flow(db, Flow(id="pay-flow", nodes=[Node("a", "pay")]), "Pay the rent", "mail.exe")
-    save_flow(db, Flow(id="other", nodes=[Node("a", "open")]), "Only opens", "mail.exe")
+    save_flow_on(db, Flow(id="report", nodes=[Node("a", "open"), Node("b", "send-it")]), "Weekly report", "mail.exe")
+    save_flow_on(db, Flow(id="pay-flow", nodes=[Node("a", "pay")]), "Pay the rent", "mail.exe")
+    save_flow_on(db, Flow(id="other", nodes=[Node("a", "open")]), "Only opens", "mail.exe")
     grant_consent(db, "mail.exe", "Send", "click")
     grant_consent(db, "mail.exe", "*", "click")  # a broad one covers every control of the app
 

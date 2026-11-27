@@ -12,7 +12,7 @@ from workflow_factory import Flow, Node, load_flow, run_flow, save_flow, save_st
 from workflow_factory.api import ApiServer
 from workflow_factory.flows import flow_summaries
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, save_legacy_flow, step
 
 pytestmark = pytest.mark.web
 
@@ -40,7 +40,10 @@ def editor(tmp_path, desktop=None):
 
 
 def flows(tmp_path):
-    return {f["id"]: (f["title"], f["app"]) for f in flow_summaries(tmp_path / "user.db", None)}
+    """{flow id: (title, the program of its first step node)}"""
+    db = tmp_path / "user.db"
+    return {f["id"]: (f["title"], next((n.technology for n in load_flow(db, None, f["id"]).nodes if n.technology), ""))
+            for f in flow_summaries(db, None)}
 
 
 def steps_of_two_apps(tmp_path):
@@ -64,13 +67,13 @@ def new_flow(page):
     page.get_by_test_id("new-flow").click()
 
 
-def test_a_flow_takes_any_words_as_its_name_and_keeps_its_app_after_a_reload_and_a_run(tmp_path):
+def test_a_flow_takes_any_words_as_its_name_and_its_nodes_keep_their_app_after_a_reload_and_a_run(tmp_path):
     steps_of_two_apps(tmp_path)
     with editor(tmp_path) as (page, apps):
+        page.get_by_test_id("app-name").select_option("word.exe")  # the programs the panel offers steps of
         page.get_by_test_id("palette-open-menu").first.click()
         assert page.get_by_test_id("flow-title").input_value() == "New flow"
         page.get_by_test_id("flow-title").fill("Morning report: ¿ventas? 50% / week #1")
-        page.get_by_test_id("app-name").select_option("word.exe")
         save(page)
         assert flows(tmp_path) == {"morning-report-ventas-50-week-1": ("Morning report: ¿ventas? 50% / week #1", "word.exe")}
 
@@ -88,10 +91,9 @@ def test_a_flow_takes_any_words_as_its_name_and_keeps_its_app_after_a_reload_and
         page.get_by_test_id("run-status").filter(has_text="Finished").wait_for()
         assert apps and set(apps) == {"word.exe"}
 
-        page.get_by_test_id("flow-title").fill("Evening report")  # a rename keeps the flow, its history and its app
-        page.get_by_test_id("app-name").select_option("paint.exe")
+        page.get_by_test_id("flow-title").fill("Evening report")  # a rename keeps the flow, its history and its nodes' app
         save(page)
-        assert flows(tmp_path) == {"morning-report-ventas-50-week-1": ("Evening report", "paint.exe")}
+        assert flows(tmp_path) == {"morning-report-ventas-50-week-1": ("Evening report", "word.exe")}
 
 
 def test_a_flow_saved_before_names_opens_under_its_identifier_with_the_app_of_its_steps(tmp_path):
@@ -108,7 +110,7 @@ def test_a_flow_saved_before_names_opens_under_its_identifier_with_the_app_of_it
 
 def test_an_app_remembered_in_another_spelling_is_the_taught_one_and_is_listed_once(tmp_path):
     steps_of_two_apps(tmp_path)
-    save_flow(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu")]), "Morning", "Word")
+    save_legacy_flow(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu")]), "Morning", "Word")
     with editor(tmp_path) as (page, apps):
         open_flow(page, "old-one")
         chooser = page.get_by_test_id("app-name")
@@ -119,17 +121,17 @@ def test_an_app_remembered_in_another_spelling_is_the_taught_one_and_is_listed_o
         page.get_by_test_id("run-status").filter(has_text="Finished").wait_for()
         assert set(apps) == {"word.exe"}
 
-        page.get_by_test_id("tab-home").click()  # the daily run takes the app the flow remembers
+        page.get_by_test_id("tab-home").click()  # the daily run needs no program: its nodes say which
         page.get_by_test_id("daily-old-one").click()
         page.get_by_test_id("daily-set-old-one").click()
         page.get_by_test_id("daily-old-one").filter(has_text="Every day at").wait_for()
         [task] = [t for name, t in page.scheduler.tasks.items() if "old-one" in name]
-        assert "--app word.exe" in task["arguments"]
+        assert "--app" not in task["arguments"]
 
 
 def test_a_flow_opened_before_the_steps_arrive_has_nothing_unsaved_once_they_do(tmp_path):
     steps_of_two_apps(tmp_path)
-    save_flow(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu")]), "Morning", "Word")
+    save_legacy_flow(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu")]), "Morning", "Word")
     with editor(tmp_path) as (page, _):
         held = []
         page.route("**/api/steps", lambda route: held.append(route))  # the steps are slow to come
@@ -210,7 +212,7 @@ def stopped_flow(tmp_path, flow_id="m-1", title="Morning sales report"):
     """A stored flow that stopped once: it leaves a history row and an open question."""
     steps_of_two_apps(tmp_path)
     flow = Flow(id=flow_id, nodes=[Node("a", "open-menu"), Node("b", "save-file")])
-    save_flow(tmp_path / "user.db", flow, title, "paint.exe")
+    save_flow_on(tmp_path / "user.db", flow, title, "paint.exe")
     run_flow(flow, desktop=FakeDesktop(controls=[button("Alpha")]), user_db=tmp_path / "user.db")
 
 
@@ -235,7 +237,7 @@ def test_the_home_row_its_history_its_stop_card_and_its_daily_run_show_the_name(
 
 def test_a_flow_running_elsewhere_is_named_by_its_name(tmp_path):
     steps_of_two_apps(tmp_path)
-    save_flow(tmp_path / "user.db", Flow(id="m-1", nodes=[Node("a", "open-menu"), Node("b", "save-file")]),
+    save_flow_on(tmp_path / "user.db", Flow(id="m-1", nodes=[Node("a", "open-menu"), Node("b", "save-file")]),
               "Morning sales report", "paint.exe")
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
     desktop.click_seconds = 1.5

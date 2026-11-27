@@ -37,7 +37,7 @@ Recipes (one pattern taught once, reused on another app by teaching only the con
 
 | Command | What it does |
 |---|---|
-| `uv run mutehand run --flow <id> --app <process, e.g. mspaint.exe>` | run a flow now, without the editor (exit codes 0 to 5, a report in the data folder; `--help` lists the options) |
+| `uv run mutehand run --flow <id>` | run a flow now, without the editor (exit codes 0 to 5, a report in the data folder; `--help` lists the options) |
 | `uv run mutehand schedule create ...` | run a flow every day with Windows Task Scheduler (`create`, `list`, `delete`) |
 | `uv run mutehand knowledge export` | move lessons and flows between machines (`export`, `import`, `build-factory`) |
 

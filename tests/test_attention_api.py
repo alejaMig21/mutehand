@@ -9,6 +9,7 @@ from test_api import call
 
 from workflow_factory import Flow, Node, list_doubts, reject_step, run_flow, save_flow, save_step
 from workflow_factory.api import ApiServer
+from workflow_factory.flows import with_technology
 from workflow_factory.queue import answer_doubt, record_run
 from workflow_factory.steps import list_steps, step_report
 from workflow_factory.tutor import list_open_doubts, mark_private
@@ -26,20 +27,21 @@ class Setup:
         self.app = app
         save_step(self.db, step("open-menu", "Alpha", app=app))
         save_step(self.db, step("close-message", "Beta", app=app, effect=effect))
-        save_flow(self.db, WEEKLY, "Weekly export", app)
+        self.flow = with_technology(WEEKLY, app)
+        save_flow(self.db, self.flow, "Weekly export")
         self.desktop = FakeDesktop(controls=[button("Alpha")], app=app)
         self.server = ApiServer(self.db, None, lambda name: self.desktop, token="secret-token",
                                 schedule_runner=FakeScheduler())
         self.server.start()
 
     def stop_the_flow(self):
-        return run_flow(WEEKLY, self.desktop, self.db)
+        return run_flow(self.flow, self.desktop, self.db)
 
     def attention(self):
         return call(self.server, "/api/attention")[1]
 
     def try_again(self):
-        return call(self.server, "/api/flows/weekly/try-again", "POST", {"app": self.app})
+        return call(self.server, "/api/flows/weekly/try-again", "POST", {})
 
     def finished(self, run_id):
         for _ in range(100):

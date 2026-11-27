@@ -32,7 +32,7 @@ def test_every_rejected_step_is_named_not_only_the_first(tmp_path):
 
     found = rejected_steps(flow(), FakeDesktop(controls=[]), tmp_path / "user.db", None)
 
-    assert found == (("a", "open-menu"), ("b", "save-file"))
+    assert found == (("a", "open-menu", "paint.exe"), ("b", "save-file", "paint.exe"))
 
 
 def test_a_restored_step_lets_the_flow_start_again(tmp_path):

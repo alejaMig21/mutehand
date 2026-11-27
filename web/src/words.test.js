@@ -70,7 +70,7 @@ test('a run that left no record says what happened, and never repeats a code', (
 test('why a flow cannot run is said with its steps and its app, never as a code', () => {
   const words = (why, steps = []) => blockedWords({ why, steps }, 'Paint')
 
-  for (const why of ['empty', 'no_app', 'expression', 'question', 'unreadable', 'something_new']) assert.match(words(why), /^[A-Z][^_]*\.$/, why)
+  for (const why of ['empty', 'expression', 'question', 'unreadable', 'something_new']) assert.match(words(why), /^[A-Z][^_]*\.$/, why)
   assert.equal(words('not_learned', ['a', 'b']), '“a”, “b” are not learned for Paint yet.')
   assert.equal(blockedWords({ why: 'not_learned', steps: ['a'] }, ''), '“a” is not learned yet.')
   assert.equal(words('rejected', ['a', 'b']), '“a”, “b” are rejected. To run this flow, press “Allow again”: on Home, in “Needs your attention”, or on Apps.')

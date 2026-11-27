@@ -266,7 +266,7 @@ def teach_step(
 def list_open_doubts(user_db: Path) -> list[dict]:
     return [
         {"id": d.id, "flow_id": d.flow_id, "node_id": d.node_id, "step": d.step,
-         "reason": str(d.reason), "detail": d.detail, "capture": d.capture, "status": d.status,
+         "technology": d.technology, "reason": str(d.reason), "detail": d.detail, "capture": d.capture, "status": d.status,
          "note": d.note}  # what the person wrote when asking for help
         for d in list_doubts(user_db, status="open")
     ]
