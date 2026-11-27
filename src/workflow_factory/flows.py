@@ -12,7 +12,7 @@ from pathlib import Path
 
 from workflow_factory.data import expressions
 from workflow_factory.desktop import plain_app
-from workflow_factory.flow import Flow, Node
+from workflow_factory.flow import Flow, Node, missing_locators
 from workflow_factory.legacy import add_text_column, upgrade_node
 from workflow_factory.queue import last_runs, list_doubts
 from workflow_factory.steps import Origin, Status, Step, list_steps, seen_versions, step_reports
@@ -332,16 +332,17 @@ def flow_overview(user_db: Path, factory_db: Path | None) -> list[dict]:
     return overview
 
 
-def create_flow(user_db: Path, title: str, app: str, nodes, edges, factory_db: Path | None = None) -> dict:
+def create_flow(user_db: Path, title: str, nodes, edges, factory_db: Path | None = None) -> dict:
     """Save a new flow under an identifier made from its title, so it never replaces another, and say whether it can run.
 
-    A step node that names no technology acts on `app`. A step the apprentice has not been taught is not an error: the flow
-    is saved and `missing_steps` names the lessons still to teach. ValueError when the nodes are not a flow."""
-    title, app = check_title(title), taught_app(check_app(app), list_steps(user_db, factory_db))
+    Every step node names the technology (program) it acts on. A step with no locator for its node's technology is not an
+    error: the flow is saved and `missing_lessons` names those nodes. ValueError when the nodes are not a flow."""
+    title = check_title(title)
     taken = [*(entry["id"] for entry in list_flows(user_db, factory_db)), *trashed_ids(user_db)]
     flow_id = new_flow_id(title, taken)
+    steps = list_steps(user_db, factory_db)
     try:
-        nodes = [{**node, "technology": node.get("technology") or app} if node.get("kind", "step") in ("step", "loop") else node
+        nodes = [{**node, "technology": _technology(node, steps)} if node.get("kind", "step") in ("step", "loop") else node
                  for node in nodes]
         flow = flow_from_dict(flow_id, {"nodes": nodes, "edges": edges})
     except (TypeError, KeyError, AttributeError):  # their words would show how the engine is built
@@ -350,12 +351,25 @@ def create_flow(user_db: Path, title: str, app: str, nodes, edges, factory_db: P
     return flow_readiness(user_db, flow_id, factory_db)
 
 
+def _technology(node: dict, steps: list[Step]) -> str:
+    """The technology a step node names, as the taught steps spell it; ValueError when it names none."""
+    technology = check_app(node.get("technology") or "")
+    if not technology:
+        raise ValueError(f"step node {node.get('id')!r} must name the technology it acts on")
+    return taught_app(technology, steps)
+
+
 def flow_readiness(user_db: Path, flow_id: str, factory_db: Path | None = None) -> dict:
-    """{"flow_id", "ready", "why", "missing_steps"}: what stops a run of the flow, and the steps still to teach."""
+    """{"flow_id", "ready", "why", "missing_lessons"}: what stops a run of the flow, and the lessons still to teach, each
+    {"node", "step", "technology"}: that step has no locator for that technology."""
     entry = next((e for e in flow_overview(user_db, factory_db) if e["id"] == flow_id), None)
     if entry is None:
         raise ValueError(f"no flow named {flow_id!r}")
     blocked = entry["blocked"]
+    try:
+        missing = missing_locators(load_flow(user_db, factory_db, flow_id), user_db, factory_db)
+    except (ValueError, TypeError, KeyError):  # an unreadable definition teaches nothing
+        missing = []
     return {"flow_id": flow_id, "ready": blocked is None, "why": blocked and blocked["why"],
-            "missing_steps": blocked["steps"] if blocked and blocked["why"] == "not_learned" else []}
+            "missing_lessons": [{"node": node, "step": step, "technology": tech} for node, step, tech in missing]}
 

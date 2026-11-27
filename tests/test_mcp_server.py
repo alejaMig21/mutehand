@@ -216,12 +216,12 @@ def test_the_tutor_lists_what_the_apprentice_already_knows_of_an_app(tmp_path):
 
 def test_a_flow_made_from_steps_the_apprentice_knows_is_saved_ready_and_titled(tmp_path):
     taught(tmp_path, "open-menu", "save-file")
-    nodes = [{"id": "a", "step": "open-menu"}, {"id": "b", "step": "save-file"}]
+    nodes = [{"id": "a", "step": "open-menu", "technology": "paint.exe"}, {"id": "b", "step": "save-file", "technology": "paint.exe"}]
 
     made = payload(ask(server_for(tmp_path, {}), "create_flow", {
-        "title": "Morning report", "app": "paint.exe", "nodes": nodes, "edges": [["a", "b"]]}))
+        "title": "Morning report", "nodes": nodes, "edges": [["a", "b"]]}))
 
-    assert made["flow_id"] == "morning-report" and made["ready"] is True and made["missing_steps"] == []
+    assert made["flow_id"] == "morning-report" and made["ready"] is True and made["missing_lessons"] == []
     saved = load_flow(tmp_path / "user.db", None, "morning-report")
     assert [n.step for n in saved.nodes] == ["open-menu", "save-file"] and saved.edges == [("a", "b")]
     assert [f for f in flow_summaries(tmp_path / "user.db", None) if f["id"] == "morning-report"][0]["title"] == "Morning report"
@@ -229,22 +229,82 @@ def test_a_flow_made_from_steps_the_apprentice_knows_is_saved_ready_and_titled(t
 
 def test_a_flow_that_needs_a_step_not_taught_yet_is_saved_and_says_which_lessons_are_missing(tmp_path):
     taught(tmp_path, "open-menu")
-    nodes = [{"id": "a", "step": "open-menu"}, {"id": "b", "step": "send-it"}, {"id": "c", "step": "close-it"}]
+    nodes = [{"id": "a", "step": "open-menu", "technology": "paint.exe"}, {"id": "b", "step": "send-it", "technology": "paint.exe"},
+             {"id": "c", "step": "close-it", "technology": "paint.exe"}]
 
     made = payload(ask(server_for(tmp_path, {}), "create_flow", {
-        "title": "Send report", "app": "paint.exe", "nodes": nodes, "edges": [["a", "b"], ["b", "c"]]}))
+        "title": "Send report", "nodes": nodes, "edges": [["a", "b"], ["b", "c"]]}))
     again = payload(ask(server_for(tmp_path, {}), "flow_status", {"flow_id": made["flow_id"]}))
 
     assert made["ready"] is False and made["why"] == "not_learned"
-    assert made["missing_steps"] == ["send-it", "close-it"]
-    assert again == {k: made[k] for k in ("flow_id", "ready", "why", "missing_steps")}
+    assert made["missing_lessons"] == [{"node": "b", "step": "send-it", "technology": "paint.exe"},
+                                       {"node": "c", "step": "close-it", "technology": "paint.exe"}]
+    assert again == {k: made[k] for k in ("flow_id", "ready", "why", "missing_lessons")}
     taught(tmp_path, "send-it", "close-it")  # after the lessons, the same flow is ready
     assert payload(ask(server_for(tmp_path, {}), "flow_status", {"flow_id": made["flow_id"]}))["ready"] is True
 
 
+# --- flows that name the technology of each node ------------------------------------------------------------------------
+
+def two_program_flow(tmp_path):
+    taught(tmp_path, "open-menu", app="paint.exe")
+    nodes = [{"id": "a", "step": "open-menu", "technology": "paint.exe"},
+             {"id": "b", "step": "open-menu", "technology": "notepad.exe"}]
+    return ask(server_for(tmp_path, {}), "create_flow", {"title": "Two programs", "nodes": nodes, "edges": [["a", "b"]]})
+
+
+def test_a_flow_of_two_programs_is_saved_ready_when_both_are_learned(tmp_path):
+    taught(tmp_path, "open-menu", app="paint.exe")
+    taught(tmp_path, "open-menu", app="notepad.exe")
+
+    made = payload(two_program_flow(tmp_path))
+
+    assert made["ready"] is True and made["missing_lessons"] == []
+    assert [n.technology for n in load_flow(tmp_path / "user.db", None, made["flow_id"]).nodes] == ["paint.exe", "notepad.exe"]
+
+
+def test_a_flow_of_two_programs_with_one_not_learned_is_saved_and_names_that_node_and_turns_ready_once_taught(tmp_path):
+    made = payload(two_program_flow(tmp_path))
+
+    assert made["ready"] is False and made["why"] == "not_learned"
+    assert made["missing_lessons"] == [{"node": "b", "step": "open-menu", "technology": "notepad.exe"}]
+    assert load_flow(tmp_path / "user.db", None, made["flow_id"]).nodes[1].technology == "notepad.exe"
+    status = payload(ask(server_for(tmp_path, {}), "flow_status", {"flow_id": made["flow_id"]}))
+    assert status["missing_lessons"] == made["missing_lessons"]
+    taught(tmp_path, "open-menu", app="notepad.exe")
+    status = payload(ask(server_for(tmp_path, {}), "flow_status", {"flow_id": made["flow_id"]}))
+    assert status["ready"] is True and status["missing_lessons"] == []
+
+
+def test_a_node_naming_a_technology_the_step_does_not_have_is_the_missing_lesson_not_an_error(tmp_path):
+    taught(tmp_path, "open-menu", app="paint.exe")
+    node = {"id": "a", "step": "open-menu", "technology": "sheet.exe"}
+
+    result = ask(server_for(tmp_path, {}), "create_flow", {"title": "Other program", "nodes": [node], "edges": None})
+
+    assert not result.is_error
+    assert payload(result)["missing_lessons"] == [{"node": "a", "step": "open-menu", "technology": "sheet.exe"}]
+
+
+def test_a_step_node_naming_no_technology_is_refused_and_nothing_is_saved(tmp_path):
+    taught(tmp_path, "open-menu")
+    server = server_for(tmp_path, {})
+
+    for node in ({"id": "a", "step": "open-menu"}, {"id": "a", "step": "open-menu", "technology": "  "},
+                 {"id": "a", "step": "open-menu", "technology": 7}):
+        assert ask(server, "create_flow", {"title": "No program", "nodes": [node], "edges": None}).is_error
+    assert flow_summaries(tmp_path / "user.db", None) == []
+
+
+def test_the_flow_level_app_argument_is_gone(tmp_path):
+    properties = {t.name: t.input_schema["properties"] for t in listed_tools(server_for(tmp_path, {}))}["create_flow"]
+
+    assert "app" not in properties
+
+
 def test_a_flow_never_replaces_another_one_with_the_same_title(tmp_path):
     taught(tmp_path, "open-menu")
-    args = {"title": "Same", "app": "paint.exe", "nodes": [{"id": "a", "step": "open-menu"}], "edges": None}
+    args = {"title": "Same", "nodes": [{"id": "a", "step": "open-menu", "technology": "paint.exe"}], "edges": None}
     server = server_for(tmp_path, {})
 
     first, second = payload(ask(server, "create_flow", args)), payload(ask(server, "create_flow", args))
@@ -256,17 +316,17 @@ def test_a_flow_that_is_not_a_valid_flow_is_refused_and_nothing_is_saved(tmp_pat
     server = server_for(tmp_path, {})
 
     for nodes in ([{"step": "x"}], [{"id": "a", "kind": "no-such-kind"}], "nope"):
-        result = ask(server, "create_flow", {"title": "Bad", "app": "paint.exe", "nodes": nodes, "edges": None})
+        result = ask(server, "create_flow", {"title": "Bad", "nodes": nodes, "edges": None})
         assert result.is_error
     assert flow_summaries(tmp_path / "user.db", None) == []
 
 
 def test_a_node_can_take_many_values_and_give_many_back_through_the_tutor_tool(tmp_path):
     taught(tmp_path, "type-name", action="type_value")
-    node = {"id": "a", "step": "type-name", "inputs": [["first", "str"], ["last", "str"], ["age", "int"]]}
+    node = {"id": "a", "step": "type-name", "technology": "paint.exe", "inputs": [["first", "str"], ["last", "str"], ["age", "int"]]}
 
     made = payload(ask(server_for(tmp_path, {}), "create_flow", {
-        "title": "Many values", "app": "paint.exe", "nodes": [node], "edges": None}))
+        "title": "Many values", "nodes": [node], "edges": None}))
 
     saved = load_flow(tmp_path / "user.db", None, made["flow_id"])
     assert saved.nodes[0].inputs == (("first", "str"), ("last", "str"), ("age", "int"))
@@ -287,8 +347,8 @@ def test_a_data_node_written_from_the_listed_operations_is_saved_and_a_misspelle
     bad = {"id": "d", "kind": "data", "op": "mathh", "fields": {}}
     server = server_for(tmp_path, {})
 
-    saved = payload(ask(server, "create_flow", {"title": "Sum", "app": "paint.exe", "nodes": [good], "edges": None}))
-    refused = ask(server, "create_flow", {"title": "Typo", "app": "paint.exe", "nodes": [bad], "edges": None})
+    saved = payload(ask(server, "create_flow", {"title": "Sum", "nodes": [good], "edges": None}))
+    refused = ask(server, "create_flow", {"title": "Typo", "nodes": [bad], "edges": None})
 
     assert saved["flow_id"] == "sum" and refused.is_error
 
@@ -309,11 +369,11 @@ def test_what_the_factory_already_knows_counts_when_a_flow_is_made_through_the_t
     server = build_server(tmp_path / "user.db", lambda app: None, factory_db=tmp_path / "factory.db")
 
     known = payload(ask(server, "list_known_steps", {"technology": "paint.exe"}))["result"]
-    made = payload(ask(server, "create_flow", {"title": "From the factory", "app": "paint.exe",
-                                               "nodes": [{"id": "a", "step": "open-menu"}], "edges": None}))
+    made = payload(ask(server, "create_flow", {"title": "From the factory",
+                                               "nodes": [{"id": "a", "step": "open-menu", "technology": "paint.exe"}], "edges": None}))
 
     assert [entry["name"] for entry in known] == ["open-menu"]
-    assert made["ready"] is True and made["missing_steps"] == []
+    assert made["ready"] is True and made["missing_lessons"] == []
 
 
 # --- listing steps by technology, tag or text ---------------------------------------------------------------------------
