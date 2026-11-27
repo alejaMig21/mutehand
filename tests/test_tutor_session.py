@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from pathlib import Path
 
 from mcp.client import Client
@@ -37,6 +38,26 @@ def test_the_playbook_names_every_tutor_tool_so_it_cannot_drift_from_the_server(
     missing = [name for name in tool_names(build_server(tmp_path / "user.db", lambda app: None)) if name not in playbook]
 
     assert missing == []
+
+
+def tool_arguments(server):
+    async def go():
+        async with Client(server) as client:
+            return {t.name: set(t.input_schema.get("properties", {})) for t in (await client.list_tools()).tools}
+    return asyncio.run(go())
+
+
+def test_every_call_the_playbook_writes_names_a_real_tool_with_exactly_its_arguments(tmp_path):
+    playbook = (ROOT / "docs" / "agents" / "tutor.md").read_text(encoding="utf-8")
+    tools = tool_arguments(build_server(tmp_path / "user.db", lambda app: None))
+    calls = re.findall(r"`([a-z]+(?:_[a-z]+)+)\(([^)]*)\)`", playbook)
+
+    unknown = [name for name, _ in calls if name not in tools]
+    wrong = [(name, args) for name, args in calls if name in tools
+             and {a.strip().rstrip("?") for a in args.split(",") if a.strip()} != tools[name]]
+    unwritten = [name for name in tools if name not in [n for n, _ in calls]]
+
+    assert (unknown, wrong, unwritten) == ([], [], [])
 
 
 def test_claude_md_only_points_to_the_playbook_and_never_repeats_how_to_teach():

@@ -1,9 +1,12 @@
 # Mutehand
 
 A mini n8n for Windows desktop apps whose building blocks are taught by an agent. A tutor (an agent in Claude Code,
-through MCP) teaches a deterministic apprentice **lessons** about an app; each lesson becomes a **node** in the
-editor; you wire nodes into **flows** that run, are scheduled and can be stopped, with no agent and no language
-model involved. Terms are in `GLOSSARY.md`, decisions in `docs/adr/`, research notes in `docs/research/`.
+through MCP) teaches a deterministic apprentice **steps** in lessons; a step is one small thing named by what it does
+("Save"), never by a program, and it can be learned on several programs (its **technologies**). You wire **nodes**
+into **flows**: a step node says which technology it acts on, so one flow can mix programs. Flows run, are scheduled
+and can be stopped, with no agent and no language model involved. Steps carry **tags** (a technology tag comes by itself
+from where it was learned, a pattern tag such as `file` or `mouse` is added by the tutor), and the editor's single filter
+finds steps by name or tag. Terms are in `GLOSSARY.md`, decisions in `docs/adr/`, research notes in `docs/research/`.
 
 ## Open the editor
 
@@ -29,7 +32,9 @@ The wheel needs Python 3.14 and Windows (the desktop adapter and `pywin32`); it 
 Open Claude Code in this folder (`claude`). The first time it asks you to approve the `workflow-factory` MCP
 server that this folder's `.mcp.json` declares: say yes once. Then ask the agent to study an app. The tutor tools
 are `observe_app`, `mark_app_private`, `set_study_order`, `study_status`, `list_open_doubts`, `answer_doubt`,
-`record_consent`, `list_known_steps`, `list_node_kinds`, `create_flow`, `flow_status` and `teach_step` (`teach_lesson` still works as its old name). Each taught step appears in the editor as a node. The agent learns how to teach from `docs/agents/tutor.md`.
+`record_consent`, `list_known_steps` (by technology, tag or words), `list_node_kinds`, `create_flow`, `flow_status` and `teach_step`
+(`teach_lesson` still works as its old name). `teach_step` refuses a name that carries a program; teaching the same name on another
+program adds a locator to the step. Each taught step can be used as a node in the editor. The agent learns how to teach from `docs/agents/tutor.md`.
 Recipes (one pattern taught once, reused on another app by teaching only the controls that differ) use `save_recipe`, `list_recipes`,
 `apply_recipe` and `mark_step_known`.
 
@@ -50,7 +55,10 @@ real exe, not the npm `.cmd` shim).
 The editor is rebuilt around flows (14 tickets, `.scratch/editor-rethink/`): Home lists the flows with a daily time and what needs
 attention, Apps lists the programs it knows, a flow screen draws a flow top to bottom and saves itself, a deleted flow can be undone,
 and a first-day guide shows what to do with nothing taught. The tutor can also build a flow from a description
-(`list_known_steps`, `list_node_kinds`, `create_flow`, `flow_status`). Tests: `uv run pytest -q`, plus opt-in `-m web` (headless browser)
+(`list_known_steps`, `list_node_kinds`, `create_flow`, `flow_status`): `create_flow` saves it even when a step is not taught on the
+node's technology yet and lists those `missing_lessons`. Steps, tags and nodes with a technology are the model of version 2
+(`docs/adr/0007-*.md`); components (flows used as nodes with declared inputs and outputs) come in a later phase.
+The persona harness (`uv run python tests/acceptance_server.py <first-day|everyday|many-apps> <dir>`) serves made-up data in that model. Tests: `uv run pytest -q`, plus opt-in `-m web` (headless browser)
 and `-m live` (real apps; `tests/test_live_excel.py` and `test_live_word.py` need `WF_LIVE_EXCEL=1` / `WF_LIVE_WORD=1`). No lessons are
 taught yet; the data folder starts empty. The example flow Vivaldi -> Word -> Telegram is not built (research in `docs/research/17` to `19`).
 
@@ -58,4 +66,4 @@ taught yet; the data folder starts empty. The example flow Vivaldi -> Word -> Te
 
 - Every acting step (click, drag, type) takes one machine-wide input lock and pauses while you use the computer.
 - Secret fields are marked `secure`, never read back, and secrets are typed from the Windows Credential Manager.
-- Lessons never store absolute screen coordinates (ADR 0004).
+- Steps never store absolute screen coordinates (ADR 0004).
