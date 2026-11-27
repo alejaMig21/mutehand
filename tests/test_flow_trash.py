@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+import subprocess
 from contextlib import closing
 
 import pytest
@@ -234,3 +235,24 @@ def test_a_trash_made_before_deletions_were_dated_still_works(served):
                    "title TEXT, app TEXT, schedules TEXT NOT NULL)")
     assert call(server, "/api/flows/morning", "DELETE")[0] == 200
     assert call(server, "/api/deleted")[1][0]["id"] == "morning"
+
+
+def test_undo_that_cannot_set_the_daily_run_again_does_not_keep_a_daily_box_without_a_task(served):
+    server, scheduler, _ = served
+    box = {"id": "t", "kind": "trigger", "fields": {"mode": {"value": "daily"}, "at": {"value": "09:30"}}}
+    assert call(server, "/api/flows/morning", "PUT", {"nodes": [box, *ONE["nodes"]], "edges": None, "app": "paint.exe"})[0] == 200
+    assert len(call(server, "/api/schedules")[1]) == 1  # saving the box made the task
+    call(server, "/api/flows/morning", "DELETE")
+    taken = server.schedule_runner
+
+    def refusing(args, **kwargs):
+        if args[1] == "/Create":
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="ERROR: Access is denied.")
+        return taken(args, **kwargs)
+
+    server.schedule_runner = refusing
+    code, back, _ = call(server, "/api/flows/morning/restore", "POST")
+
+    assert code == 200 and back["daily_run_lost"] and back["daily_box_removed"] is True
+    assert [n["kind"] for n in back["nodes"]] == ["step"] and call(server, "/api/schedules")[1] == []
+    assert [n["kind"] for n in call(server, "/api/flows/morning")[1]["nodes"]] == ["step"]

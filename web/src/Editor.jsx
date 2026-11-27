@@ -95,7 +95,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   // changes the server has not got: a chore with no box yet is not stored, so its name alone is nothing to lose
   const unkept = dirty && (isStored || nodes.length > 0)
   // what keeps the flow from being stored, in the person's words (the box says it too)
-  const held = invalid.length ? `Fix “${invalid[0].label}” in ${invalid[0].node}: ${invalid[0].error}.` : unfinished(body.nodes)
+  const held = invalid.length ? `Fix “${invalid[0].label}” in ${invalid[0].node}: ${invalid[0].error}.` : unfinished(body.nodes, boxNumbers(nodes, edges))
 
   const refresh = useCallback(() => {
     const fail = (e) => setError(e.message)
@@ -323,7 +323,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     const ticket = ++busy.current.ticket
     setOpening(true)
     try {
-      const time = await api(`${flowUrl(id)}/daily`).catch(() => null) // reading it brings an older schedule onto the first box
+      const time = await api(`${flowUrl(id)}/daily`).catch(() => null) // reading only says what Windows has; it never changes the canvas
       const read = await api(flowUrl(id))
       if (ticket !== busy.current.ticket) return
       setDaily(time)
@@ -668,8 +668,9 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
 
         {!nodes.some(isDaily) && ( // a chore with no start box starts when Run is pressed: this gives it a time
           <button className="ghost daily-button" data-testid="daily-add" aria-expanded={settingDaily}
-            title="This chore starts when you press Run now" onClick={() => setSettingDaily((open) => !open)}>
-            <Icon name="clock" size={16} /> Run every day
+            title={daily?.at ? 'Windows runs this chore every day; it has no start box yet' : 'This chore starts when you press Run now'}
+            onClick={() => setSettingDaily((open) => !open)}>
+            <Icon name="clock" size={16} /> {daily?.at ? `Every day at ${daily.at}` : 'Run every day'}
           </button>
         )}
 

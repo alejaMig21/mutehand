@@ -275,14 +275,14 @@ class ApiServer:
             if "base" in body and stored is not None and body["base"] != (seen := self._flow_view(stored))["revision"]:
                 return 409, {"error": f"A flow called '{seen['title']}' already exists" if body["base"] is None else
                              f"'{seen['title']}' was changed somewhere else since you opened it"}
-            return 200, self._write(*parsed, body)
+            return self._write_with_daily(stored, *parsed, body, 200)
 
     def _create(self, body: dict) -> tuple[int, dict]:
         """Save a new flow under an identifier made from its title, so it can never replace another."""
         title = check_title(body["title"])
         with self._save_lock:
             parsed = _parse_flow(new_flow_id(title, self._flow_ids()), body)
-            return 201, self._write(*parsed, body)
+            return self._write_with_daily(None, *parsed, body, 201)
 
     def _flow_ids(self) -> list[str]:
         """Every identifier in use or held for an undo."""
@@ -349,9 +349,27 @@ class ApiServer:
                 return 404, {"error": "nothing was deleted under this name"}
             if self._local(flow_id):
                 return 409, {"error": "A flow with this identifier exists again."}
-            lost = self._recreate(flow_id, restore_flow(self.user_db, flow_id))
-            view = self._flow_view(load_flow(self.user_db, self.factory_db, flow_id))
+            tasks = restore_flow(self.user_db, flow_id)
+            lost = self._recreate(flow_id, tasks)
+            flow = load_flow(self.user_db, self.factory_db, flow_id)
+            at = daily.trigger_time(flow)
+            if lost and at and at not in [t["at"] for t in tasks if t["name"] not in lost]:
+                # a daily box with no task behind it would say "every day" and never run: take it off the chore
+                before = load_layout(self.user_db, flow_id)
+                self._store(*daily.with_daily(flow, None, before), before)
+                flow = load_flow(self.user_db, self.factory_db, flow_id)
+                return 200, {**self._flow_view(flow), "daily_run_lost": lost, "daily_box_removed": True}
+            view = self._flow_view(flow)
             return 200, {**view, "daily_run_lost": lost} if lost else view
+
+    def _write_with_daily(self, stored, flow, positions: dict | None, body: dict, ok: int) -> tuple[int, dict]:
+        """Save `flow` (replacing `stored`, None for a new one). A daily trigger box and the Windows task that runs it exist
+        together or not at all: when the save adds, removes or re-times that box, the task follows, or nothing is saved.
+        Call with the save lock held."""
+        now = daily.trigger_time(flow)
+        if (daily.trigger_time(stored) if stored else None) == now:
+            return ok, self._write(flow, positions, body)
+        return self._with_task(flow.id, flow, now, lambda: self._write(flow, positions, body), ok, body.get("app"))
 
     def _write(self, flow, positions: dict | None, body: dict) -> dict:
         """Call with the save lock held."""
@@ -371,17 +389,13 @@ class ApiServer:
             save_layout(self.user_db, flow.id, positions)
 
     def _daily_read(self, flow_id: str) -> tuple[int, dict]:
-        """The flow's daily time as Windows has it. A task made before the first box showed it brings the box in line."""
+        """The flow's daily time as Windows has it, and as its first box says. Reading changes nothing."""
         with self._save_lock:
             flow = load_flow(self.user_db, self.factory_db, flow_id)
             if flow is None:
                 return 404, {"error": "no such flow"}
             tasks = daily.tasks_by_flow(self.user_db, self.schedule_runner).get(flow_id, [])
             at = tasks[0]["at"] if tasks else None
-            if at and daily.trigger_time(flow) != at and self._local(flow_id):
-                before = load_layout(self.user_db, flow_id)
-                self._store(*daily.with_daily(flow, at, before), before)
-                flow = load_flow(self.user_db, self.factory_db, flow_id)
             return 200, {"at": at, "node_at": daily.trigger_time(flow)}
 
     def _daily_change(self, flow_id: str, at: str | None) -> tuple[int, dict]:
@@ -394,49 +408,61 @@ class ApiServer:
                 raise ValueError("This is a template. Make a copy of it to give it a daily time.")
             if at is not None and not (isinstance(at, str) and schedule.CLOCK.fullmatch(at)):
                 raise ValueError("The time must be a time of day such as 07:30.")
-            runner, before = self.schedule_runner, load_layout(self.user_db, flow_id)
-            old = daily.tasks_by_flow(self.user_db, runner).get(flow_id, [])
-            if at is None:
-                try:
-                    for task in old:
-                        schedule.delete_schedule(task["name"], runner=runner)
-                except RuntimeError as error:
-                    return 502, {"error": f"The daily run could not be stopped, so it still runs every day. {error}"}
-                self._store(*daily.with_daily(flow, None, before), before)
-                return 200, {"at": None}
-            steps = list_steps(self.user_db, self.factory_db)
-            info = stored_info(self.user_db, self.factory_db).get(flow_id, {})
-            app = taught_app(describe_flow(flow_id, info, lambda: flow, lambda: steps)["app"], steps) \
-                or next((t["app"] for t in old if t["app"]), "")
-            if not app:
-                raise ValueError("Choose which app this chore runs on first: the daily run needs to know it.")
+            before = load_layout(self.user_db, flow_id)
             new_flow, places = daily.with_daily(flow, at, before)
-            name = f"{flow_id} daily {at.replace(':', '')}"
-            full, kept = schedule.full_name(name), {schedule.full_name(t["name"]) for t in old}
-            listed = schedule.list_schedules(runner=runner)
-            if len(listed) >= MAX_SCHEDULES and full not in listed:
-                return 409, {"error": f"There are already {MAX_SCHEDULES} daily runs in Windows. Stop one first."}
-            extra = ["--user-db", str(self.user_db)] if self.user_db != default_user_db() else []
-            try:
-                schedule.create_schedule(name, flow_id, app, at, extra, runner=runner)
-            except (ValueError, RuntimeError) as error:  # the words are Windows' own or ours: no screen content
-                return (502 if isinstance(error, RuntimeError) else 400), {
-                    "error": f"The daily run was not set, nothing was changed. {error}"}
+
+            def commit() -> dict:
+                self._store(new_flow, places, before)
+                return {"at": at}
+            return self._with_task(flow_id, flow, at, commit)
+
+    def _with_task(self, flow_id: str, flow, at: str | None, commit, ok: int = 200, app: str | None = None) -> tuple[int, dict]:
+        """Set the flow's Windows task to `at` (None: no task), then `commit()` what goes with it; the answer is
+        (ok, what commit gave). The task and what commit stores change together, or neither does. Call with the save lock held."""
+        runner = self.schedule_runner
+        old = daily.tasks_by_flow(self.user_db, runner).get(flow_id, [])
+        if at is None:
+            stopped = []
             try:
                 for task in old:
-                    if schedule.full_name(task["name"]) != full:
-                        schedule.delete_schedule(task["name"], runner=runner)
-                self._store(new_flow, places, before)
-            except Exception as error:  # noqa: BLE001 - whatever failed, the task made a moment ago must not stay alone
-                if full not in kept:
-                    try:
-                        schedule.delete_schedule(name, runner=runner)
-                    except RuntimeError:
-                        pass
+                    schedule.delete_schedule(task["name"], runner=runner)
+                    stopped.append(task)
+                return ok, commit()
+            except Exception as error:  # noqa: BLE001 - what was stopped runs again: the box is still there
+                self._recreate(flow_id, stopped)
                 if isinstance(error, RuntimeError):
-                    return 502, {"error": f"The daily time was not changed. {error}"}
+                    return 502, {"error": f"The daily run could not be stopped, so it still runs every day. {error}"}
                 raise
-            return 200, {"at": at}
+        steps = list_steps(self.user_db, self.factory_db)
+        info = {**stored_info(self.user_db, self.factory_db).get(flow_id, {}), **({"app": app} if app else {})}
+        app = taught_app(describe_flow(flow_id, info, lambda: flow, lambda: steps)["app"], steps) \
+            or next((t["app"] for t in old if t["app"]), "")
+        if not app:
+            raise ValueError("Choose which app this chore runs on first: the daily run needs to know it.")
+        name = f"{flow_id} daily {at.replace(':', '')}"
+        full, kept = schedule.full_name(name), {schedule.full_name(t["name"]) for t in old}
+        listed = schedule.list_schedules(runner=runner)
+        if len(listed) >= MAX_SCHEDULES and full not in listed:
+            return 409, {"error": f"There are already {MAX_SCHEDULES} daily runs in Windows. Stop one first."}
+        try:
+            schedule.create_schedule(name, flow_id, app, at, self._schedule_extra(), runner=runner)
+        except (ValueError, RuntimeError) as error:  # the words are Windows' own or ours: no screen content
+            return (502 if isinstance(error, RuntimeError) else 400), {
+                "error": f"The daily run was not set, nothing was changed. {error}"}
+        try:
+            for task in old:
+                if schedule.full_name(task["name"]) != full:
+                    schedule.delete_schedule(task["name"], runner=runner)
+            return ok, commit()
+        except Exception as error:  # noqa: BLE001 - whatever failed, the task made a moment ago must not stay alone
+            if full not in kept:
+                try:
+                    schedule.delete_schedule(name, runner=runner)
+                except RuntimeError:
+                    pass
+            if isinstance(error, RuntimeError):
+                return 502, {"error": f"The daily time was not changed. {error}"}
+            raise
 
     def _run_view(self, run_id: str) -> dict | None:
         with self._runs_lock:

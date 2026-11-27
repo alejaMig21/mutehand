@@ -117,7 +117,8 @@ def test_a_time_set_on_the_first_box_shows_on_home_and_can_be_changed_and_stoppe
         page.get_by_test_id("daily-time").fill("06:45")
         page.get_by_test_id("daily-set").click()
         on_the_flow_screen(page, "Morning report", 3)
-        start_box(page).filter(has_text="Start: every day at 06:45").wait_for()
+        page.get_by_test_id("daily-add").filter(has_text="Every day at 06:45").wait_for()  # said, not drawn
+        assert start_box(page).count() == 0  # opening the chore never rewrote it
         assert mine(scheduler) == [TASK + "0645"]
 
         page.get_by_test_id("daily-change").click()
@@ -173,7 +174,7 @@ def test_run_now_starts_a_chore_with_or_without_a_daily_time(tmp_path):
         assert [c.name for c in desktop.clicks] == ["Alpha", "Beta", "Alpha", "Beta"]
 
 
-def test_a_schedule_made_before_shows_on_its_chore_and_on_its_first_box(tmp_path):
+def test_a_schedule_made_before_shows_on_its_chore_and_on_the_canvas_without_rewriting_it(tmp_path):
     chores(tmp_path)
     scheduler = FakeScheduler()
     # a task made by the old Schedules screen, which put no start box on the flow
@@ -183,7 +184,8 @@ def test_a_schedule_made_before_shows_on_its_chore_and_on_its_first_box(tmp_path
         page.get_by_test_id("daily-morning").filter(has_text="Every day at 6:45 AM").wait_for()
         page.get_by_test_id("open-chore-morning").click()
         on_the_flow_screen(page, "Morning report", 3)
-        start_box(page).filter(has_text="Start: every day at 06:45").wait_for()
+        page.get_by_test_id("daily-add").filter(has_text="Every day at 06:45").wait_for()  # said, not drawn
+        assert start_box(page).count() == 0  # opening the chore never rewrote it
 
 
 def test_the_daily_time_works_with_the_keyboard_alone(tmp_path):

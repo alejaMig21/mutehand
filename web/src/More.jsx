@@ -162,7 +162,7 @@ export function useDeleted(reload, flows) {
       const back = await api(`/api/flows/${encode(deleted.id)}/restore`, { method: 'POST' })
       restored.current = deleted.id
       reload()
-      if (back.daily_run_lost) setDeleted({ ...deleted, back: true, lost: back.daily_run_lost.length })
+      if (back.daily_run_lost) setDeleted({ ...deleted, back: true, lost: back.daily_run_lost.length, boxOff: back.daily_box_removed })
       else setDeleted(null)
     } catch (e) {
       setProblem(e.message)
@@ -172,7 +172,7 @@ export function useDeleted(reload, flows) {
   }
 
   const sum = deleted && (deleted.back
-    ? `“${deleted.title}” is back, but its daily run could not be set again.`
+    ? `“${deleted.title}” is back, but its daily run could not be set again${deleted.boxOff ? ', so its daily start box was taken off' : ''}.`
     : `“${deleted.title}” was deleted${deleted.daily_runs ? ', and its daily run stopped' : ''}.`)
   const notice = deleted && (
     <div className="undo-notice" data-testid="deleted-notice" role="status">

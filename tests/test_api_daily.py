@@ -205,7 +205,7 @@ def test_a_factory_template_is_not_changed_by_giving_it_a_time(tmp_path):
     assert code == 400 and "copy" in body["error"].lower() and mine(scheduler) == []
 
 
-def test_schedules_made_before_show_on_their_flow_and_on_its_first_box(served):
+def test_schedules_made_before_show_on_their_flow_without_a_read_rewriting_its_canvas(served):
     server, scheduler, db = served
     # made by the old Schedules screen: a task, and no trigger node on the flow
     assert call(server, "/api/schedules", "POST", {"flow": "morning", "app": "mspaint.exe", "at": "06:45"})[0] == 201
@@ -213,8 +213,8 @@ def test_schedules_made_before_show_on_their_flow_and_on_its_first_box(served):
 
     overview = {f["id"]: f for f in call(server, "/api/flow-overview")[1]}
     assert overview["morning"]["daily"] == "06:45"
-    assert call(server, "/api/flows/morning/daily")[1]["at"] == "06:45"  # reading it brings the first box in line
-    assert [t.fields["at"]["value"] for t in daily_triggers(load_flow(db, None, "morning"))] == ["06:45"]
+    assert call(server, "/api/flows/morning/daily")[1] == {"at": "06:45", "node_at": None}
+    assert daily_triggers(load_flow(db, None, "morning")) == []  # reading never rewrites the person's canvas
     assert len(mine(scheduler)) == 1
 
 
@@ -274,3 +274,105 @@ def test_a_full_scheduler_refuses_before_anything_changes(served):
     code, body, _ = set_time(server, "07:30")
 
     assert code == 409 and "20" in body["error"] and TASK + "0730" not in scheduler.tasks
+
+
+# --- the canvas saves a flow whole: the same rule holds whichever box the person changed -------------------------------
+
+
+def trigger_json(at="09:00", mode="daily"):
+    fields = {"mode": {"value": mode}, **({"at": {"value": at}} if mode == "daily" else {})}
+    return {"id": "t", "kind": "trigger", "fields": fields}
+
+
+def canvas_save(server, nodes, **extra):
+    """The editor's autosave: the whole flow, in one PUT."""
+    return call(server, "/api/flows/morning", "PUT", {"nodes": nodes, "edges": None, "app": "mspaint.exe", **extra})
+
+
+STEPS = [{"id": "a", "step": "open-menu"}, {"id": "b", "step": "save-file"}]
+
+
+def refusing(scheduler, verb):
+    def run(args, **kwargs):
+        if args[1] == verb:
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="ERROR: Access is denied.")
+        return scheduler(args, **kwargs)
+    return run
+
+
+def test_removing_the_daily_box_on_the_canvas_removes_the_windows_task(served):
+    server, scheduler, db = served
+    set_time(server, "07:30")
+    box = call(server, "/api/flows/morning")[1]["nodes"]
+
+    code, _, _ = canvas_save(server, [n for n in box if n["kind"] != "trigger"])
+
+    assert code == 200 and mine(scheduler) == [] and FOREIGN in scheduler.tasks
+    assert daily_triggers(load_flow(db, None, "morning")) == []
+
+
+def test_a_task_that_cannot_be_removed_keeps_the_box_the_canvas_tried_to_remove(served):
+    server, scheduler, db = served
+    set_time(server, "07:30")
+    box = call(server, "/api/flows/morning")[1]["nodes"]
+    server.schedule_runner = refusing(scheduler, "/Delete")
+
+    code, body, _ = canvas_save(server, [n for n in box if n["kind"] != "trigger"])
+
+    assert code == 502 and "still runs every day" in body["error"]
+    assert mine(scheduler) == [TASK + "0730"] and len(daily_triggers(load_flow(db, None, "morning"))) == 1
+
+
+def test_adding_a_daily_box_on_the_canvas_makes_the_windows_task(served):
+    server, scheduler, db = served
+
+    code, _, _ = canvas_save(server, [trigger_json("09:00"), *STEPS])
+
+    assert code == 200 and mine(scheduler) == [TASK + "0900"] and scheduler.tasks[TASK + "0900"]["at"] == "09:00"
+    assert call(server, "/api/flows/morning/daily")[1] == {"at": "09:00", "node_at": "09:00"}
+
+
+def test_editing_the_time_of_the_daily_box_moves_the_windows_task_and_a_read_changes_nothing(served):
+    server, scheduler, db = served
+    set_time(server, "07:30")
+    box = call(server, "/api/flows/morning")[1]["nodes"]
+    changed = [{**n, "fields": {**n["fields"], "at": {"value": "08:45"}}} if n["kind"] == "trigger" else n for n in box]
+
+    assert canvas_save(server, changed)[0] == 200
+
+    assert mine(scheduler) == [TASK + "0845"]
+    stored = load_flow(db, None, "morning")
+    assert call(server, "/api/flows/morning/daily")[1] == {"at": "08:45", "node_at": "08:45"}
+    assert load_flow(db, None, "morning") == stored  # reading never rewrote the person's canvas
+
+
+def test_a_scheduler_that_refuses_a_canvas_save_leaves_the_flow_as_it_was(served):
+    server, scheduler, db = served
+    server.schedule_runner = refusing(scheduler, "/Create")
+    before = load_flow(db, None, "morning")
+
+    code, body, _ = canvas_save(server, [trigger_json("09:00"), *STEPS])
+
+    assert code == 502 and "nothing was changed" in body["error"].lower() and "Access is denied" in body["error"]
+    assert mine(scheduler) == [] and load_flow(db, None, "morning") == before
+
+
+def test_a_canvas_save_that_leaves_the_daily_box_alone_does_not_call_the_scheduler(served):
+    server, scheduler, _ = served
+    set_time(server, "07:30")
+    box = call(server, "/api/flows/morning")[1]["nodes"]
+    scheduler.calls.clear()
+
+    assert canvas_save(server, [*box, {"id": "c", "step": "save-file"}])[0] == 200
+
+    assert scheduler.calls == []
+
+
+def test_a_task_made_before_boxes_showed_it_is_left_when_the_canvas_saves_something_else(served):
+    server, scheduler, db = served
+    call(server, "/api/schedules", "POST", {"flow": "morning", "app": "mspaint.exe", "at": "06:45"})
+
+    assert canvas_save(server, STEPS)[0] == 200
+
+    assert mine(scheduler) == [TASK + "0645"]
+    assert daily_triggers(load_flow(db, None, "morning")) == []
