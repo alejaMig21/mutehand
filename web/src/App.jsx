@@ -83,7 +83,13 @@ export default function App() {
             {name}
           </button>
         ))}
-        <button data-testid="quit" onClick={quit} className="tabs-end" title={`Closes the program. ${OPEN_AGAIN}`}>Close the program</button>
+        {/* closing is rare and a browser tab can be closed anyway, so it is kept one step away from the tabs */}
+        <details className="tabs-end app-more">
+          <summary data-testid="app-more-toggle">More</summary>
+          <div className="app-more-menu">
+            <button data-testid="quit" onClick={quit} title={`Closes the program. ${OPEN_AGAIN}`}>Close the program</button>
+          </div>
+        </details>
       </nav>
       <main className="screen">
         {/* the editor stays mounted so unsaved nodes, edges and run context survive a tab change */}

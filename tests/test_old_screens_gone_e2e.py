@@ -71,8 +71,12 @@ def test_the_navigation_is_home_apps_and_close_the_program_and_none_of_the_old_s
     chores(tmp_path)
     with served(tmp_path) as (page, _, _, _):
         at_home(page)
-        names = [b.inner_text().strip() for b in page.locator("nav[aria-label=screens] button").all()]
-        assert names == ["Home", "Apps", "Close the program"]
+        shown = page.locator("nav[aria-label=screens] button:visible, nav[aria-label=screens] summary")
+        names = [b.inner_text().strip() for b in shown.all()]
+        assert names == ["Home", "Apps", "More"]  # closing the program is inside More
+        page.get_by_test_id("app-more-toggle").click()
+        assert page.get_by_test_id("quit").inner_text().strip() == "Close the program"
+        page.get_by_test_id("app-more-toggle").click()
         for old in ("library", "queue", "history", "schedules", "consents", "checks", "editor"):
             assert page.get_by_test_id(f"tab-{old}").count() == 0
         page.get_by_test_id("open-chore-morning").click()
@@ -100,7 +104,8 @@ def test_the_navigation_fits_a_narrow_window_is_readable_and_works_from_the_keyb
     with served(tmp_path, width=width) as (page, _, _, _):
         at_home(page)
         assert page.evaluate(NO_SIDEWAYS_SCROLL) and page.evaluate(CONTRAST) == []
-        for test_id in ("tab-home", "tab-apps", "quit"):
+        page.get_by_test_id("app-more-toggle").click()
+        for test_id in ("tab-home", "tab-apps", "app-more-toggle", "quit"):
             box = page.get_by_test_id(test_id).bounding_box()
             assert box["x"] >= 0 and box["x"] + box["width"] <= width and box["height"] >= 44, test_id
         tab_to(page, "tab-apps")
@@ -117,6 +122,9 @@ def test_closing_with_nothing_to_lose_does_not_ask_and_the_closed_page_says_how_
         asked = []
         page.on("dialog", lambda dialog: (asked.append(dialog.message), dialog.dismiss()))
         at_home(page)
+        assert not page.get_by_test_id("quit").is_visible()  # it is not at hand: a tap near the tabs cannot reach it
+        tab_to(page, "app-more-toggle")
+        page.keyboard.press("Enter")
         assert "uv run workflow-factory" in page.get_by_test_id("quit").get_attribute("title")  # the control says it too
 
         tab_to(page, "quit")
@@ -138,13 +146,14 @@ def test_closing_while_a_chore_runs_asks_first_says_what_is_lost_and_how_to_open
         run_button(page, "morning").click()
         page.get_by_test_id("run-now-morning").filter(has_text="Stop").wait_for()
 
+        page.get_by_test_id("app-more-toggle").click()
         page.get_by_test_id("quit").click()
         page.wait_for_timeout(400)
         assert len(asked) == 1 and not server.quit_requested.is_set()  # asked, and "cancel" changed nothing
         assert "running will be stopped" in asked[0] and "uv run workflow-factory" in asked[0]
 
         accept["now"] = True
-        page.get_by_test_id("quit").click()
+        page.get_by_test_id("quit").click()  # the menu is still open after a cancelled close
         page.get_by_test_id("closed").wait_for()
         assert server.quit_requested.is_set()
 
@@ -164,6 +173,7 @@ def test_closing_with_a_change_that_is_not_kept_asks_first(tmp_path):
         page.get_by_test_id("system-wait").click()
         page.get_by_test_id("run-status").filter(has_text="Not kept").wait_for()
 
+        page.get_by_test_id("app-more-toggle").click()
         page.get_by_test_id("quit").click()
 
         page.wait_for_timeout(300)
@@ -331,7 +341,7 @@ def a_run_that_waits_for_the_person():
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
     desktop.click_seconds = 0.5
     desktop.on_action = [desktop.user_acts]
-    desktop.on_sleep = [lambda: time.sleep(1.2)]  # the fake clock's wait takes real time, so it is seen
+    desktop.on_sleep = [lambda: time.sleep(4)]  # the fake clock's wait takes real time, long enough to be seen on a loaded machine
     return desktop
 
 

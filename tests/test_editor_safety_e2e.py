@@ -290,6 +290,7 @@ def test_at_double_zoom_the_main_actions_stay_on_screen_and_the_canvas_is_not_co
     page.reload()
     page.get_by_test_id("search").wait_for()
     assert page.locator(".canvas").bounding_box()["height"] >= 220  # the boxes to add go under it, not over it
+    page.get_by_test_id("app-more-toggle").click()
     for test_id in ("undo", "run", "tab-apps", "quit"):
         box = page.get_by_test_id(test_id).bounding_box()
         assert box["x"] >= 0 and box["x"] + box["width"] <= 683, test_id
@@ -506,6 +507,7 @@ def test_a_double_click_on_the_empty_canvas_moves_nothing(app):
 def test_the_closed_page_says_how_to_open_it_again(app):
     page, _, _ = app
     page.on("dialog", lambda dialog: dialog.accept())
+    page.get_by_test_id("app-more-toggle").click()
     page.get_by_test_id("quit").click()
 
     assert "uv run workflow-factory" in page.get_by_test_id("closed").inner_text()
