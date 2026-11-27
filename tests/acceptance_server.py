@@ -108,6 +108,11 @@ def first_day(db, server):
     pass
 
 
+def data_folder_present(state: Path) -> bool:
+    """The folder is what a cleanup can delete; the first day creates no database in it, so the folder is what is watched."""
+    return state.is_dir()
+
+
 DATASETS = {"first-day": first_day, "everyday": everyday, "many-apps": many_apps}
 
 
@@ -125,9 +130,9 @@ def main(argv):
     DATASETS[argv[0]](state / "user.db", server)
     server.start()
     print(f"READY {server.url}", flush=True)
-    while (state / "user.db").exists():  # a cleaned-up temp folder would turn every answer into a 500: stop, and say why
+    while data_folder_present(state):  # a cleaned-up temp folder would turn every answer into a 500: stop, and say why
         time.sleep(5)
-    sys.exit(f"{state / 'user.db'} is gone (the folder was deleted): the server stopped. Start it again on an empty folder.")
+    sys.exit(f"{state} is gone (the folder was deleted): the server stopped. Start it again on an empty folder.")
 
 
 if __name__ == "__main__":
