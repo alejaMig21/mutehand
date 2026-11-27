@@ -195,6 +195,7 @@ def test_the_daily_time_works_with_the_keyboard_alone(tmp_path):
     chores(tmp_path)
     with served(tmp_path) as (page, scheduler, _):
         at_home(page)
+        page.get_by_test_id("chore-morning").wait_for()  # the heading is there while the list still loads
         tab_to(page, "daily-morning")
         page.keyboard.press("Enter")
         assert page.evaluate(FOCUSED) == "daily-time-morning"  # the form opens with the time field ready
