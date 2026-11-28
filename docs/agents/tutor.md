@@ -61,7 +61,8 @@ A step is used by nodes. Name it as the node should read: a verb and what it act
 - Its name says what it does, with no technology or process name in it (`Save`, never `Save workbook` or `Excel save`):
   `teach_step` refuses such a name with `name_has_technology` before touching the app. A step is generic: teaching the same
   name on another app (that app's own control, its own `role` and `control_name`) adds a locator for that technology and keeps the
-  others, each with its own measured effect. Name by what it does so one name serves every program.
+  others, each with its own measured effect. Name by what it does so one name serves every program. The `action` is the step's,
+  not the locator's: a known name taught with a different action is refused with `action_differs` before touching the app; give that action its own name.
 - Pattern tags (the `tags` argument, optional: `file`, `mouse`, `text`) say what kind of step it is, so the editor's filter finds it. They are kept by name and merged when the step
   is taught on another app. Technology tags are never given: they are the apps the step was taught on.
 - The measured effect is the one you expected. An unexpected effect is a doubt, not a success: tell the person.

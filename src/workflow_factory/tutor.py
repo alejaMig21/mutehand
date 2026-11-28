@@ -224,6 +224,12 @@ def teach_step(
         return {"status": "name_has_technology", "message": (
             f"A step name must say what it does and must not contain a technology name or a program's process name "
             f"({given!r} is one). Name the step by its action, for example 'Save', and teach it again.")}
+    elsewhere = [s for s in list_steps(user_db, None, light=True)  # the action kind belongs to the step as a whole
+                 if s.name == name and plain_app(s.app) != plain_app(key.process) and s.action != action]
+    if elsewhere:
+        return {"status": "action_differs", "message": (
+            f"The step {name!r} already exists with the action {elsewhere[0].action!r} on {elsewhere[0].app}, and a step "
+            f"has one action everywhere. Give this {action!r} action its own name and teach it again.")}
     record_app_name(user_db, key)
     candidate = Step(app=key.process, version=key.version, name=name, locator=locator,
                        action=action, sensitive=sensitive, secret_ref=secret_ref)

@@ -435,6 +435,21 @@ def test_a_private_technology_is_counted_never_named_and_gives_no_tags(tmp_path)
     assert "telegram" not in json.dumps(everything) and "send-it" not in json.dumps(everything)
 
 
+def test_a_known_name_taught_with_another_action_on_a_new_technology_is_refused_before_the_app_is_touched(tmp_path):
+    from workflow_factory import find_step
+
+    server, _, excel = two_technologies(tmp_path)
+    db = tmp_path / "user.db"
+    teach(server, "paint.exe", "Save", "Save")
+
+    refused = teach(server, "excel.exe", "Save", "Save as", action="select")
+    again = teach(server, "excel.exe", "Save", "Save as")  # the same action: a locator is added
+
+    assert refused["status"] == "action_differs" and "'click'" in refused["message"] and "its own name" in refused["message"]
+    assert find_step(db, None, "excel.exe", "Save") is not None and again["status"] == "saved"
+    assert len(excel.clicks) == 1  # only the second call touched the app
+
+
 def test_an_open_doubt_of_a_private_technology_carries_its_program_and_no_text_read_from_its_screen(tmp_path):
     from workflow_factory.queue import record_doubt
     from workflow_factory.tutor import mark_private
