@@ -12,7 +12,7 @@ from workflow_factory import Flow, Node, load_flow, run_flow, save_flow, save_st
 from workflow_factory.api import ApiServer
 from workflow_factory.flows import flow_summaries
 
-from fake_desktop import FakeDesktop, button, save_flow_on, step
+from fake_desktop import FakeDesktop, button, save_flow_on, save_flow_paint, step
 
 pytestmark = pytest.mark.web
 
@@ -99,10 +99,11 @@ def test_a_flow_takes_any_words_as_its_name_and_its_nodes_keep_their_app_after_a
         assert flows(tmp_path) == {"morning-report-ventas-50-week-1": ("Evening report", "word.exe")}
 
 
-def test_a_flow_saved_before_names_opens_under_its_identifier_with_the_app_of_its_steps(tmp_path):
+def test_a_flow_without_a_title_opens_under_its_identifier_with_the_technology_of_each_node(tmp_path):
     steps_of_two_apps(tmp_path)
     save_step(tmp_path / "user.db", step("close", "Alpha", app="word.exe"))
-    save_flow(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu"), Node("b", "close")]))
+    save_flow(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu", technology="paint.exe"),
+                                                              Node("b", "close", technology="word.exe")]))
     with editor(tmp_path) as (page, apps):
         open_flow(page, "old-one")
 
@@ -158,7 +159,7 @@ def test_two_flows_with_the_same_name_stay_two_flows_and_can_be_told_apart(tmp_p
 
 def test_a_blank_name_is_not_kept_and_says_so_and_a_change_made_elsewhere_is_never_replaced_unasked(tmp_path):
     steps_of_two_apps(tmp_path)
-    save_flow(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu")]), "Morning")
+    save_flow_paint(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu")]), "Morning")
     with editor(tmp_path) as (page, _):
         open_flow(page, "old-one")
         page.get_by_test_id("flow-title").fill("   ")
@@ -167,7 +168,7 @@ def test_a_blank_name_is_not_kept_and_says_so_and_a_change_made_elsewhere_is_nev
         assert page.get_by_test_id("run-status").inner_text() == "Not saved"
         assert flows(tmp_path)["old-one"][0] == "Morning"
 
-        save_flow(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "save-file")]), "Renamed elsewhere")
+        save_flow_paint(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "save-file")]), "Renamed elsewhere")
         page.get_by_test_id("flow-title").fill("Mine")
         page.get_by_test_id("changed-elsewhere").filter(has_text="'Renamed elsewhere' was changed").wait_for()
         page.wait_for_timeout(600)
@@ -251,7 +252,7 @@ def test_naming_saving_and_reopening_work_with_the_keyboard_alone(tmp_path):
 def test_long_names_fit_a_narrow_window_and_stay_readable(tmp_path, width, height):
     long = "Weekly-report-" + "x" * 80
     stopped_flow(tmp_path, "long-1", long)
-    save_flow(tmp_path / "user.db", Flow(id="long-2", nodes=[Node("a", "open-menu")]), long)
+    save_flow_paint(tmp_path / "user.db", Flow(id="long-2", nodes=[Node("a", "open-menu")]), long)
 
     def fits(locator):
         rect = locator.bounding_box()

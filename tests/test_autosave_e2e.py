@@ -8,7 +8,9 @@ import re
 import pytest
 from test_canvas_e2e import editor, node, open_flow, three_actions
 
-from workflow_factory import Flow, Node, load_flow, save_flow
+from workflow_factory import Flow, Node, load_flow
+
+from fake_desktop import save_flow_paint
 
 pytestmark = pytest.mark.web
 
@@ -17,7 +19,7 @@ SAVED = re.compile("^Saved$")
 
 def seed(tmp_path):
     db = three_actions(tmp_path)
-    save_flow(db, Flow(id="morning", nodes=[Node("n1", "open-menu"), Node("n2", "save-file")]))
+    save_flow_paint(db, Flow(id="morning", nodes=[Node("n1", "open-menu"), Node("n2", "save-file")]))
     return db
 
 
@@ -94,7 +96,7 @@ def test_a_change_made_elsewhere_is_shown_and_the_person_chooses(tmp_path):
     db = seed(tmp_path)
     with editor(tmp_path) as page:
         open_flow(page, "morning", "n2")
-        save_flow(db, Flow(id="morning", nodes=[Node("n1", "close-node")]))  # another window
+        save_flow_paint(db, Flow(id="morning", nodes=[Node("n1", "close-node")]))  # another window
         add(page, "wait", "system-wait")
         notice = page.get_by_test_id("changed-elsewhere")
         notice.wait_for()
@@ -112,7 +114,7 @@ def test_the_person_can_take_the_other_version_instead(tmp_path):
     db = seed(tmp_path)
     with editor(tmp_path) as page:
         open_flow(page, "morning", "n2")
-        save_flow(db, Flow(id="morning", nodes=[Node("n1", "close-node")]))
+        save_flow_paint(db, Flow(id="morning", nodes=[Node("n1", "close-node")]))
         add(page, "wait", "system-wait")
         page.get_by_test_id("changed-elsewhere").get_by_role("button", name="Show the other version").click()
         page.wait_for_function("document.querySelectorAll('.react-flow__node').length === 1")

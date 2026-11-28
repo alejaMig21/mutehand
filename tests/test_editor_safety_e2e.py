@@ -16,11 +16,10 @@ from workflow_factory import (
     load_flow,
     reject_step,
     run_flow,
-    save_flow,
     save_step,
 )
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_paint, step
 
 pytestmark = pytest.mark.web
 
@@ -33,8 +32,8 @@ def app(tmp_path):
     save_step(db, step("open-menu", "Alpha"))
     save_step(db, step("save-file", "Beta"))
     save_step(db, step("Close dialog", "Missing"))
-    save_flow(db, Flow(id="morning", nodes=[Node("n1", "open-menu"), Node("n2", "save-file")]))
-    save_flow(db, Flow(id="weekly", nodes=[Node("n1", "open-menu"), Node("n2", "Close dialog")]))
+    save_flow_paint(db, Flow(id="morning", nodes=[Node("n1", "open-menu"), Node("n2", "save-file")]))
+    save_flow_paint(db, Flow(id="weekly", nodes=[Node("n1", "open-menu"), Node("n2", "Close dialog")]))
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
     server = serve(tmp_path, desktop)
     try:
@@ -432,7 +431,7 @@ def test_at_double_zoom_the_node_window_stacks_without_covering_its_own_controls
 def test_an_app_says_why_an_action_is_blocked_and_what_allowing_it_again_does(app):
     page, folder, _ = app
     teach = Flow(id="teach", nodes=[Node("n1", "Menu opens")])
-    save_flow(folder / "user.db", teach)
+    save_flow_paint(folder / "user.db", teach)
     run_flow(teach, desktop=FakeDesktop(controls=[button("Alpha")]), user_db=_taught(folder, "Menu opens"))
     reject_step(folder / "user.db", "paint.exe", "save-file")
     page.get_by_test_id("tab-apps").click()

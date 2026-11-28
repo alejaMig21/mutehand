@@ -6,9 +6,9 @@ The built editor in a headless browser against the real API, with the stand-in d
 import pytest
 from test_canvas_e2e import choose, editor, node, open_flow, three_actions, three_in_a_row
 
-from workflow_factory import Flow, Node, load_flow, save_flow, save_step
+from workflow_factory import Flow, Node, load_flow, save_step
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_paint, step
 
 pytestmark = pytest.mark.web
 
@@ -21,7 +21,7 @@ def test_choosing_a_node_says_what_it_does_and_how_often_it_has_worked_and_shows
     db = tmp_path / "user.db"
     save_step(db, step("open-menu", "Alpha", effect="revealed", factory_successes=2))
     save_step(db, step("save-file", "Beta", action="type_value"))
-    save_flow(db, Flow(id="row", nodes=[Node("a", "open-menu"), Node("b", "save-file")], edges=[("a", "b")]))
+    save_flow_paint(db, Flow(id="row", nodes=[Node("a", "open-menu"), Node("b", "save-file")], edges=[("a", "b")]))
     with editor(tmp_path) as page:
         open_flow(page, "row", "b")
         assert "Choose a node" in strip(page).inner_text()  # nothing chosen yet
@@ -40,7 +40,7 @@ def test_choosing_a_node_says_what_it_does_and_how_often_it_has_worked_and_shows
 
 def test_a_system_node_is_explained_without_what_was_typed_into_it(tmp_path):
     db = three_actions(tmp_path)
-    save_flow(db, Flow(id="s", nodes=[
+    save_flow_paint(db, Flow(id="s", nodes=[
         Node("w", kind="wait", fields={"seconds": {"value": 1}}), Node("a", "open-menu")], edges=[("w", "a")]))
     with editor(tmp_path) as page:
         open_flow(page, "s", "a")
@@ -50,7 +50,7 @@ def test_a_system_node_is_explained_without_what_was_typed_into_it(tmp_path):
 
 def test_settings_opens_the_detail_only_for_a_node_that_has_settings(tmp_path):
     db = three_actions(tmp_path)
-    save_flow(db, Flow(id="j", nodes=[Node("a", "open-menu"), Node("j", kind="join")], edges=[("a", "j")]))
+    save_flow_paint(db, Flow(id="j", nodes=[Node("a", "open-menu"), Node("j", kind="join")], edges=[("a", "j")]))
     with editor(tmp_path) as page:
         open_flow(page, "j", "j")
         choose(page, "j")
@@ -68,7 +68,7 @@ def test_settings_opens_the_detail_only_for_a_node_that_has_settings(tmp_path):
 def test_test_this_node_warns_about_the_mouse_and_keyboard_before_it_does_anything(tmp_path):
     db = three_actions(tmp_path)
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta"), button("Gamma")])
-    save_flow(db, Flow(id="row", nodes=[Node("a", "open-menu"), Node("b", "save-file")], edges=[("a", "b")]))
+    save_flow_paint(db, Flow(id="row", nodes=[Node("a", "open-menu"), Node("b", "save-file")], edges=[("a", "b")]))
     with editor(tmp_path, desktop) as page:
         open_flow(page, "row", "b")
         choose(page, "b")

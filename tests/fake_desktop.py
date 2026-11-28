@@ -226,3 +226,8 @@ def save_flow_on(db, flow, title=None, app=None):
     save_flow(db, with_technology(flow, app) if app else flow, title)
 
 
+def save_flow_paint(db, flow, title=None):
+    """`save_flow_on` for the many tests whose steps are all taught on Paint, the stand-in desktop's default."""
+    save_flow_on(db, flow, title, "paint.exe")
+
+

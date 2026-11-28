@@ -13,11 +13,11 @@ import pytest
 from fake_scheduler import FakeScheduler
 from test_editor_e2e import DIST, open_page, reveal
 
-from workflow_factory import Flow, Node, load_flow, save_flow, save_step
+from workflow_factory import Flow, Node, load_flow, save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.flows import flow_summaries
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_paint, step
 
 pytestmark = pytest.mark.web
 
@@ -84,7 +84,7 @@ WIRES = [("a", "d"), ("d", "b"), ("d", "c"), ("b", "r")]
 def drawn_left_to_right(tmp_path):
     """A flow stored with the positions the earlier canvas gave it: one column per distance from the start."""
     db = three_actions(tmp_path)
-    save_flow(db, Flow(id="old", nodes=BRANCHED, edges=WIRES))
+    save_flow_paint(db, Flow(id="old", nodes=BRANCHED, edges=WIRES))
     across = {n: {"x": 60 + column * 250, "y": 60 + row * 140} for n, column, row in (
         ("a", 0, 0), ("d", 1, 0), ("b", 2, 0), ("c", 2, 1), ("r", 3, 0), ("x", 4, 0))}
     with closing(sqlite3.connect(db)) as opened, opened:
@@ -174,7 +174,7 @@ def test_the_two_paths_of_a_decision_are_labelled_and_filled_by_adding_nodes(tmp
 
 def test_a_third_line_out_of_a_decision_is_refused_in_words(tmp_path):
     db = three_actions(tmp_path)
-    save_flow(db, Flow(id="forked", edges=[("d", "b"), ("d", "c")], nodes=[
+    save_flow_paint(db, Flow(id="forked", edges=[("d", "b"), ("d", "c")], nodes=[
         Node("d", kind="if", fields={"condition": {"value": True}}, then="b", otherwise="c"),
         Node("b", "save-file"), Node("c", "close-node"), Node("e", "open-menu")]))
     with editor(tmp_path) as page:
@@ -290,7 +290,7 @@ def says(page, node_id, words):
 
 def three_in_a_row(tmp_path):
     db = three_actions(tmp_path)
-    save_flow(db, Flow(id="row", nodes=[Node("a", "open-menu"), Node("b", "save-file"), Node("c", "close-node")],
+    save_flow_paint(db, Flow(id="row", nodes=[Node("a", "open-menu"), Node("b", "save-file"), Node("c", "close-node")],
                        edges=[("a", "b"), ("b", "c")]))
     return db
 
@@ -331,7 +331,7 @@ def test_the_running_node_says_so_and_after_stop_nothing_is_left_running(tmp_pat
 
 def test_the_path_not_taken_is_not_reached(tmp_path):
     db = three_actions(tmp_path)
-    save_flow(db, Flow(id="forked", edges=[("d", "b"), ("d", "c")], nodes=[
+    save_flow_paint(db, Flow(id="forked", edges=[("d", "b"), ("d", "c")], nodes=[
         Node("d", kind="if", fields={"condition": {"value": True}}, then="b", otherwise="c"),
         Node("b", "save-file"), Node("c", "close-node")]))
     with editor(tmp_path) as page:
@@ -393,7 +393,7 @@ def test_a_missing_action_offers_the_message_to_send_in_a_chat_and_nothing_is_st
 
 
 def test_with_nothing_learned_the_panel_still_says_how_to_teach(tmp_path):
-    save_flow(tmp_path / "user.db", Flow(id="old", nodes=[Node("a", "open-menu")]))  # a flow whose action is not known here
+    save_flow_paint(tmp_path / "user.db", Flow(id="old", nodes=[Node("a", "open-menu")]))  # a flow whose action is not known here
     with editor(tmp_path, screen=None) as page:
         page.get_by_test_id("open-flow-old").click()
         panel(page).get_by_text("Nothing learned yet.").wait_for()
@@ -485,7 +485,7 @@ def test_the_panel_and_zoom_buttons_are_large_enough_and_readable_in_a_wide_wind
 def test_every_node_stays_in_sight_while_the_flow_runs_and_where_it_stopped(tmp_path):
     db = three_actions(tmp_path)
     nodes = [Node(f"b{i}", "open-menu") for i in range(4)] + [Node("last", "save-file")]
-    save_flow(db, Flow(id="tall", nodes=nodes, edges=[(a.id, b.id) for a, b in pairwise(nodes)]))
+    save_flow_paint(db, Flow(id="tall", nodes=nodes, edges=[(a.id, b.id) for a, b in pairwise(nodes)]))
     with editor(tmp_path, FakeDesktop(controls=[button("Alpha")]), size=(1280, 800)) as page:
         open_flow(page, "tall", "last")
         page.get_by_test_id("run").click()
@@ -534,7 +534,7 @@ def test_in_a_narrow_window_what_can_be_done_with_the_chosen_node_covers_no_node
 
 def test_where_the_person_puts_a_node_is_kept_after_a_reload(tmp_path):
     db = three_actions(tmp_path)
-    save_flow(db, Flow(id="two", nodes=[Node("a", "open-menu"), Node("b", "save-file")]))
+    save_flow_paint(db, Flow(id="two", nodes=[Node("a", "open-menu"), Node("b", "save-file")]))
     with editor(tmp_path) as page:
         open_flow(page, "two", "b")
         x, y = middle(page, "b")

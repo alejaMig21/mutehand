@@ -15,7 +15,7 @@ import pytest
 from workflow_factory import Flow, Node, load_flow, save_step
 from workflow_factory.api import ApiServer
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, save_flow_paint, step
 
 pytestmark = pytest.mark.web
 SAVED = re.compile("^Saved$")  # "Unsaved changes" holds the word too: match the whole badge
@@ -116,10 +116,9 @@ def test_the_editor_without_the_token_cannot_read_anything(editor):
 def test_a_loaded_flow_keeps_unique_node_ids_and_drops_the_previous_run_colours(editor):
     from playwright.sync_api import sync_playwright
 
-    from workflow_factory import save_flow
 
     server, tmp_path = editor
-    save_flow(tmp_path / "user.db", Flow(id="gappy", nodes=[Node("n1", "open-menu"), Node("n3", "save-file")],
+    save_flow_paint(tmp_path / "user.db", Flow(id="gappy", nodes=[Node("n1", "open-menu"), Node("n3", "save-file")],
                                          edges=[]))
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
@@ -314,7 +313,6 @@ def test_nothing_in_the_editor_starts_a_lesson(editor):
 
 
 def seed_data_flow(tmp_path):
-    from workflow_factory import save_flow
 
     def fixed(value):
         return {"value": value}
@@ -325,7 +323,7 @@ def seed_data_flow(tmp_path):
         Node("m", kind="data", op="math", fields={"a": fixed(1), "b": fixed(2), "operation": fixed("add")}),
         Node("p", "open-menu"),
     ]
-    save_flow(tmp_path / "user.db", Flow(id="datas", nodes=nodes, edges=[("d", "c"), ("c", "m"), ("m", "p")]))
+    save_flow_paint(tmp_path / "user.db", Flow(id="datas", nodes=nodes, edges=[("d", "c"), ("c", "m"), ("m", "p")]))
 
 
 def open_seeded_flow(page):
@@ -443,11 +441,10 @@ def serve(tmp_path, desktop):
 def test_stop_ends_a_run_at_once_and_the_run_button_comes_back(tmp_path):
     from playwright.sync_api import sync_playwright
 
-    from workflow_factory import save_flow
 
     save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
     save_step(tmp_path / "user.db", step("save-file", "Beta"))
-    save_flow(tmp_path / "user.db", Flow(id="slow", nodes=[Node("a", "open-menu"), Node("b", "save-file")]))
+    save_flow_paint(tmp_path / "user.db", Flow(id="slow", nodes=[Node("a", "open-menu"), Node("b", "save-file")]))
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
     desktop.click_seconds = 1.5
     server = serve(tmp_path, desktop)
@@ -473,12 +470,12 @@ def test_stop_ends_a_run_at_once_and_the_run_button_comes_back(tmp_path):
 def test_a_flow_with_a_rejected_step_says_which_one_and_cannot_be_started(tmp_path):
     from playwright.sync_api import sync_playwright
 
-    from workflow_factory import reject_step, save_flow
+    from workflow_factory import reject_step
 
     save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
     save_step(tmp_path / "user.db", step("save-file", "Beta"))
     reject_step(tmp_path / "user.db", "paint.exe", "save-file")
-    save_flow(tmp_path / "user.db", Flow(id="blocked", nodes=[Node("a", "open-menu"), Node("b", "save-file")]))
+    save_flow_paint(tmp_path / "user.db", Flow(id="blocked", nodes=[Node("a", "open-menu"), Node("b", "save-file")]))
     server = serve(tmp_path, FakeDesktop(controls=[button("Alpha"), button("Beta")]))
     try:
         with sync_playwright() as playwright:
@@ -500,12 +497,12 @@ def test_a_flow_with_a_rejected_step_says_which_one_and_cannot_be_started(tmp_pa
 def test_nodes_say_how_far_a_step_is_trusted_and_a_stopped_node_is_explained_not_counted_as_a_doubt(tmp_path):
     from playwright.sync_api import sync_playwright
 
-    from workflow_factory import Sensitivity, grant_consent, save_flow
+    from workflow_factory import Sensitivity, grant_consent
 
     save_step(tmp_path / "user.db", step("send", "Send", app="telegram.exe", sensitive=Sensitivity.OUTWARD_ACTION))
     save_step(tmp_path / "user.db", step("open-menu", "Alpha", app="telegram.exe"))
     grant_consent(tmp_path / "user.db", "telegram.exe", "Send", "click")
-    save_flow(tmp_path / "user.db", Flow(id="chat", nodes=[Node("a", "open-menu"), Node("b", "send")]))
+    save_flow_on(tmp_path / "user.db", Flow(id="chat", nodes=[Node("a", "open-menu"), Node("b", "send")]), app="telegram.exe")
     desktop = FakeDesktop(controls=[button("Alpha")], app="telegram.exe")  # Send is not on screen: b will stop
     server = serve(tmp_path, desktop)
     try:
