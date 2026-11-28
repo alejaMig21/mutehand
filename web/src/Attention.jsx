@@ -209,7 +209,9 @@ function Setup({ item }) {
 // Told once, after an upgrade starts the person's data again: where the earlier data was kept.
 function Notice({ item, onDismissed }) {
   const [problem, setProblem] = useState('')
-  const dismiss = () => api(`/api/notices/${encode(item.id)}/dismiss`, { method: 'POST' }).then(onDismissed, (e) => setProblem(e.message))
+  const tell = () => api(`/api/notices/${encode(item.id)}/dismiss`, { method: 'POST' })
+  useEffect(() => { tell().catch(() => {}) }, [item.id]) // eslint-disable-line react-hooks/exhaustive-deps -- shown, so told: never again
+  const dismiss = () => tell().then(onDismissed, (e) => setProblem(e.message))
   return (
     <Card id={`notice-${item.id}`} title="A fresh start"
       detail={`This version starts with no Steps and no Flows. Everything you had before was kept in a copy: ${item.copy}`}
@@ -227,8 +229,15 @@ const rejectedKey =(item) => `rejected-${item.app}-${item.step}`
 //
 // A try again answers the same way: its answer stands in the card, or where the card was once the flow no longer needs
 // the person, until it is hidden. `tries` and `hide` are the ones `useTryAgain` gives.
-export function Attention({ items, tries, hide, tryAgain, onChanged, running }) {
+export function Attention({ items: asked, tries, hide, tryAgain, onChanged, running }) {
   const [kept, setKept] = useState({}) // key -> {item, at, words}
+  // a notice is dismissed on the program's side the moment it is shown; it stays on screen until the person presses Got it
+  const [told, setTold] = useState({})
+  useEffect(() => {
+    const fresh = asked.filter((item) => item.kind === 'notice' && !told[item.id])
+    if (fresh.length) setTold((all) => ({ ...all, ...Object.fromEntries(fresh.map((item) => [item.id, item])) }))
+  }, [asked]) // eslint-disable-line react-hooks/exhaustive-deps
+  const items = [...asked, ...Object.values(told).filter((one) => !asked.some((item) => item.kind === 'notice' && item.id === one.id))]
   const placed = useRef({}) // flow -> where its card was when Try again was pressed
   const list = items.map((item) => ({ item }))
   for (const [key, one] of Object.entries(kept)) {
@@ -255,7 +264,8 @@ export function Attention({ items, tries, hide, tryAgain, onChanged, running }) 
               </Card>
             )
           }
-          if (item.kind === 'notice') return <Notice key={`notice-${item.id}`} item={item} onDismissed={onChanged} />
+          if (item.kind === 'notice') return <Notice key={`notice-${item.id}`} item={item}
+            onDismissed={() => { setTold(({ [item.id]: _gone, ...rest }) => rest); onChanged() }} />
           if (item.kind === 'relearn') return <Relearn key={`relearn-${item.app}`} item={item} />
           if (item.kind === 'rejected') return <Rejected key={rejectedKey(item)} item={item} onAllowed={allowed(item, at)} />
           if (item.kind === 'setup') return <Setup key={`setup-${item.id}`} item={item} />
