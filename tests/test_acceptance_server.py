@@ -51,3 +51,13 @@ def test_the_persona_data_is_built_with_generic_steps_tags_and_nodes_that_name_t
         for node in (n for n in flow.nodes if n.kind == "step"):  # a daily time adds a trigger node
             assert node.technology in technologies and node.step in by_name and node.technology in by_name[node.step]
     assert any(len({n.technology for n in flow.nodes if n.kind == "step"}) >= 2 for flow in flows)  # a flow that mixes two programs
+
+
+def test_runs_on_the_harness_are_dated_today_so_a_new_run_is_never_older_than_a_seeded_one(tmp_path):
+    from datetime import UTC, datetime
+
+    from workflow_factory.queue import last_runs
+
+    db = served_data(tmp_path, "everyday")
+    today = datetime.now(UTC).date().isoformat()
+    assert {run["at"][:10] for run in last_runs(db).values()} == {today}  # the stand-in desktop's clock was fixed in 2026-01-01

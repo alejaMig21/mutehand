@@ -76,7 +76,7 @@ summary { cursor: pointer; }
 .flow-note { position: absolute; z-index: 2; left: 16px; bottom: -14px; max-width: calc(100% - 32px); box-sizing: border-box; margin: 0; padding: 3px 12px;
   background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; }
 .flow-run.busy svg { animation: spin 1s linear infinite; }
-.flow-run.cannot { background: transparent; border-style: dashed; color: var(--muted); }
+.flow-run.cannot, .topbar .cannot { background: transparent; border-style: dashed; color: var(--muted); } /* a button that cannot be pressed yet does not look like one */
 .flow-run.cannot:hover { border-color: var(--line); }
 
 /* a flow's More: rename, history, delete, and the undo notice */

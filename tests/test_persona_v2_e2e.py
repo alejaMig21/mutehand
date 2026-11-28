@@ -70,6 +70,18 @@ def test_saving_a_daily_time_or_a_new_name_leaves_the_rows_buttons_where_they_we
         assert all(abs(after[n][axis] - now[n][axis]) <= 1 for n in after for axis in ("x", "y"))
 
 
+# --- 4: Run now in a flow with nothing in it says why it cannot run -----------------------------------------------------------
+
+def test_run_now_in_a_new_empty_flow_says_it_has_nothing_to_run_and_looks_unavailable(tmp_path):
+    many_programs(tmp_path, 1)
+    with editor(tmp_path, size=(390, 740)) as page:
+        run = page.get_by_test_id("run")
+        run.wait_for()
+        assert run.is_disabled() and "Nothing to run yet" in run.inner_text()
+        assert run.evaluate("(b) => getComputedStyle(b).borderStyle") == "dashed"  # not the filled look of a button that can be pressed
+        assert "Add your first node" in page.locator(".empty-canvas").inner_text()  # what to do is on the screen, not in a tooltip
+
+
 # --- 1: a step learned for many programs stays short on its card, and asking which one stays on the screen -------------------
 
 def many_programs(tmp_path, count=30):

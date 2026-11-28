@@ -693,9 +693,9 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
             <Icon name="stop" size={16} /> Stop
           </button>
         ) : (
-          <button className="primary" data-testid="run" onClick={run} disabled={starting || nodes.length === 0 || Boolean(blocked)}
+          <button className={nodes.length === 0 ? 'cannot' : 'primary'} data-testid="run" onClick={run} disabled={starting || nodes.length === 0 || Boolean(blocked)}
             title={nodes.length === 0 ? 'Add a node first' : blocked}>
-            <Icon name="play" size={16} /> {starting ? 'Starting…' : 'Run now'}
+            <Icon name="play" size={16} /> {starting ? 'Starting…' : nodes.length === 0 ? 'Nothing to run yet' : 'Run now'}
           </button>
         )}
       </header>

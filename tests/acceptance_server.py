@@ -9,6 +9,7 @@ must not hold a database yet and its path must be short (Windows limits a schedu
 
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -52,8 +53,15 @@ def learn(db, technology, name, steps, version="1.0"):
     record_app_name(db, AppKey(technology, version, name))
 
 
+class TodayDesktop(FakeDesktop):
+    """The stand-in desktop with the real clock: its own starts in 2026-01-01, so a run made here would read as older than today's."""
+
+    def now(self):
+        return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def desktop_for(app, missing=()):
-    return FakeDesktop(controls=[button(a) for a in STEPS.get(app, []) if a not in missing], app=app, product_name=NAMES.get(app, ""))
+    return TodayDesktop(controls=[button(a) for a in STEPS.get(app, []) if a not in missing], app=app, product_name=NAMES.get(app, ""))
 
 
 def on(technology, *steps):
