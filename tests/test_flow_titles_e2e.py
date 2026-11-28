@@ -70,7 +70,8 @@ def new_flow(page):
 def test_a_flow_takes_any_words_as_its_name_and_its_nodes_keep_their_app_after_a_reload_and_a_run(tmp_path):
     steps_of_two_apps(tmp_path)
     with editor(tmp_path) as (page, apps):
-        page.get_by_test_id("palette-open-menu").first.click()
+        page.get_by_test_id("palette-open-menu").click()
+        page.get_by_test_id("technology-chooser").get_by_role("button").first.click()  # the step has two programs: it asks
         page.get_by_test_id("node-n1").dblclick()
         page.get_by_test_id("node-technology").select_option("word.exe")  # the node says which program it acts on
         page.get_by_test_id("close-detail").click()
@@ -154,7 +155,8 @@ def test_two_flows_with_the_same_name_stay_two_flows_and_can_be_told_apart(tmp_p
         asked = []
         page.on("dialog", lambda dialog: (asked.append(dialog.message), dialog.dismiss()))
         page.get_by_test_id("flow-title").fill("Morning")  # a flow is kept under its name as soon as it has a node
-        page.get_by_test_id("palette-open-menu").first.click()
+        page.get_by_test_id("palette-open-menu").click()
+        page.get_by_test_id("technology-chooser").get_by_role("button").first.click()  # the step has two programs: it asks
         save(page)
         new_flow(page)
         page.get_by_test_id("flow-title").fill("Morning")
@@ -202,7 +204,8 @@ def test_a_blank_name_is_not_kept_and_says_so_and_a_change_made_elsewhere_is_nev
 def test_a_node_of_a_flow_never_saved_can_be_tested(tmp_path):
     steps_of_two_apps(tmp_path)
     with editor(tmp_path) as (page, apps):
-        page.get_by_test_id("palette-open-menu").first.click()
+        page.get_by_test_id("palette-open-menu").click()
+        page.get_by_test_id("technology-chooser").get_by_role("button").first.click()  # the step has two programs: it asks
         page.locator('.react-flow__node[data-id="n1"]').click()
         page.get_by_test_id("test-node").click()
         page.get_by_test_id("confirm-test").click()
@@ -255,7 +258,8 @@ def test_a_flow_running_elsewhere_is_named_by_its_name(tmp_path):
 def test_naming_saving_and_reopening_work_with_the_keyboard_alone(tmp_path):
     steps_of_two_apps(tmp_path)
     with editor(tmp_path) as (page, _):
-        page.get_by_test_id("palette-open-menu").first.press("Enter")
+        page.get_by_test_id("palette-open-menu").press("Enter")
+        page.keyboard.press("Enter")  # the first program, which has the focus
         page.get_by_role("textbox", name="Flow name").press("ControlOrMeta+a")
         page.keyboard.type("Typed by hand")
         page.get_by_test_id("run-status").filter(has_text=re.compile("^Saved$")).wait_for()

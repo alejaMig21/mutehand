@@ -78,6 +78,7 @@ def test_a_step_added_in_the_editor_is_kept_with_the_program_it_was_taught_on(tm
             browser, page = open_page(playwright, server)
             page.get_by_test_id("flow-title").fill("kept")
             page.get_by_test_id("palette-save").click()
+            page.get_by_test_id("technology-excel.exe").click()  # a step of two programs asks which
             page.get_by_test_id("node-n1").wait_for()
             open_technology(page, "n1").select_option("paint.exe")
             page.get_by_test_id("run-status").filter(has_text="Saved").wait_for()
@@ -139,6 +140,7 @@ def test_a_node_says_its_program_and_offers_only_the_programs_its_step_is_learne
     page, _ = two
     page.get_by_test_id("palette-only-excel").click()
     page.get_by_test_id("palette-save").click()
+    page.get_by_test_id("technology-excel.exe").click()  # a step of two programs asks which
     assert "Excel" in page.get_by_test_id("node-n1").inner_text()
     chooser = open_technology(page, "n1")
     assert [o.inner_text() for o in chooser.locator("option").all()] == ["Excel"]
@@ -152,6 +154,7 @@ def test_the_changed_technology_is_kept_after_a_reload_and_undo_takes_it_back(tw
     page, tmp_path = two
     page.get_by_test_id("flow-title").fill("changed")
     page.get_by_test_id("palette-save").click()
+    page.get_by_test_id("technology-excel.exe").click()  # a step of two programs asks which
     page.get_by_test_id("run-status").filter(has_text="Saved").wait_for()
     first = load_flow(tmp_path / "user.db", None, "changed").nodes[0].technology
     other = "paint.exe" if first == "excel.exe" else "excel.exe"
@@ -175,6 +178,7 @@ def test_the_changed_technology_is_kept_after_a_reload_and_undo_takes_it_back(tw
 def test_the_technology_chooser_is_reached_and_changed_from_the_keyboard(two):
     page, _ = two
     page.get_by_test_id("palette-save").click()
+    page.get_by_test_id("technology-excel.exe").click()  # a step of two programs asks which
     chooser = open_technology(page, "n1")
     before = chooser.input_value()
     chooser.focus()
@@ -188,6 +192,7 @@ def test_the_chooser_fits_a_narrow_window(tmp_path):
     server, playwright, browser, page = serve_two_programs(tmp_path, size=(390, 800))
     try:
         page.get_by_test_id("palette-save").click()
+        page.get_by_test_id("technology-excel.exe").click()  # a step of two programs asks which
         chooser = open_technology(page, "n1")
         box = chooser.bounding_box()
         assert box["x"] >= 0 and box["x"] + box["width"] <= 390
