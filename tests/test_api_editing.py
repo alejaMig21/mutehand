@@ -8,10 +8,10 @@ import time
 import pytest
 from test_api import call, make_server
 
-from workflow_factory import Flow, Node, list_runs, run_flow, save_flow, save_step, schedule
+from workflow_factory import Flow, Node, list_runs, run_flow, save_step, schedule
 from workflow_factory.api import MAX_FLOW_NAME_CHARS
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 ONE = {"nodes": [{"id": "n1", "step": "open-menu"}], "edges": []}
 TWO = {"nodes": [{"id": "n1", "step": "open-menu"}, {"id": "n2", "step": "save-file"}], "edges": [["n1", "n2"]]}
@@ -67,7 +67,7 @@ def test_the_runs_in_progress_are_listed_so_a_reloaded_editor_can_stop_them(tmp_
     desktop.click_seconds = 1.0
     server = make_server(tmp_path, desktop)
     try:
-        call(server, "/api/flows/slow", "PUT", ONE)
+        call(server, "/api/flows/slow", "PUT", {"nodes": [{"id": "n1", "step": "open-menu", "technology": "paint.exe"}], "edges": []})
         _, started, _ = call(server, "/api/flows/slow/run", "POST", {"app": "paint.exe"})
         _, during, _ = call(server, "/api/runs")
         for _ in range(100):
@@ -119,7 +119,7 @@ def test_a_browser_that_leaves_before_the_answer_is_not_an_error(tmp_path, monke
 def test_no_more_schedules_are_made_than_a_person_could_manage(tmp_path):
     from fake_scheduler import FakeScheduler
 
-    save_flow(tmp_path / "user.db", Flow(id="report", nodes=[Node("n1", "open-menu")]))
+    save_flow_on(tmp_path / "user.db", Flow(id="report", nodes=[Node("n1", "open-menu")]), app="paint.exe")
     scheduler = FakeScheduler()
     server = make_server(tmp_path, schedule_runner=scheduler)
     try:

@@ -44,11 +44,11 @@ test('nothing matching leaves no section', () => assert.deepEqual(panelSections(
 
 test('a step gets the technology that was searched, else the only one, else it asks which', () => {
   const [a, b] = ['excel.exe', 'paint.exe']
-  assert.deepEqual(chooseTechnology('excel', [a, b]), { app: a })
-  assert.deepEqual(chooseTechnology('Save PAINT', [a, b]), { app: b })
-  assert.deepEqual(chooseTechnology('save', [a]), { app: a })
-  assert.deepEqual(chooseTechnology('save', [a, b]), { ask: [a, b] })
-  assert.deepEqual(chooseTechnology('', [a, b]), { ask: [a, b] })
+  assert.deepEqual(chooseTechnology('excel', [a, b], [a, b]), { app: a })
+  assert.deepEqual(chooseTechnology('Save PAINT', [a, b], [a, b]), { app: b })
+  assert.deepEqual(chooseTechnology('save', [a], [a]), { app: a })
+  assert.deepEqual(chooseTechnology('save', [a, b], [a, b]), { ask: [a, b] })
+  assert.deepEqual(chooseTechnology('', [a, b], [a, b]), { ask: [a, b] })
 })
 
 test('a technology the server hides is not searched by, but its step is still found by name', () => {

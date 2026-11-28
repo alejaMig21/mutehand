@@ -6,12 +6,10 @@ from contextlib import closing
 import pytest
 from test_api import call, make_server
 
-from workflow_factory import Flow, Node, build_factory, export_knowledge, import_knowledge, load_flow, save_flow, save_step
+from workflow_factory import build_factory, export_knowledge, import_knowledge, load_flow
 from workflow_factory.flows import flow_summaries
 
-from fake_desktop import step
-
-ONE = {"nodes": [{"id": "n1", "step": "open-menu"}], "edges": []}
+ONE = {"nodes": [{"id": "n1", "step": "open-menu", "technology": "paint.exe"}], "edges": []}
 
 
 @pytest.fixture
@@ -31,27 +29,6 @@ def test_a_title_with_any_words_is_kept_with_the_flow_and_listed_and_no_program_
     assert "app" not in loaded and "app" not in saved[1]  # a program the request names is not kept on the flow
     assert listed == [{"id": "report", "origin": "local", "title": "Morning report: ¿ventas?"}]
     assert call(server, "/api/flows/report")[1] == loaded
-
-
-def test_a_flow_saved_before_titles_takes_its_identifier_and_its_nodes_the_app_of_most_of_its_steps(tmp_path):
-    for app, name in (("telegram.exe", "Send"), ("telegram.exe", "Write"), ("whatsapp.exe", "Write"),
-                      ("whatsapp.exe", "Open"), ("whatsapp.exe", "Close")):
-        save_step(tmp_path / "user.db", step(name, "Alpha", app=app))
-    save_flow(tmp_path / "user.db", Flow(id="mostly-whatsapp", nodes=[
-        Node("a", "Send"), Node("b", "Open"), Node("c", "Close")]))
-    save_flow(tmp_path / "user.db", Flow(id="tie", nodes=[Node("a", "Write")]))
-    save_flow(tmp_path / "user.db", Flow(id="empty", nodes=[Node("a", kind="wait", fields={"seconds": {"value": 1}})]))
-    server = make_server(tmp_path)
-    try:
-        listed = {f["id"]: f["title"] for f in call(server, "/api/flows")[1]}
-        loaded = {f: call(server, f"/api/flows/{f}")[1] for f in listed}
-    finally:
-        server.stop()
-
-    assert listed == {"mostly-whatsapp": "mostly-whatsapp", "tie": "tie", "empty": "empty"}
-    technologies = {f: [n["technology"] for n in flow["nodes"]] for f, flow in loaded.items()}
-    assert technologies == {"mostly-whatsapp": ["whatsapp.exe"] * 3, "tie": ["telegram.exe"], "empty": [""]}
-    assert all("app" not in flow for flow in loaded.values())
 
 
 def test_a_flow_that_cannot_be_read_does_not_hide_the_others_from_the_list(tmp_path, server):
@@ -109,7 +86,7 @@ def test_a_new_flow_gets_a_short_identifier_from_its_title_and_never_takes_one_i
 
 def test_a_copy_and_an_export_carry_the_title_and_the_technology_of_the_nodes(tmp_path):
     build_factory(tmp_path / "factory.db", {"version": 1, "steps": [], "flows": [
-        {"id": "template", "title": "The template", "app": "paint.exe", **ONE}]})  # a file from before nodes had one
+        {"id": "template", "title": "The template", **ONE}]})
     server = make_server(tmp_path)
     try:
         listed = call(server, "/api/flows")[1][0]

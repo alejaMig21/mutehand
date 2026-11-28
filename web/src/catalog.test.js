@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { appLabel, CHIP_COLOURS, chipFor, onAppNames, setAppNames, taughtApp, technologiesOf, SYSTEM_NODES } from './catalog.js'
+import { appLabel, CHIP_COLOURS, chipFor, onAppNames, setAppNames,technologiesOf, SYSTEM_NODES } from './catalog.js'
 
 test('every system node can be stored as it is: a kind, and its operation when it is a data node', () => {
   const keys = new Set()
@@ -46,15 +46,6 @@ test('an app is called by its product name once it is known, and keeps its chip 
     stop()
     setAppNames({})
   }
-})
-
-test('an app typed in any spelling is the one the steps were taught on', () => {
-  const apps = ['Telegram.exe', 'paint']
-
-  assert.equal(taughtApp(' telegram ', apps), 'Telegram.exe')
-  assert.equal(taughtApp('PAINT.EXE', apps), 'paint')
-  assert.equal(taughtApp(' unknown.exe ', apps), 'unknown.exe')
-  assert.equal(taughtApp('', apps), '')
 })
 
 test('the programs a step is learned for are ordered by their names on screen, and Paint.exe and paint.exe are one', () => {

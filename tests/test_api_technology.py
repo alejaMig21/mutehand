@@ -7,12 +7,12 @@ import pytest
 from fake_scheduler import FakeScheduler
 from test_api import call
 
-from workflow_factory import Flow, Node, load_flow, save_flow, save_step
+from workflow_factory import save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.queue import list_doubts
 from workflow_factory.tutor import mark_private
 
-from fake_desktop import FakeDesktop, button, save_legacy_flow, step
+from fake_desktop import FakeDesktop, button, step
 
 
 @pytest.fixture
@@ -102,28 +102,6 @@ def test_a_stop_on_a_node_leaves_a_doubt_that_names_its_technology(served):
     assert call(server, "/api/doubts")[1][0]["technology"] == "paint.exe"
     [card] = [i for i in call(server, "/api/attention")[1] if i["kind"] == "stopped"]
     assert card["app"] == "paint.exe" and card["node"] == "b"
-
-
-def test_a_flow_saved_without_technologies_takes_the_program_it_was_saved_with(tmp_path):
-    db = tmp_path / "user.db"
-    save_step(db, step("save", "Save picture", app="paint.exe"))
-    save_legacy_flow(db, Flow(id="old", nodes=[Node("a", "save")]), "Old", "Paint")  # the name as a person wrote it
-
-    opened = load_flow(db, None, "old")
-    assert [n.technology for n in opened.nodes] == ["paint.exe"]  # spelled as the taught steps spell it
-
-    save_flow(db, opened, "Old")  # the next save keeps it on the node, and the flow lets go of the program
-    from sqlite3 import connect
-    assert connect(db).execute("SELECT app FROM flow_info WHERE id = 'old'").fetchone() == (None,)
-    assert [n.technology for n in load_flow(db, None, "old").nodes] == ["paint.exe"]
-
-
-def test_a_flow_saved_before_without_any_program_takes_the_program_of_its_steps(tmp_path):
-    db = tmp_path / "user.db"
-    save_step(db, step("save", "Save picture", app="paint.exe"))
-    save_flow(db, Flow(id="old", nodes=[Node("a", "save")]), "Old")
-
-    assert [n.technology for n in load_flow(db, None, "old").nodes] == ["paint.exe"]
 
 
 def test_the_step_list_shows_no_control_name_of_a_private_technology_and_search_cannot_find_it(served):

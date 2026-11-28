@@ -3,10 +3,10 @@ lock and does not wait for the person; a private app lets it read only with cons
 
 import pytest
 
-from workflow_factory import Flow, Node, grant_consent, run_flow, save_flow, save_step
+from workflow_factory import Flow, Node, grant_consent, run_flow, save_step
 from workflow_factory.workday import main
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 
 def teach(user_db, app="paint.exe"):
@@ -94,7 +94,7 @@ def test_a_password_field_is_never_read(tmp_path):
 
 def test_the_report_of_a_workday_never_holds_what_was_read(tmp_path):
     teach(tmp_path / "user.db")
-    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=read_then_type().nodes))
+    save_flow_on(tmp_path / "user.db", Flow(id="morning", nodes=read_then_type().nodes), app="paint.exe")
     desktop = desktop_with({"Title": "Salary 99,000"})
 
     code = main(["--flow", "morning", "--app", "paint.exe", "--user-db", str(tmp_path / "user.db"),

@@ -86,8 +86,3 @@ export const systemEntryFor = (node) => SYSTEM_NODES.find((s) => s.node.kind ===
 // What a node is called on screen.
 export const titleOf = (node) => (node.kind && node.kind !== 'step' ? systemEntryFor(node)?.title ?? node.kind : node.step)
 
-// The app as the taught steps spell it, so a run finds them: 'Telegram' is telegram.exe.
-export function taughtApp(typed, apps) {
-  const app = typed.trim()
-  return apps.includes(app) ? app : apps.find((known) => appKey(known) === appKey(app)) ?? app
-}

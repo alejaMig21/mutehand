@@ -4,7 +4,6 @@ import json
 import re
 import sqlite3
 import unicodedata
-from collections import Counter
 from contextlib import closing
 from dataclasses import asdict, replace
 from datetime import UTC, datetime, timedelta
@@ -163,40 +162,28 @@ def _has_table(db: sqlite3.Connection, name: str) -> bool:
     return db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)).fetchone() is not None
 
 
-def _read(db: sqlite3.Connection, flow_id: str) -> tuple[Flow, str] | None:
-    """(the flow, the app it was saved with before nodes recorded a technology: "" when none), or None."""
+def _read(db: sqlite3.Connection, flow_id: str) -> Flow | None:
     if not _has_table(db, "flows"):  # e.g. a factory file that only ships steps
         return None
     row = db.execute("SELECT definition FROM flows WHERE id = ?", (flow_id,)).fetchone()
-    if row is None:
-        return None
-    old = db.execute("SELECT app FROM flow_info WHERE id = ?", (flow_id,)).fetchone() if _has_table(db, "flow_info") else None
-    return _load(flow_id, row[0]), (old and old[0]) or ""
+    return None if row is None else _load(flow_id, row[0])
 
 
 def load_flow(user_db: Path, factory_db: Path | None, flow_id: str) -> Flow | None:
-    """The user's flow first, then the factory template (opened read-only). A step node saved without a technology takes
-    the app its flow was saved with, else the app that has the flow's steps: the next save keeps it on the node."""
+    """The user's flow first, then the factory template (opened read-only)."""
     with closing(sqlite3.connect(user_db)) as db, db:
         db.execute(SCHEMA)
         found = _read(db, flow_id)
     if found is None and factory_db is not None and factory_db.exists():
         with closing(_read_only(factory_db)) as db:
             found = _read(db, flow_id)
-    return found and _with_technologies(*found, user_db, factory_db)
+    return found
 
 
 def with_technology(flow: Flow, technology: str) -> Flow:
     """The flow with `technology` on every step node that names none."""
     return replace(flow, nodes=[replace(node, technology=technology) if node.kind in ("step", "loop") and not node.technology
                                 else node for node in flow.nodes])
-
-
-def _with_technologies(flow: Flow, old_app: str, user_db: Path, factory_db: Path | None) -> Flow:
-    if all(node.technology for node in flow.nodes if node.kind in ("step", "loop")):
-        return flow
-    steps = list_steps(user_db, factory_db)
-    return with_technology(flow, taught_app(old_app, steps) if old_app else guess_app(flow, steps))
 
 
 def _read_only(factory_db: Path) -> sqlite3.Connection:
@@ -254,12 +241,6 @@ def stored_info(user_db: Path, factory_db: Path | None) -> dict[str, dict]:
         for flow_id, info in _info_rows(db).items():
             found[flow_id] = {**found.get(flow_id, {}), **info}
     return found
-
-
-def guess_app(flow: Flow, steps: list[Step]) -> str:
-    """The app that has the most of the flow's steps (the first met on a tie); '' when none is known."""
-    apps = Counter(step.app for node in flow.nodes for step in steps if step.name == node.step)
-    return apps.most_common(1)[0][0] if apps else ""
 
 
 def flow_summaries(user_db: Path, factory_db: Path | None) -> list[dict]:

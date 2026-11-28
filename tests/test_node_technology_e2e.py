@@ -9,7 +9,7 @@ from test_home_e2e import home, row, run_button, says
 
 from workflow_factory import Flow, Node, load_flow, save_flow, save_step
 
-from fake_desktop import FakeDesktop, button, save_legacy_flow, step
+from fake_desktop import FakeDesktop, button, step
 
 pytestmark = pytest.mark.web
 
@@ -48,18 +48,6 @@ def test_home_says_which_program_has_not_learned_a_step_and_touches_nothing(tmp_
         assert page.get_by_test_id("flow-why-both").inner_text().strip() == "“save” is not learned for Word yet."
         assert button_.is_disabled()
     assert all(d.calls == [] for d in desktops.values())
-
-
-def test_a_flow_saved_before_nodes_knew_their_program_still_opens_and_runs(tmp_path):
-    db = tmp_path / "user.db"
-    save_step(db, step("save", "Save picture", app="paint.exe"))
-    save_legacy_flow(db, Flow(id="old", nodes=[Node("a", "save")]), "Old flow", "paint.exe")
-    desktop = FakeDesktop(controls=[button("Save picture")], app="paint.exe")
-    with home(tmp_path, desktop_for=lambda tech: desktop) as (page, _):
-        assert "Paint" in row(page, "old").inner_text()
-        run_button(page, "old").click()
-        says(page, "old", "Worked")
-    assert [c.name for c in desktop.clicks] == ["Save picture"]
 
 
 def test_a_step_added_in_the_editor_is_kept_with_the_program_it_was_taught_on(tmp_path):

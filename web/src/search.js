@@ -47,7 +47,7 @@ export function panelSections(query, rows, recipes = []) {
 
 // The program a step node takes when pressed from a search: the one the typed words name, else the only one (none for a universal step),
 // else the person is asked: {app} or {ask: [apps to choose from]}.
-export function chooseTechnology(query, technologies, visible = technologies) {
+export function chooseTechnology(query, technologies, visible) {
   const typed = words(query)
   const named = technologies.filter((app) => visible.includes(app)).filter((app) => words(appLabel(app)).some((word) => typed.some((part) => word.startsWith(part))))
   const candidates = named.length ? named : technologies

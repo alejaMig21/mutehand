@@ -1,9 +1,7 @@
 """Fake desktop port: the single test seam. No real screen access."""
 
-import sqlite3
 import threading
 import time
-from contextlib import closing
 from datetime import UTC, datetime, timedelta
 
 from fake_clipboard import FakeClipboard
@@ -228,8 +226,3 @@ def save_flow_on(db, flow, title=None, app=None):
     save_flow(db, with_technology(flow, app) if app else flow, title)
 
 
-def save_legacy_flow(db, flow, title=None, app=None):
-    """Save a flow the way an earlier version did: nodes without a technology and the program kept on the flow."""
-    save_flow(db, flow, title)
-    with closing(sqlite3.connect(db)) as conn, conn:
-        conn.execute("UPDATE flow_info SET app = ? WHERE id = ?", (app, flow.id))

@@ -19,7 +19,6 @@ from pathlib import Path
 from workflow_factory.daily import with_daily
 from workflow_factory.flows import SCHEMA as FLOW_SCHEMA
 from workflow_factory.flows import (
-    check_app,
     check_title,
     flow_from_dict,
     flow_to_dict,
@@ -28,7 +27,6 @@ from workflow_factory.flows import (
     new_flow_id,
     save_flow,
     stored_info,
-    with_technology,
 )
 from workflow_factory.legacy import upgrade_knowledge
 from workflow_factory.paths import default_user_db
@@ -80,8 +78,6 @@ def _parse(data: dict, origin: Origin):
                 raise ValueError(f"flow id {item['id']!r} may only use letters, digits, '_', '.' and '-'")
             words = {"title": check_title(item["title"])} if "title" in item else {}
             flow = flow_from_dict(item["id"], item)
-            if item.get("app"):  # a file written before nodes recorded a technology: its steps act on that app
-                flow = with_technology(flow, check_app(item["app"]))
             flows.append((flow, words))
     except (KeyError, TypeError, AttributeError) as error:
         raise ValueError(f"the file is not valid knowledge: {error}") from None

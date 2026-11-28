@@ -12,7 +12,7 @@ from workflow_factory import Flow, Node, load_flow, run_flow, save_flow, save_st
 from workflow_factory.api import ApiServer
 from workflow_factory.flows import flow_summaries
 
-from fake_desktop import FakeDesktop, button, save_flow_on, save_legacy_flow, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 pytestmark = pytest.mark.web
 
@@ -111,32 +111,9 @@ def test_a_flow_saved_before_names_opens_under_its_identifier_with_the_app_of_it
         page.get_by_test_id("run-status").filter(has_text=re.compile("^Saved$")).wait_for()
 
 
-def test_an_app_remembered_in_another_spelling_is_the_taught_one_and_is_listed_once(tmp_path):
-    steps_of_two_apps(tmp_path)
-    save_legacy_flow(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu")]), "Morning", "Word")
-    with editor(tmp_path) as (page, apps):
-        open_flow(page, "old-one")
-        page.get_by_test_id("node-a").dblclick()
-        chooser = page.get_by_test_id("node-technology")
-        assert chooser.input_value() == "word.exe"
-        assert chooser.locator("option").all_inner_texts() == ["Paint", "Word"]
-        page.get_by_test_id("close-detail").click()
-        page.get_by_test_id("run-status").filter(has_text=re.compile("^Saved$")).wait_for()
-        page.get_by_test_id("run").click()
-        page.get_by_test_id("run-status").filter(has_text="Finished").wait_for()
-        assert set(apps) == {"word.exe"}
-
-        page.get_by_test_id("tab-home").click()  # the daily run needs no program: its nodes say which
-        page.get_by_test_id("daily-old-one").click()
-        page.get_by_test_id("daily-set-old-one").click()
-        page.get_by_test_id("daily-old-one").filter(has_text="Every day at").wait_for()
-        [task] = [t for name, t in page.scheduler.tasks.items() if "old-one" in name]
-        assert "--app" not in task["arguments"]
-
-
 def test_a_flow_opened_before_the_steps_arrive_has_nothing_unsaved_once_they_do(tmp_path):
     steps_of_two_apps(tmp_path)
-    save_legacy_flow(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu")]), "Morning", "Word")
+    save_flow_on(tmp_path / "user.db", Flow(id="old-one", nodes=[Node("a", "open-menu")]), "Morning", "word.exe")
     with editor(tmp_path) as (page, _):
         held = []
         page.route("**/api/steps", lambda route: held.append(route))  # the steps are slow to come

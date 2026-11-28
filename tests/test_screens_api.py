@@ -12,13 +12,12 @@ from workflow_factory import (
     list_doubts,
     list_runs,
     run_flow,
-    save_flow,
     save_step,
 )
 from workflow_factory.queue import answer_doubt, dismiss_doubt
 from workflow_factory.steps import list_steps, step_report
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 
 def run_and_wait(server, flow_id, context=None):
@@ -125,9 +124,9 @@ def test_run_history_tells_what_ran_what_stopped_and_why_without_any_data_values
     save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
     save_step(tmp_path / "user.db", step("send", "Send", sensitive=Sensitivity.OUTWARD_ACTION))
     save_step(tmp_path / "user.db", step("typer", "Alpha", action="type_value"))
-    save_flow(tmp_path / "user.db", Flow(id="ok", nodes=[Node("a", "open-menu")]))
-    save_flow(tmp_path / "user.db", Flow(id="stuck", nodes=[Node("a", "open-menu"), Node("s", "send")]))
-    save_flow(tmp_path / "user.db", Flow(id="typing", nodes=[Node("t", "typer", inputs=(("text", "str"),))]))
+    save_flow_on(tmp_path / "user.db", Flow(id="ok", nodes=[Node("a", "open-menu")]), app="paint.exe")
+    save_flow_on(tmp_path / "user.db", Flow(id="stuck", nodes=[Node("a", "open-menu"), Node("s", "send")]), app="paint.exe")
+    save_flow_on(tmp_path / "user.db", Flow(id="typing", nodes=[Node("t", "typer", inputs=(("text", "str"),))]), app="paint.exe")
     desktop = FakeDesktop(controls=[button("Alpha"), button("Send")])
     server = make_server(tmp_path, desktop=desktop)
     try:

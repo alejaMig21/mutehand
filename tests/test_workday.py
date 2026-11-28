@@ -22,13 +22,13 @@ from workflow_factory.workday import (
     write_report,
 )
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 
 def setup(tmp_path, nodes=None, steps=(("open-menu", "Alpha"), ("save-file", "Beta"))):
     for name, control in steps:
         save_step(tmp_path / "user.db", step(name, control))
-    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=nodes or [Node("a", "open-menu"), Node("b", "save-file")]))
+    save_flow_on(tmp_path / "user.db", Flow(id="morning", nodes=nodes or [Node("a", "open-menu"), Node("b", "save-file")]), app="paint.exe")
     return tmp_path
 
 
@@ -249,7 +249,7 @@ def two_trigger_nodes():
 @pytest.mark.parametrize("extra, clicked", [((), ["Alpha"]), (("--fired", "daily"), ["Beta"])], ids=["by hand", "scheduled"])
 def test_a_workday_fires_the_trigger_it_was_started_by(tmp_path, extra, clicked):
     setup(tmp_path)
-    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=two_trigger_nodes(), edges=[("m", "a"), ("d", "b")]))
+    save_flow_on(tmp_path / "user.db", Flow(id="morning", nodes=two_trigger_nodes(), edges=[("m", "a"), ("d", "b")]), app="paint.exe")
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
 
     code = run(tmp_path, desktop, *extra)
@@ -260,7 +260,7 @@ def test_a_workday_fires_the_trigger_it_was_started_by(tmp_path, extra, clicked)
 def test_the_report_never_holds_the_data_a_data_node_gave_out(tmp_path):
     setup(tmp_path)
     nodes = [Node("d", kind="data", op="fixed", fields={"value": {"value": "secret-page-text-1234"}})]
-    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=nodes))
+    save_flow_on(tmp_path / "user.db", Flow(id="morning", nodes=nodes), app="paint.exe")
 
     code = run(tmp_path, FakeDesktop(controls=[]), "--with-values")  # even with values enabled: those are the run's input
 

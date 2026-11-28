@@ -5,12 +5,12 @@ import urllib.request
 
 import pytest
 
-from workflow_factory import Flow, Node, save_flow, save_step
+from workflow_factory import Flow, Node, save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.steps import add_tags
 from workflow_factory.tutor import mark_private
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 
 def make_server(tmp_path, desktop=None, **kw):
@@ -160,7 +160,7 @@ def test_an_invalid_flow_is_refused_with_a_message(server):
 def test_a_flow_runs_and_its_live_per_node_status_can_be_polled(tmp_path):
     save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
     save_step(tmp_path / "user.db", step("save-file", "Beta"))
-    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=[Node("a", "open-menu"), Node("b", "save-file")]))
+    save_flow_on(tmp_path / "user.db", Flow(id="morning", nodes=[Node("a", "open-menu"), Node("b", "save-file")]), app="paint.exe")
     server = make_server(tmp_path)
     try:
         status, started, _ = call(server, "/api/flows/morning/run", "POST", {"app": "paint.exe"})
@@ -246,7 +246,7 @@ def slow_server(tmp_path, flows=1, **kw):
     desktop.click_seconds = 0.6  # long enough to still be running when the next request arrives
     save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
     for number in range(flows):
-        save_flow(tmp_path / "user.db", Flow(id=f"f{number}", nodes=[Node("a", "open-menu")]))
+        save_flow_on(tmp_path / "user.db", Flow(id=f"f{number}", nodes=[Node("a", "open-menu")]), app="paint.exe")
     server = ApiServer(tmp_path / "user.db", None, lambda app: desktop, token="secret-token", **kw)
     server.start()
     return server

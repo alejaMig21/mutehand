@@ -18,7 +18,7 @@ from workflow_factory.queue import answer_doubt, list_doubts, record_run
 from workflow_factory.steps import record_app_name, revalidate_changed_versions
 from workflow_factory.tutor import mark_private
 
-from fake_desktop import FakeDesktop, button, save_flow_on, save_legacy_flow, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 pytestmark = pytest.mark.web
 
@@ -668,12 +668,3 @@ def test_home_fits_a_narrow_window_and_stays_readable(tmp_path, width, height):
         assert page.evaluate(CONTRAST) == []
 
 
-def test_an_app_remembered_in_another_spelling_runs_on_the_taught_one(tmp_path):
-    put_flows(tmp_path)
-    save_legacy_flow(tmp_path / "user.db", Flow(id="morning", nodes=[Node("n1", "open-menu"), Node("n2", "save-file")]), app="PAINT")
-    asked = []
-    desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
-    with home(tmp_path, desktop_for=lambda app: asked.append(app) or desktop) as (page, _):
-        run_button(page, "morning").click()
-        says(page, "morning", "Worked")
-        assert set(asked) == {"paint.exe"}
