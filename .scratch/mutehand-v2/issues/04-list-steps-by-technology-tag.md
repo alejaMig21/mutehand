@@ -6,10 +6,15 @@ Spec: `../spec.md`. ADR: `docs/adr/0007-generic-steps-with-tags-and-components.m
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Listing by technology, by tag and by text each return the expected steps; a query "sav" finds "Save"; accents and capitals are ignored
-- [ ] A step known on several technologies appears once with all of them
-- [ ] A private technology contributes counts and no names or tags
-- [ ] The same search rule is exposed to the HTTP API's step listing so the panel can use it
-- [ ] Behaviour is proven by MCP and API tests, red before green
+- [x] Listing by technology, by tag and by text each return the expected steps; a query "sav" finds "Save"; accents and capitals are ignored
+- [x] A step known on several technologies appears once with all of them
+- [x] A private technology contributes counts and no names or tags
+- [x] The same search rule is exposed to the HTTP API's step listing so the panel can use it
+- [x] Behaviour is proven by MCP and API tests, red before green
+
+## Answer
+
+`list_known_steps(technology, tag, query)` returns one entry per step name with tags, technologies and state, with one shared search rule (a Python rule and a web port tested with the same vectors); a private technology is counted, never named. `GET /api/steps` takes `q` and `tech`. Later review fix: the step list shows no control name of a private technology.
+Commits: 3a19b7f, 92d4465.

@@ -6,10 +6,15 @@ Spec: `../spec.md`. ADR: `docs/adr/0007-generic-steps-with-tags-and-components.m
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Teaching "Save" in Paint and then in Excel gives one step with two technologies, each with its own measured effect and counters
-- [ ] Teaching "Save workbook" or "Excel save" is refused with a message that names the rule; nothing is saved
-- [ ] Pattern tags given when teaching are kept and returned; teaching again on another technology does not lose them
-- [ ] Consent and private-technology rules behave as before, per step and technology
-- [ ] Behaviour is proven by MCP tests through the in-process client with the stand-in desktop, red before green; existing tutor tests are updated with the model
+- [x] Teaching "Save" in Paint and then in Excel gives one step with two technologies, each with its own measured effect and counters
+- [x] Teaching "Save workbook" or "Excel save" is refused with a message that names the rule; nothing is saved
+- [x] Pattern tags given when teaching are kept and returned; teaching again on another technology does not lose them
+- [x] Consent and private-technology rules behave as before, per step and technology
+- [x] Behaviour is proven by MCP tests through the in-process client with the stand-in desktop, red before green; existing tutor tests are updated with the model
+
+## Answer
+
+`teach_step` refuses a name that carries a technology, accepts pattern tags, and teaching a known name on a new technology adds a locator. Later review fix: a known name taught with another action is refused before the app is touched.
+Commits: f2a2782, e1d8733.

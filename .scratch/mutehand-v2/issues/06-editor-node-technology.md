@@ -6,10 +6,15 @@ Spec: `../spec.md`. ADR: `docs/adr/0007-generic-steps-with-tags-and-components.m
 
 **Blocked by:** 05
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A step node card and its detail show the technology with the program's name as the screens call it
-- [ ] Changing the technology of a node offers only technologies the step is learned for and keeps it after a reload
-- [ ] The flow screen has no program selector; saving, running and Undo still work
-- [ ] It fits 683 px and 390 px wide windows, works from the keyboard and keeps its contrast
-- [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop, red before green
+- [x] A step node card and its detail show the technology with the program's name as the screens call it
+- [x] Changing the technology of a node offers only technologies the step is learned for and keeps it after a reload
+- [x] The flow screen has no program selector; saving, running and Undo still work
+- [x] It fits 683 px and 390 px wide windows, works from the keyboard and keeps its contrast
+- [x] Behaviour is proven by browser tests against the real API with the stand-in desktop, red before green
+
+## Answer
+
+A node card and its detail show the technology and a "Runs on" chooser offers only the technologies the step is learned for; the program selector left the flow screen.
+Commits: f084534, a7b890a.

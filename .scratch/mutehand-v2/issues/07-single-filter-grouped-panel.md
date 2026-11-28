@@ -6,11 +6,16 @@ Spec: `../spec.md`. ADR: `docs/adr/0007-generic-steps-with-tags-and-components.m
 
 **Blocked by:** 04, 06
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Typing "Excel" lists the steps learned for Excel; typing "Save" lists every Save whatever the technology; a universal step does not appear in either
-- [ ] Sections collapse and expand, announce their name and state to a screen reader, and follow the rules for the empty and typing states
-- [ ] The old program selector and the "decisions and repeats" section are gone; the system nodes appear under their own groups
-- [ ] A message shows when nothing matches; the entry to teach stays
-- [ ] It fits 683 px and 390 px, works from the keyboard alone, and keeps its contrast
-- [ ] Behaviour is proven by browser tests against the real API with the stand-in desktop, red before green
+- [x] Typing "Excel" lists the steps learned for Excel; typing "Save" lists every Save whatever the technology; a universal step does not appear in either
+- [x] Sections collapse and expand, announce their name and state to a screen reader, and follow the rules for the empty and typing states
+- [x] The old program selector and the "decisions and repeats" section are gone; the system nodes appear under their own groups
+- [x] A message shows when nothing matches; the entry to teach stays
+- [x] It fits 683 px and 390 px, works from the keyboard alone, and keeps its contrast
+- [x] Behaviour is proven by browser tests against the real API with the stand-in desktop, red before green
+
+## Answer
+
+One search box matches names and tags; the panel has collapsible sections by node type (Steps, Components, Triggers, Order, Logic, Data), Escape clears the box, and a step with several technologies asks which one. The matching rule is a port of the server's, with shared test vectors.
+Commits: a7cbc46, 75bc109, 4dad0e6.

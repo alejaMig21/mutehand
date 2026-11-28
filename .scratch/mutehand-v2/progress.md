@@ -1,4 +1,6 @@
-# Mutehand model v2, phase 1: progress (paused 2026-11-27, battery)
+# Mutehand model v2, phase 1: progress (finished 2026-11-28)
+
+All ten tickets are resolved and merged; the paused-state notes below are history. Ticket 11 (separate steps and locators in storage) is for a later phase.
 
 Integration branch: `mutehand-v2` (local only, nothing pushed). Tip when paused: `11a0ae0`. Base: `step-model-v2` (ADR 0007, spec, tickets).
 Remote: `https://github.com/alejaMig21/mutehand` (public). PR #1 (editor rethink + packaging + Mutehand rename) is merged; local `main` = remote `main`.
