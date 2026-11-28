@@ -44,6 +44,7 @@ def editor(tmp_path):
 def reveal(page, testid):
     """Open the panel section that holds a system node: Triggers, Order, Logic and Data start closed."""
     entry = page.get_by_test_id(testid)
+    entry.wait_for(state="attached")  # the steps arrive after the page: a section must not be toggled before they do
     if not entry.is_visible():
         page.locator("details.section", has=entry).locator("summary").click()
     return entry
