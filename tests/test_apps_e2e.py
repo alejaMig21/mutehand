@@ -90,7 +90,7 @@ def test_an_app_opens_with_its_actions_problems_first_each_with_its_button(tmp_p
         stub_clipboard(page)
         apps_screen(page)
         assert "5 steps" in app_row(page, "excel.exe").inner_text()
-        assert "2 to fix" in app_row(page, "excel.exe").inner_text()
+        assert "2 need attention" in app_row(page, "excel.exe").inner_text()
         app_row(page, "excel.exe").click()
         card = page.get_by_test_id("app-card-excel.exe")
         card.wait_for()
@@ -100,7 +100,7 @@ def test_an_app_opens_with_its_actions_problems_first_each_with_its_button(tmp_p
         assert order == ["app-relearn", "app-problem-Save", "app-step-New spreadsheet", "app-step-Open file",
                          "app-step-Write in a cell"]
         assert "learned again" in card.get_by_test_id("app-relearn").inner_text()
-        assert "You rejected it." in card.get_by_test_id("app-problem-Save").inner_text()
+        assert "You blocked it." in card.get_by_test_id("app-problem-Save").inner_text()
 
         card.get_by_test_id("app-message-relearn").click()
         message = card.get_by_test_id("chat-text").inner_text()
@@ -110,7 +110,7 @@ def test_an_app_opens_with_its_actions_problems_first_each_with_its_button(tmp_p
         card.get_by_test_id("app-problem-Save").wait_for(state="detached")
         assert state_of(db, "Save") != "rejected"
         card.get_by_test_id("app-close").click()
-        app_row(page, "excel.exe").filter(has_text="1 to fix").wait_for()
+        app_row(page, "excel.exe").filter(has_text="1 needs attention").wait_for()
 
 
 def test_taking_a_permission_back_asks_first_says_what_stops_and_removes_only_that_consent(tmp_path):
@@ -226,7 +226,7 @@ def test_no_screen_content_of_a_private_app_reaches_the_screen_a_search_or_a_mes
         card.wait_for()
         card.get_by_role("button", name="Take back").click()
         card.get_by_test_id("take-back-ask").wait_for()
-        card.get_by_role("button", name="Show me what to send").first.click()
+        card.get_by_role("button", name="Show me the message to copy").first.click()
         words = page.get_by_test_id("app-card-telegram.exe").inner_text() + page.get_by_test_id("chat-text").first.inner_text()
         for secret in ("Ana Ruiz", "4471", "open-chat", "Bank code"):
             assert secret not in words, secret

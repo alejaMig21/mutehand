@@ -18,7 +18,7 @@ export const RUN_MARKS = {
   unreached: ['clock', 'Not reached', 'muted'], continued: ['skip', 'Carried on', 'warn'], paused: ['pause', 'Paused: you moved the mouse', 'warn'],
 }
 // A rejected step blocks the flow, so it is said on its node; how far a step is trusted is not.
-const REJECTED = ['xcircle', 'Rejected', 'bad']
+const REJECTED = ['xcircle', 'Blocked', 'bad']
 
 export function marksFor(node, meta, runStatus) {
   const marks = []

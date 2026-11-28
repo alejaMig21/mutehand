@@ -44,7 +44,7 @@ def test_home_says_which_program_has_not_learned_a_step_and_touches_nothing(tmp_
         Node("a", "save", technology="excel.exe"), Node("b", "save", technology="word.exe")]), "Both programs")
     with home(tmp_path, desktop_for=desktops.__getitem__) as (page, _):
         button_ = run_button(page, "both")
-        button_.filter(has_text="Cannot run yet").wait_for()
+        button_.filter(has_text="Not ready yet").wait_for()
         assert page.get_by_test_id("flow-why-both").inner_text().strip() == "“save” is not learned for Word yet."
         assert button_.is_disabled()
     assert all(d.calls == [] for d in desktops.values())

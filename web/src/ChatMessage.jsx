@@ -4,7 +4,7 @@ import { Icon } from './icons.jsx'
 // A message the person sends to the tutor in a chat, with a button that copies it. The editor only shows the words:
 // nothing starts here. `message` must never hold screen content of a private app.
 // `onCopy` runs first, to keep what the message was made from (a note the person added) before it leaves.
-export default function ChatMessage({ message, intro = 'Copy this message and paste it in your assistant chat:', onCopy }) {
+export default function ChatMessage({ message, intro = 'Copy this message and paste it where you talk to your assistant:', onCopy }) {
   const [outcome, setOutcome] = useState({}) // what was said about copying belongs to the words that were copied
   const text = useRef(null)
 

@@ -95,7 +95,7 @@ function Flow({ flow, title, following: { runs, follow, attach, forget }, reload
   // a flow that stopped is tried again, not run: what it is waiting for is the person's Try again
   const again = Boolean(stopped) && !stopped.rejected_by_person.length
   const why = !running && blockedWords(again && flow.blocked?.why === 'question' ? null : flow.blocked, Object.keys(flow.blocked?.by_technology ?? {}).filter(Boolean).map(appLabel).join(', '))
-  const label = running ? 'Stop' : starting ? 'Running…' : why ? 'Cannot run yet' : again ? 'Try again' : 'Run now'
+  const label = running ? 'Stop' : starting ? 'Running…' : why ? 'Not ready yet' : again ? 'Try again' : 'Run now'
   const unavailable = starting || (running && !run.armed) || Boolean(why)
 
   async function press() {

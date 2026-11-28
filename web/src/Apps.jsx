@@ -179,8 +179,8 @@ function Relearn({ steps, name, hidden }) {
         {!hidden && ` ${steps.map((step) => `“${step.name}”`).join(', ')}`}
       </p>
       <button data-testid="app-message-relearn" aria-expanded={message} onClick={() => setMessage(!message)}
-        aria-label={`${message ? 'Hide the message' : 'Show me what to send'}: ${name}`}>
-        <Icon name="chat" size={20} /> {message ? 'Hide the message' : 'Show me what to send'}
+        aria-label={`${message ? 'Hide the message' : 'Show me the message to copy'}: ${name}`}>
+        <Icon name="chat" size={20} /> {message ? 'Hide the message' : 'Show me the message to copy'}
       </button>
       {message && <div className="help-panel"><ChatMessage message={relearnMessage(name)} /></div>}
     </div>
@@ -209,7 +209,7 @@ function Problem({ step, name, hidden, onChanged }) {
   return (
     <div className="app-problem" data-testid={`app-problem-${step.name}`}>
       <Icon name="alert" size={24} />
-      <p><b>{title}</b> is rejected. {hidden && step.why?.kind !== 'person' ? '' : whyWords(step.why)}</p>
+      <p><b>{title}</b> is blocked. {hidden && step.why?.kind !== 'person' ? '' : whyWords(step.why)}</p>
       <button className="primary" data-testid={`app-allow-again-${step.name}`} aria-disabled={busy || undefined}
         aria-label={`Allow again: ${hidden ? name : step.name}`} onClick={allow}>Allow again</button>
       {problem && <p className="stopped-problem" role="alert">{problem}</p>}

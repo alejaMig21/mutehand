@@ -115,6 +115,58 @@ def test_a_pasted_wall_of_text_echoed_in_no_results_stays_inside_the_screen(tmp_
         assert page.locator("main").evaluate("(e) => e.scrollWidth <= e.clientWidth")  # and the screen does not scroll sideways
 
 
+# --- 7: the name at the top leads Home ---------------------------------------------------------------------------------------
+
+def test_the_name_at_the_top_left_goes_home_from_every_screen(tmp_path):
+    put_flows(tmp_path)
+    with home(tmp_path) as (page, _):
+        brand = page.get_by_role("button", name="Mutehand", exact=False).first
+        apps_screen(page)
+        brand.click()
+        page.get_by_role("heading", name="Your flows").wait_for()
+        assert page.get_by_test_id("tab-home").get_attribute("aria-current") == "page"
+        page.get_by_test_id("open-flow-morning").click()
+        page.get_by_test_id("flow-title").wait_for()
+        brand.click()
+        page.get_by_role("heading", name="Your flows").wait_for()
+
+
+# --- 8: New flow makes no flow until it has a node ---------------------------------------------------------------------------
+
+def test_tapping_new_flow_twice_leaves_no_empty_flow_in_the_list(tmp_path):
+    put_flows(tmp_path)
+    with served(tmp_path) as (page, _, _):
+        says(page, "morning", "Never run")
+        for _ in range(2):
+            page.get_by_test_id("new-flow").click()
+            page.get_by_test_id("flow-title").wait_for()
+            page.get_by_test_id("back-home").click()
+            page.get_by_role("heading", name="Your flows").wait_for()
+        page.get_by_test_id("new-flow").dblclick()  # two quick taps on the same button
+        page.get_by_test_id("flow-title").wait_for()
+        page.get_by_test_id("back-home").click()
+        page.get_by_role("heading", name="Your flows").wait_for()
+        says(page, "morning", "Never run")
+        assert page.locator('[data-testid^="open-flow-"]').count() == 1  # only Morning report exists
+
+
+def test_an_empty_flow_exists_only_when_a_node_was_added_and_then_removed(tmp_path):
+    """The one way to get "New flow" in the list with nothing in it: its first node made it, and the person took the node out."""
+    put_flows(tmp_path)
+    with served(tmp_path) as (page, _, _):
+        says(page, "morning", "Never run")
+        page.get_by_test_id("new-flow").click()
+        page.get_by_test_id("search").fill("wait")
+        page.get_by_test_id("system-wait").click()
+        page.get_by_test_id("run-status").filter(has_text="Saved").wait_for()
+        page.locator(".react-flow__node").first.click()
+        page.get_by_test_id("delete-node").click()
+        page.get_by_test_id("removed-notice").wait_for()
+        page.get_by_test_id("run-status").filter(has_text="Saved").wait_for()
+        page.get_by_test_id("back-home").click()
+        says(page, "new-flow", "Never run")  # kept by the earlier decision: a flow is made by its first node
+
+
 # --- 1: a step learned for many programs stays short on its card, and asking which one stays on the screen -------------------
 
 def many_programs(tmp_path, count=30):

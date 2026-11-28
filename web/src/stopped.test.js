@@ -25,7 +25,7 @@ test('a node in a private app is not named, and a stop with no time is still sai
 test('a stop the person caused says to allow the step again before anything else', () => {
   const says = stoppedWords({ ...item, rejected_by_person: [{ app: 'paint.exe', step: 'close-message' }] }, now)
 
-  assert.match(says.hint, /rejected/)
+  assert.match(says.hint, /blocked/)
   assert.match(says.hint, /Allow again/)
 })
 
@@ -103,7 +103,7 @@ test('the update message is one text, with or without the flows that wait', () =
 })
 
 test('a rejected step says who rejected it, and a private app is not named', () => {
-  assert.equal(rejectedWords({ app: 'paint.exe', step: 'save-file', private: false, why: { kind: 'person' }, flows }).title, '“save-file” is rejected')
+  assert.equal(rejectedWords({ app: 'paint.exe', step: 'save-file', private: false, why: { kind: 'person' }, flows }).title, '“save-file” is blocked')
   const hidden = rejectedWords({ app: 'vault.exe', step: 'secret-step', private: true, why: { kind: 'different_effect' }, flows })
 
   assert.doesNotMatch(JSON.stringify(hidden), /secret-step/)

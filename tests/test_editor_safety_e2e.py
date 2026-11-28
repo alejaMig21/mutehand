@@ -206,7 +206,7 @@ def test_the_flow_screen_notices_what_was_changed_in_apps(app):
     reject_step(folder / "user.db", "paint.exe", "save-file")  # another window, or the tutor, did it
     page.get_by_test_id("tab-home").click()
     page.get_by_test_id("open-flow-morning").click()
-    page.get_by_test_id("node-n2").filter(has_text="Rejected").wait_for()
+    page.get_by_test_id("node-n2").filter(has_text="Blocked").wait_for()
     assert page.get_by_test_id("run").is_disabled()
 
     page.get_by_role("button", name="Open Apps").click()  # the notice says where to go
@@ -217,7 +217,7 @@ def test_the_flow_screen_notices_what_was_changed_in_apps(app):
     page.get_by_test_id("open-flow-morning").click()
 
     page.get_by_test_id("node-n2").wait_for()
-    page.get_by_test_id("node-n2").filter(has_not_text="Rejected").wait_for()  # read again as the screen comes back
+    page.get_by_test_id("node-n2").filter(has_not_text="Blocked").wait_for()  # read again as the screen comes back
     assert page.get_by_test_id("run").is_enabled()
 
 
@@ -381,7 +381,7 @@ def test_the_list_of_steps_says_what_is_rejected_or_already_allowed(app):
     reject_step(folder / "user.db", "paint.exe", "save-file")
     page.reload()
 
-    assert "Rejected" in page.get_by_test_id("palette-save-file").inner_text()
+    assert "Blocked" in page.get_by_test_id("palette-save-file").inner_text()
     assert "Consent given" in page.get_by_test_id("palette-send-it").inner_text()
 
 
@@ -439,8 +439,8 @@ def test_an_app_says_why_an_action_is_blocked_and_what_allowing_it_again_does(ap
     page.get_by_test_id("app-row-paint.exe").click()
 
     failed = page.get_by_test_id("app-problem-Menu opens").inner_text()
-    assert "is rejected" in failed and "something new appeared" in failed and "nothing changed on screen" in failed
-    assert "You rejected it" in page.get_by_test_id("app-problem-save-file").inner_text()
+    assert "is blocked" in failed and "something new appeared" in failed and "nothing changed on screen" in failed
+    assert "You blocked it" in page.get_by_test_id("app-problem-save-file").inner_text()
     assert page.get_by_test_id("app-problem-open-menu").count() == 0  # only a blocked action needs a reason
 
     page.get_by_test_id("tab-home").click()

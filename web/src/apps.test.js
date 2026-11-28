@@ -8,7 +8,7 @@ const stops = (steps, flows) => ({ steps, flows: flows.map((title) => ({ id: tit
 
 test('a row has a note only when something needs the person, a stopped flow first', () => {
   assert.equal(noteWords(row(), 0), null)
-  assert.deepEqual(noteWords(row({ problems: 2 }), 0), { words: '2 to fix', tone: 'warn' })
+  assert.deepEqual(noteWords(row({ problems: 2 }), 0), { words: '2 need attention', tone: 'warn' })
   assert.deepEqual(noteWords(row({ problems: 2 }), 1), { words: '1 stopped', tone: 'bad' })
   assert.deepEqual(noteWords(row(), 3), { words: '3 stopped', tone: 'bad' })
 })

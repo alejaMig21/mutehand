@@ -16,7 +16,7 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
 // [icon, words, tone]: each with an icon and words, never colour alone.
 export function summaryMarks(summary) {
   const marks = []
-  if (summary.rejected.length) marks.push(['xcircle', plural(summary.rejected.length, 'rejected step', 'rejected steps'), 'bad'])
+  if (summary.rejected.length) marks.push(['xcircle', plural(summary.rejected.length, 'blocked step', 'blocked steps'), 'bad'])
   if (summary.missing.length) marks.push(['alert', plural(summary.missing.length, 'step not taught yet', 'steps not taught yet'), 'bad'])
   if (summary.needsConsent) marks.push(['lock', plural(summary.needsConsent, 'step needs consent', 'steps need consent'), 'warn'])
   return marks
@@ -32,5 +32,5 @@ export function whyNotRunnable(summary) {
   if (!summary.rejected.length) return ''
   const names = summary.rejected.map((r) => `'${r.step}'`).join(', ')
   const one = summary.rejected.length === 1
-  return `Will not start: ${names} ${one ? 'is' : 'are'} rejected. Open Apps to see why and allow it again.`
+  return `Will not start: ${names} ${one ? 'is' : 'are'} blocked. Open Apps to see why and allow it again.`
 }

@@ -188,7 +188,7 @@ def test_the_actions_of_an_app_are_listed_by_name_and_a_rejected_one_says_why_an
     save_step(db, step("factory-only", "Gamma", origin="factory"))
     reject_step(db, "paint.exe", "save-file")  # the person rejected it themselves
     with served(tmp_path) as (page, _, _, _):
-        says(page, "morning", "Cannot run yet")
+        says(page, "morning", "Not ready yet")
         page.get_by_test_id("attention-allow-again-paint.exe-save-file").wait_for()  # Home: the flow it blocks
         page.get_by_test_id("tab-apps").click()
         page.get_by_test_id("app-row-paint.exe").click()
@@ -196,7 +196,7 @@ def test_the_actions_of_an_app_are_listed_by_name_and_a_rejected_one_says_why_an
         card.get_by_test_id("app-problem-save-file").wait_for()
         assert "3 steps" in card.inner_text()
         assert {"open-menu", "factory-only"} <= {a.inner_text() for a in card.locator("[data-testid^=app-step-]").all()}
-        assert "You rejected it." in card.get_by_test_id("app-problem-save-file").inner_text()
+        assert "You blocked it." in card.get_by_test_id("app-problem-save-file").inner_text()
 
         card.get_by_test_id("app-allow-again-save-file").click()
 

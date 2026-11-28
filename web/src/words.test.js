@@ -46,7 +46,7 @@ test('why a step is rejected is told as what happened', () => {
   const different = whyWords({ kind: 'different_effect', expected: 'revealed', got: 'no_change', at: '2026-01-01T09:30:00Z' })
 
   assert.match(different, /When it was learned, something new appeared\. The last time it ran, nothing changed on screen/)
-  assert.equal(whyWords({ kind: 'person' }), 'You rejected it.')
+  assert.equal(whyWords({ kind: 'person' }), 'You blocked it.')
   assert.match(whyWords(null), /not recorded/)
 })
 
@@ -73,7 +73,7 @@ test('why a flow cannot run is said with its steps and its app, never as a code'
   for (const why of ['empty', 'expression', 'question', 'unreadable', 'something_new']) assert.match(words(why), /^[A-Z][^_]*\.$/, why)
   assert.equal(words('not_learned', ['a', 'b']), '“a”, “b” are not learned for Paint yet.')
   assert.equal(blockedWords({ why: 'not_learned', steps: ['a'] }, ''), '“a” is not learned yet.')
-  assert.equal(words('rejected', ['a', 'b']), '“a”, “b” are rejected. To run this flow, press “Allow again”: on Home, in “Needs your attention”, or on Apps.')
+  assert.equal(words('rejected', ['a', 'b']), '“a”, “b” are blocked. To run this flow, press “Allow again”: on Home, in “Needs your attention”, or on Apps.')
   assert.equal(words('to_revalidate', ['a', 'b']), 'Paint was updated: “a”, “b” have to be learned again.')
   assert.equal(blockedWords(null, 'Paint'), '')
 })
@@ -127,4 +127,14 @@ test('the screens say flow, node and step: never chore, box or action', async ()
 
 test('a flow with nothing in it says steps, the word the screens use', () => {
   assert.equal(blockedWords({ why: 'empty', steps: [] }, ''), 'It has no steps yet. Open it to add some.')
+})
+
+test('what a person reads has none of the words the personas could not follow', async () => {
+  const { readdirSync, readFileSync } = await import('node:fs')
+  const jargon = /\b(?:to fix|Cannot run yet|Show me what to send|assistant chat|Run data)\b|\b[Rr]ejected\b/
+  const quoted = /(['"`])(?:(?!\1)[^\n\\])*\1/g // a sentence in quotes is shown; one word, an identifier or a state kept as data is not
+  for (const file of readdirSync(new URL('.', import.meta.url)).filter((name) => /\.jsx?$/.test(name) && !name.includes('.test.'))) {
+    const sentences = (readFileSync(new URL(file, import.meta.url), 'utf8').match(quoted) ?? []).filter((text) => /\s/.test(text))
+    assert.deepEqual(sentences.filter((text) => jargon.test(text)), [], file)
+  }
 })

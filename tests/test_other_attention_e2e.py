@@ -68,8 +68,8 @@ def test_a_rejected_action_that_blocks_a_flow_says_why_and_allow_again_lifts_it(
         card = page.get_by_test_id("attention-rejected-paint.exe-save-file")
         card.wait_for()
         text = card.inner_text()
-        assert "“save-file” is rejected" in text and "You rejected it." in text and "“Morning report”" in text
-        assert "Cannot run yet" in row(page, "morning").inner_text()
+        assert "“save-file” is blocked" in text and "You blocked it." in text and "“Morning report”" in text
+        assert "Not ready yet" in row(page, "morning").inner_text()
 
         card.get_by_role("button", name="Allow again").click()
 

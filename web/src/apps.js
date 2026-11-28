@@ -11,7 +11,7 @@ const many = (n, one, other) => `${n} ${n === 1 ? one : other}`
 // The note on an app's row, or null when nothing there needs the person. `stopped` counts the flows stopped on that app.
 export function noteWords(row, stopped) {
   if (stopped) return { words: `${stopped} stopped`, tone: 'bad' }
-  return row.problems ? { words: `${row.problems} to fix`, tone: 'warn' } : null
+  return row.problems ? { words: `${row.problems} ${row.problems === 1 ? 'needs' : 'need'} attention`, tone: 'warn' } : null
 }
 
 // What a permission lets the apprentice do. "*" is every control of the app.

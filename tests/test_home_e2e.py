@@ -224,7 +224,7 @@ def unreadable(db):
     (not_learned, "“print-it” is not learned for Paint yet."),
     (learned_for_another_app, "“open-menu” is not learned for Word yet."),
     (never_learned_at_all, "“print-it” is not learned yet."),
-    (rejected, "“save-file” is rejected. To run this flow, press “Allow again”: on Home, in “Needs your attention”, or on Apps."),
+    (rejected, "“save-file” is blocked. To run this flow, press “Allow again”: on Home, in “Needs your attention”, or on Apps."),
     (app_updated, "Paint was updated: “open-menu” has to be learned again."),
     (an_expression, "It uses an expression, which cannot run yet."),
     (unreadable, "It cannot be read."),
@@ -236,7 +236,7 @@ def test_a_flow_that_cannot_run_says_so_on_its_button_and_why(tmp_path, trouble,
         pressed = []
         page.on("request", lambda r: pressed.append(r.url) if r.method == "POST" else None)
         button_ = run_button(page, "stuck")
-        button_.filter(has_text="Cannot run yet").wait_for()
+        button_.filter(has_text="Not ready yet").wait_for()
         assert button_.is_disabled()
         assert page.get_by_test_id("flow-why-stuck").inner_text().strip() == why
         # the reason is read with the button, which stays reachable by the keyboard
@@ -650,7 +650,7 @@ def test_home_fits_a_narrow_window_and_stays_readable(tmp_path, width, height):
 
     with home(tmp_path, desktop) as (page, _):
         page.set_viewport_size({"width": width, "height": height})
-        run_button(page, "long-2").filter(has_text="Cannot run yet").wait_for()
+        run_button(page, "long-2").filter(has_text="Not ready yet").wait_for()
         fine()
         run_button(page, "long-1").click()
         run_button(page, "long-1").filter(has_text="Stop").wait_for()

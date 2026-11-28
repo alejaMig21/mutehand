@@ -519,7 +519,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     setError('')
     try {
       let values
-      try { values = JSON.parse(context || '{}') } catch { throw new Error('Run data is not valid JSON.') }
+      try { values = JSON.parse(context || '{}') } catch { throw new Error('The starting values are not written correctly. Leave them as {} if the flow needs none.') }
       const id = await ensureStored()
       if (!id) return
       forget(id)
@@ -677,11 +677,11 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
 
         <div className="menu-anchor">
           <button className="ghost" data-testid="run-data" aria-expanded={menu === 'data'} onClick={() => setMenu(menu === 'data' ? null : 'data')}>
-            Run data
+            Starting values
           </button>
           {menu === 'data' && (
             <div className="menu wide">
-              <label htmlFor="run-context">Starting values for this run, optional. Only nodes that read “Run data” use them.</label>
+              <label htmlFor="run-context">Starting values for this run, optional. Only nodes that read “Starting values” use them.</label>
               <small data-testid="context-hint">{'{}'} means nothing: leave it so if the flow needs no starting values.</small>
               <textarea id="run-context" data-testid="context" value={context} rows={4} onChange={(e) => setContext(e.target.value)} />
             </div>

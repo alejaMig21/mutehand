@@ -13,7 +13,7 @@ export function stoppedWords(item, now = new Date()) {
   const app = appLabel(item.app || 'the app')
   const when = item.at ? ` ${sinceWords(item.at, now)}` : ''
   const hint = item.rejected_by_person?.length
-    ? 'You rejected a step this flow uses, so trying again would not run it. Press “Allow again” first.'
+    ? 'You blocked a step this flow uses, so trying again would not run it. Press “Allow again” first.'
     : ON_SCREEN.includes(item.reason)
       ? `Open ${app} the way you usually do, then try again. You will be told whether it worked.`
       : 'Try again, or ask for help. You will be told whether it worked.'
@@ -87,7 +87,7 @@ export function rejectedWords(item) {
   const why = item.why?.kind === 'person' ? whyWords(item.why)
     : item.private ? 'It did not do what it was taught to do the last time it ran.' : whyWords(item.why)
   return {
-    title: item.private ? `A step in ${app} is rejected` : `“${item.step}” is rejected`,
+    title: item.private ? `A step in ${app} is blocked` : `“${item.step}” is blocked`,
     detail: `${why} ${item.flows.length > 1 ? 'These flows cannot run' : 'This flow cannot run'}: ${titles(item.flows)}.`,
   }
 }

@@ -488,10 +488,10 @@ def test_a_flow_with_a_rejected_step_says_which_one_and_cannot_be_started(tmp_pa
             page.get_by_test_id("flow-blocked").click()
             note = page.get_by_test_id("cannot-start")
             note.wait_for()
-            assert "'save-file' is rejected" in note.inner_text()
+            assert "'save-file' is blocked" in note.inner_text()
             assert page.get_by_test_id("run").is_disabled()
-            assert "1 rejected step" in page.get_by_test_id("safety-summary").inner_text()
-            assert "Rejected" in page.get_by_test_id("node-b").inner_text()
+            assert "1 blocked step" in page.get_by_test_id("safety-summary").inner_text()
+            assert "Blocked" in page.get_by_test_id("node-b").inner_text()
             browser.close()
     finally:
         server.stop()

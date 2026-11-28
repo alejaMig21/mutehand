@@ -238,7 +238,7 @@ def test_an_app_with_ten_actions_to_learn_again_offers_one_message_in_plain_word
         apps_screen(page)
         app_row(page, "excel.exe").click()
         card = page.get_by_test_id("app-card-excel.exe")
-        buttons = card.get_by_role("button", name="Show me what to send")
+        buttons = card.get_by_role("button", name="Show me the message to copy")
         buttons.wait_for()
         assert buttons.count() == 1
         buttons.click()

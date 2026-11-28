@@ -30,21 +30,21 @@ const programs = (apps) => {
 // Asks which program a step node is for. The first choice has the focus; Escape, or a press anywhere else, leaves without adding anything.
 // The programs scroll inside it, so Cancel stays in view however many there are.
 function Chooser({ name, apps, onChoose, onCancel }) {
-  const box = useRef(null)
+  const frame = useRef(null)
   const first = useRef(null)
   const leave = useRef(onCancel)
   leave.current = onCancel
   useEffect(() => {
     first.current?.focus()
-    box.current?.scrollIntoView({ block: 'nearest' })
-    const away = (e) => { if (e.type === 'keydown' ? e.key === 'Escape' : !box.current?.contains(e.target)) leave.current() }
+    frame.current?.scrollIntoView({ block: 'nearest' })
+    const away = (e) => { if (e.type === 'keydown' ? e.key === 'Escape' : !frame.current?.contains(e.target)) leave.current() }
     document.addEventListener('pointerdown', away)
     document.addEventListener('keydown', away)
     return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', away) }
   }, [])
   return (
     <li>
-      <div role="group" aria-label={`Which program for ${name}?`} className="chooser" data-testid="technology-chooser" ref={box}>
+      <div role="group" aria-label={`Which program for ${name}?`} className="chooser" data-testid="technology-chooser" ref={frame}>
         <p>Which program for “{name}”?</p>
         <div className="chooser-apps">
           {apps.map((app, i) => (
@@ -96,7 +96,7 @@ export default function SearchPanel({ steps, recipes, onAddSystem, onAddStep, on
           return [
             <Entry key={item.name} title={item.name} hint={programs(item.technologies).text} hintTitle={programs(item.technologies).all} data-testid={`palette-${item.name}`}
               onClick={() => press(item)} {...('app' in pick ? draggable({ app: pick.app, step: item.name }) : {})}>
-              {row.state === 'rejected' && <span className="tag tone-bad"><Icon name="xcircle" size={13} /> Rejected</span>}
+              {row.state === 'rejected' && <span className="tag tone-bad"><Icon name="xcircle" size={13} /> Blocked</span>}
               {row.sensitive && (row.consent === 'given'
                 ? <span className="tag tone-muted"><Icon name="lock" size={13} /> Consent given</span>
                 : <span className="tag tone-warn"><Icon name="lock" size={13} /> Needs consent</span>)}

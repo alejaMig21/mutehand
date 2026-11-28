@@ -5,7 +5,7 @@ const REASONS = {
   control_not_found: 'The button or field this step uses is not on the screen.',
   unreadable: 'The control is there but cannot be read.',
   out_of_frame: 'The app window is not set up the way it was when the step was learned.',
-  rejected: 'This step is rejected.',
+  rejected: 'This step is blocked.',
   to_revalidate: 'The app was updated, so this step needs a re-check.',
   template_no_match: 'The picture this step looks for is not on the screen.',
   missing_input: 'A value this node needs was not there.',
@@ -109,15 +109,15 @@ export function blockedWords(blocked, app) {
   const names = steps.map((step) => `“${step}”`).join(', ')
   const one = steps.length === 1
   if (why === 'not_learned') return `${names} ${one ? 'is' : 'are'} not learned ${app ? `for ${app} ` : ''}yet.`
-  if (why === 'rejected') return `${names} ${one ? 'is' : 'are'} rejected. To run this flow, press “Allow again”: on Home, in “Needs your attention”, or on Apps.`
+  if (why === 'rejected') return `${names} ${one ? 'is' : 'are'} blocked. To run this flow, press “Allow again”: on Home, in “Needs your attention”, or on Apps.`
   if (why === 'to_revalidate') return `${app} was updated: ${names} ${one ? 'has' : 'have'} to be learned again.`
   return BLOCKED[why] ?? `It cannot run: ${spaced(why)}.`
 }
 
-// What rejected a step: {kind: 'person'} or {kind: 'different_effect', expected, got, at}.
+// What blocked a step: {kind: 'person'} or {kind: 'different_effect', expected, got, at}.
 export function whyWords(why) {
-  if (why?.kind === 'person') return 'You rejected it.'
-  if (why?.kind !== 'different_effect') return 'Why it was rejected was not recorded.'
+  if (why?.kind === 'person') return 'You blocked it.'
+  if (why?.kind !== 'different_effect') return 'Why it was blocked was not recorded.'
   return `When it was learned, ${effectWords(why.expected)}. The last time it ran, ${effectWords(why.got)}.`
     + (why.at ? ` (${whenWords(why.at)})` : '')
 }

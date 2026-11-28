@@ -75,7 +75,7 @@ export function outputFieldsOf(node, meta = {}) {
 
 // The list a person picks a reference from: the run's starting data, then every other node's outputs.
 export function refOptions(nodes, selectedId, runKeys = [], titleOf = (n) => n.data.node.step || n.data.node.kind) {
-  const options = runKeys.map((field) => ({ node: 'run', field, label: `Run data · ${field}` }))
+  const options = runKeys.map((field) => ({ node: 'run', field, label: `Starting values · ${field}` }))
   for (const n of nodes) {
     if (n.id === selectedId) continue
     for (const field of outputFieldsOf(n.data.node, n.data.meta)) {

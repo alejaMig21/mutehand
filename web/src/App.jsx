@@ -85,7 +85,7 @@ export default function App() {
   return (
     <div className="shell">
       <nav className="tabs" aria-label="screens">
-        <span className="brand">Mutehand</span>
+        <button className="brand" data-testid="brand" aria-label="Mutehand: go to Home" onClick={() => setScreen('home')}>Mutehand</button>
         {/* the flow screen belongs to Home: its tab stays the current one */}
         {TABS.map(([id, name]) => (
           <button key={id} data-testid={`tab-${id}`} aria-current={id === screen || (id === 'home' && screen === 'editor') ? 'page' : undefined}
