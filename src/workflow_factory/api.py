@@ -161,7 +161,7 @@ class ApiServer:
             return 404, None
         untaught = missing_locators(flow, self.user_db, self.factory_db)
         if untaught:  # a recipe's hole nobody filled is just a step that was never taught
-            names = ", ".join(f"'{step}' for {_program(tech)}" if tech else f"'{step}' (it names no program)"
+            names = ", ".join(f"'{step}' for {plain_app(tech)}" if tech else f"'{step}' (it names no program)"
                               for _, step, tech in untaught)
             raise ValueError(f"This flow will not start: {names} {'has' if len(untaught) == 1 else 'have'} not been taught "
                              "yet. An agent teaches it in a chat.")
@@ -539,7 +539,7 @@ class ApiServer:
                         found = context.get(step.name, {"tags": [], "technologies": []})
                         if (not tech or plain_app(step.app) == plain_app(tech)) and search_matches(
                                 query, step.name, [*found["tags"], *found["technologies"]]):
-                            rows.append({**_step_view(step), **safety, **found})
+                            rows.append({**_step_view(step, safety["private"]), **safety, **found})
                     return self._send(200, rows)
                 if method == "GET" and path == "/api/attention":
                     return self._send(200, attention_items(api.user_db, api.factory_db, api.user_db.parent))
@@ -724,11 +724,6 @@ class ApiServer:
         return Handler
 
 
-def _program(technology: str) -> str:
-    """A program as a sentence names it: its process name without the extension."""
-    return technology.removesuffix(".exe")
-
-
 def _parse_flow(flow_id: str, body: dict) -> tuple:
     """(flow, positions or None) from a request body; ValueError when it is not a flow."""
     try:
@@ -766,9 +761,9 @@ def _safety(user_db: Path, steps: list) -> list[dict]:
     return marks
 
 
-def _step_view(step) -> dict:
-    """What the palette needs: never the secret reference, never pixels."""
-    view = asdict(step.locator)
+def _step_view(step, private: bool) -> dict:
+    """What the palette needs: never the secret reference, never pixels, and of a private app only the control's role."""
+    view = {"role": step.locator.role} if private else asdict(step.locator)
     return {"app": step.app, "name": step.name, "origin": str(step.origin), "action": step.action,
             "sensitive": str(step.sensitive) if step.sensitive else None,
             "locator": view}

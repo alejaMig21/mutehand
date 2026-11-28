@@ -433,3 +433,18 @@ def test_a_private_technology_is_counted_never_named_and_gives_no_tags(tmp_path)
     assert {"private": True, "count": 1} in everything  # only the step that exists nowhere else counts
     assert by_tag == [] and by_text == []
     assert "telegram" not in json.dumps(everything) and "send-it" not in json.dumps(everything)
+
+
+def test_an_open_doubt_of_a_private_technology_carries_its_program_and_no_text_read_from_its_screen(tmp_path):
+    from workflow_factory.queue import record_doubt
+    from workflow_factory.tutor import mark_private
+
+    db = tmp_path / "user.db"
+    mark_private(db, "telegram.exe")
+    record_doubt(db, "chat", "a", "open-chat", "control_not_found", {"button": 1, "textfield": 2}, "control_not_found",
+                 technology="telegram.exe")
+
+    [doubt] = payload(ask(server_for(tmp_path, {}), "list_open_doubts"))["result"]
+
+    assert doubt["technology"] == "telegram.exe" and doubt["step"] == "open-chat"  # a process name and a name the tutor chose
+    assert doubt["capture"] == {"button": 1, "textfield": 2}  # roles and counts, as before the model change

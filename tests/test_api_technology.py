@@ -1,5 +1,6 @@
 """A flow has no program of its own: each step node names the technology it acts on, and the API never asks for one."""
 
+import json
 import time
 
 import pytest
@@ -9,6 +10,7 @@ from test_api import call
 from workflow_factory import Flow, Node, load_flow, save_flow, save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.queue import list_doubts
+from workflow_factory.tutor import mark_private
 
 from fake_desktop import FakeDesktop, button, save_legacy_flow, step
 
@@ -122,3 +124,17 @@ def test_a_flow_saved_before_without_any_program_takes_the_program_of_its_steps(
     save_flow(db, Flow(id="old", nodes=[Node("a", "save")]), "Old")
 
     assert [n.technology for n in load_flow(db, None, "old").nodes] == ["paint.exe"]
+
+
+def test_the_step_list_shows_no_control_name_of_a_private_technology_and_search_cannot_find_it(served):
+    server, _, db = served
+    save_step(db, step("open-chat", "Chat with Ana Ruiz", app="telegram.exe"))
+    mark_private(db, "telegram.exe")
+
+    everything = call(server, "/api/steps")[1]
+    [private] = [row for row in everything if row["name"] == "open-chat"]
+    [public] = [row for row in everything if row["name"] == "print"]
+
+    assert "Ana" not in json.dumps(private) and private["locator"] == {"role": "button"}
+    assert private["technologies"] == [] and public["locator"]["name"] == "Print"  # others keep their locator
+    assert call(server, "/api/steps?q=ana")[1] == []
