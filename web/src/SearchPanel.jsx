@@ -8,11 +8,11 @@ export const DRAG_TYPE = 'application/x-workflow-entry'
 // an entry can be pressed, or dragged to the place on the canvas where it should go
 const draggable = (entry) => ({ draggable: true, onDragStart: (e) => e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(entry)) })
 
-function Entry({ title, hint, children, ...props }) {
+function Entry({ title, hint, hintTitle, children, ...props }) {
   return (
     <li>
       <button type="button" className="entry" {...props}>
-        <span className="entry-text"><b>{title}</b>{hint && <small>{hint}</small>}</span>
+        <span className="entry-text"><b>{title}</b>{hint && <small title={hintTitle}>{hint}</small>}</span>
         {children}
         <Icon name="plus" />
       </button>
@@ -20,20 +20,39 @@ function Entry({ title, hint, children, ...props }) {
   )
 }
 
-// Asks which program a step node is for. The first choice has the focus; Escape leaves without adding anything.
+// A card names at most three programs and counts the rest; the whole list is its tooltip.
+const SHOWN = 3
+const programs = (apps) => {
+  const names = apps.map(appLabel)
+  return { text: names.length > SHOWN ? `${names.slice(0, SHOWN).join(', ')} +${names.length - SHOWN} more` : names.join(', '), all: names.join(', ') }
+}
+
+// Asks which program a step node is for. The first choice has the focus; Escape, or a press anywhere else, leaves without adding anything.
+// The programs scroll inside it, so Cancel stays in view however many there are.
 function Chooser({ name, apps, onChoose, onCancel }) {
+  const box = useRef(null)
   const first = useRef(null)
-  useEffect(() => first.current?.focus(), [])
+  const leave = useRef(onCancel)
+  leave.current = onCancel
+  useEffect(() => {
+    first.current?.focus()
+    box.current?.scrollIntoView({ block: 'nearest' })
+    const away = (e) => { if (e.type === 'keydown' ? e.key === 'Escape' : !box.current?.contains(e.target)) leave.current() }
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', away)
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', away) }
+  }, [])
   return (
     <li>
-      <div role="group" aria-label={`Which program for ${name}?`} className="chooser" data-testid="technology-chooser"
-        onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel() } }}>
+      <div role="group" aria-label={`Which program for ${name}?`} className="chooser" data-testid="technology-chooser" ref={box}>
         <p>Which program for “{name}”?</p>
-        {apps.map((app, i) => (
-          <button key={app} type="button" ref={i === 0 ? first : undefined} data-testid={`technology-${app}`} onClick={() => onChoose(app)}>
-            {appLabel(app)}
-          </button>
-        ))}
+        <div className="chooser-apps">
+          {apps.map((app, i) => (
+            <button key={app} type="button" ref={i === 0 ? first : undefined} data-testid={`technology-${app}`} onClick={() => onChoose(app)}>
+              {appLabel(app)}
+            </button>
+          ))}
+        </div>
         <button type="button" onClick={onCancel}>Cancel</button>
       </div>
     </li>
@@ -75,7 +94,7 @@ export default function SearchPanel({ steps, recipes, onAddSystem, onAddStep, on
           const row = item.step
           const pick = chooseTechnology(query, item.technologies, item.visible)
           return [
-            <Entry key={item.name} title={item.name} hint={item.technologies.map(appLabel).join(', ')} data-testid={`palette-${item.name}`}
+            <Entry key={item.name} title={item.name} hint={programs(item.technologies).text} hintTitle={programs(item.technologies).all} data-testid={`palette-${item.name}`}
               onClick={() => press(item)} {...('app' in pick ? draggable({ app: pick.app, step: item.name }) : {})}>
               {row.state === 'rejected' && <span className="tag tone-bad"><Icon name="xcircle" size={13} /> Rejected</span>}
               {row.sensitive && (row.consent === 'given'

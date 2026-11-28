@@ -72,7 +72,9 @@ summary { cursor: pointer; }
 .home .flow-run { min-width: 180px; min-height: 56px; font-size: 18px; }
 .flow-run[aria-disabled="true"] { cursor: default; }
 .flow-line:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-.daily-saved { flex: 1 1 100%; }
+/* a confirmation of the row hangs on its lower edge: it takes no room, so no button of the row moves */
+.flow-note { position: absolute; z-index: 2; left: 16px; bottom: -14px; max-width: calc(100% - 32px); box-sizing: border-box; margin: 0; padding: 3px 12px;
+  background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; }
 .flow-run.busy svg { animation: spin 1s linear infinite; }
 .flow-run.cannot { background: transparent; border-style: dashed; color: var(--muted); }
 .flow-run.cannot:hover { border-color: var(--line); }
@@ -200,9 +202,10 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .search-panel summary h3 { margin: 0; }
 .section > summary { font-size: 17px; font-weight: 600; }
 .section > ul, .section > .empty { margin-bottom: 8px; }
-.chooser { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; border: 1.5px solid var(--line); border-radius: 12px;
-  background: var(--sunk); }
-.chooser p { flex: 1 1 100%; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.chooser { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; border: 1.5px solid var(--line); border-radius: 12px;
+  background: var(--sunk); max-height: min(60vh, 420px); }
+.chooser p { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.chooser-apps { display: flex; flex-wrap: wrap; gap: 8px; overflow-y: auto; min-height: 0; } /* the programs scroll, Cancel stays below them */
 .chooser button { min-height: 44px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; border-radius: 12px; font-weight: 600; }
 .search-panel input { min-height: 44px; box-sizing: border-box; padding: 8px 14px; border-radius: 12px; }
 .panel-app { display: flex; align-items: center; gap: 10px; }
@@ -310,6 +313,7 @@ input[type="number"] { width: 70px; }
 
 /* the daily time: a button on each flow's row and on the first node, and the form it opens */
 .flow-daily { position: relative; z-index: 1; min-width: 150px; text-align: left; }
+.home .flow-daily { min-height: 76px; min-width: 200px; } /* as big with its time as without, so the row does not grow when a time is set */
 .flow-daily span { display: flex; flex-direction: column; }
 .flow-daily small { color: var(--muted); font-weight: 400; }
 .daily-form { position: relative; z-index: 1; flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }

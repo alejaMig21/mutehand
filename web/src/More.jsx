@@ -44,7 +44,7 @@ export default function More({ flow, title, reload, onDeleted, place }) {
         More
       </button>
       {renamed && !open && (
-        <p className="flow-line tone-ok" role="status" data-testid={`renamed-${id}`}><Icon name="checkcircle" size={18} /> Renamed to “{renamed}”.</p>
+        <p className="flow-line tone-ok flow-note" role="status" data-testid={`renamed-${id}`}><Icon name="checkcircle" size={18} /> Renamed to “{renamed}”.</p>
       )}
       {open && (
         <div className="more-panel" id={`more-panel-${id}`} data-testid={`more-panel-${id}`}

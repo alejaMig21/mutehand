@@ -152,7 +152,7 @@ function Flow({ flow, title, following: { runs, follow, attach, forget }, reload
         <Icon name="clock" size={20} />
         {daily ? <span>Every day at <b>{timeWords(daily)}</b><small>Change or stop</small></span> : 'Run every day'}
       </button>
-      {saved && !setting && <p className="flow-line tone-ok daily-saved" role="status" data-testid={`daily-saved-${id}`}><Icon name="checkcircle" size={18} /> {saved}</p>}
+      {saved && !setting && <p className="flow-line tone-ok flow-note" role="status" data-testid={`daily-saved-${id}`}><Icon name="checkcircle" size={18} /> {saved}</p>}
       <More flow={flow} title={title} reload={reload} onDeleted={onDeleted} place={place} />
       {setting && <DailyForm at={daily} suffix={`-${id}`} submit={(at) => changeDaily(id, at)} onDone={closeDaily} />}
     </li>
