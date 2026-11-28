@@ -73,7 +73,7 @@ def test_the_navigation_is_home_apps_and_close_the_program_and_none_of_the_old_s
         at_home(page)
         shown = page.locator("nav[aria-label=screens] button:visible, nav[aria-label=screens] summary")
         names = [b.inner_text().strip() for b in shown.all()]
-        assert names == ["Home", "Apps", "More"]  # closing the program is inside More
+        assert names == ["Mutehand", "Home", "Apps", "More"]  # the name leads Home; closing the program is inside More
         page.get_by_test_id("app-more-toggle").click()
         assert page.get_by_test_id("quit").inner_text().strip() == "Close the program"
         page.get_by_test_id("app-more-toggle").click()

@@ -223,7 +223,7 @@ def test_the_screens_never_say_flow_node_action_or_draft(tmp_path):
         everything = everything.replace("React Flow", "")  # the library's credit in the canvas corner stays as it is
         assert not JARGON.search(everything), JARGON.findall(everything)
         page.get_by_test_id("open-flows").click()
-        assert page.get_by_role("button", name="Run now").count() == 1
+        assert page.get_by_test_id("run").count() == 1  # "Nothing to run yet" while the flow is empty
 
 
 # --- 9: rename says it worked --------------------------------------------------------------------------------------------
