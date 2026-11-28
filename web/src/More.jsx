@@ -138,19 +138,21 @@ function History({ id }) {
   )
 }
 
-// The notice after a delete, with Undo, shown where the flow was. Kept until it is dismissed, another flow is deleted or Home is left: there is no
+
+// One notice per flow deleted lately, each with its own Undo, shown where the flow was. Kept until dismissed, undone or Home is left: there is no
 // timer to race a keyboard or screen reader user. `flows` is Home's list, to give the focus back to the restored row.
 export function useDeleted(reload, flows) {
-  const [deleted, setDeleted] = useState(null) // {id, title, daily_runs, at} or, once undone, {back: true, lost}; `at` is its place in the list
-  const [problem, setProblem] = useState('')
+  const [items, setItems] = useState([]) // newest first: {id, title, daily_runs, at} or, once undone with a loss, {back: true, lost}; `at` is its place in the list
+  const [problems, setProblems] = useState({})
   const [busy, setBusy] = useState(false)
   const undo = useRef(null)
   const restored = useRef(null)
 
-  useEffect(() => { // a flow deleted a moment ago, before this page was loaded again, can still be undone
-    api('/api/deleted').then((recent) => { if (recent[0]) setDeleted((now) => now ?? { ...recent[0], at: 0 }) }).catch(() => {})
+  useEffect(() => { // flows deleted a moment ago, before this page was loaded again, can still be undone
+    api('/api/deleted').then((recent) => setItems((now) => [...now, ...recent.filter((r) => !now.some((n) => n.id === r.id)).map((r) => ({ ...r, at: 0 }))])).catch(() => {})
   }, [])
-  useEffect(() => { if (deleted && !deleted.back) undo.current?.focus() }, [deleted])
+  const newest = items[0]?.back ? null : items[0]?.id
+  useEffect(() => { if (newest) undo.current?.focus() }, [newest])
   useEffect(() => {
     if (restored.current && flows.some((flow) => flow.id === restored.current)) {
       document.querySelector(`[data-testid="open-flow-${restored.current}"]`)?.focus()
@@ -158,32 +160,38 @@ export function useDeleted(reload, flows) {
     }
   }, [flows])
 
-  async function restore() {
+  const drop = (id) => setItems((now) => now.filter((item) => item.id !== id))
+  async function restore(item) {
     if (busy) return
     setBusy(true)
-    setProblem('')
+    setProblems(({ [item.id]: _, ...rest }) => rest)
     try {
-      const back = await api(`/api/flows/${encode(deleted.id)}/restore`, { method: 'POST' })
-      restored.current = deleted.id
+      const back = await api(`/api/flows/${encode(item.id)}/restore`, { method: 'POST' })
+      restored.current = item.id
       reload()
-      if (back.daily_run_lost) setDeleted({ ...deleted, back: true, lost: back.daily_run_lost.length, nodeOff: back.daily_node_removed })
-      else setDeleted(null)
+      if (back.daily_run_lost) setItems((now) => now.map((n) => (n.id === item.id ? { ...item, back: true, lost: back.daily_run_lost.length, nodeOff: back.daily_node_removed } : n)))
+      else drop(item.id)
     } catch (e) {
-      setProblem(e.message)
+      setProblems((now) => ({ ...now, [item.id]: e.message }))
     } finally {
       setBusy(false)
     }
   }
 
-  const sum = deleted && (deleted.back
-    ? `“${deleted.title}” is back, but its daily run could not be set again${deleted.nodeOff ? ', so its daily start node was taken off' : ''}.`
-    : `“${deleted.title}” was deleted${deleted.daily_runs ? ', and its daily run stopped' : ''}.`)
-  const notice = deleted && (
-    <div className="undo-notice" data-testid="deleted-notice" role="status">
-      <span>{sum}{problem && <span className="tone-bad" role="alert"> {problem}</span>}</span>
-      {!deleted.back && <button className="primary" data-testid="undo-delete" ref={undo} onClick={restore} aria-disabled={busy || undefined}>Undo</button>}
-      <button data-testid="dismiss-deleted" onClick={() => setDeleted(null)}>Dismiss</button>
-    </div>
-  )
-  return { notice, at: deleted?.at ?? 0, onDeleted: (gone, at) => { setProblem(''); setDeleted({ ...gone, at }) } }
+  const notices = items.map((item, n) => {
+    const sum = item.back
+      ? `“${item.title}” is back, but its daily run could not be set again${item.nodeOff ? ', so its daily start node was taken off' : ''}.`
+      : `“${item.title}” was deleted${item.daily_runs ? ', and its daily run stopped' : ''}.`
+    return (
+      <div key={item.id} className="undo-notice" data-testid="deleted-notice" role="status">
+        <span>{sum}{problems[item.id] && <span className="tone-bad" role="alert"> {problems[item.id]}</span>}</span>
+        {!item.back && <button className="primary" data-testid="undo-delete" ref={n === 0 ? undo : null} onClick={() => restore(item)} aria-disabled={busy || undefined}>Undo</button>}
+        <button data-testid="dismiss-deleted" onClick={() => drop(item.id)}>Dismiss</button>
+      </div>
+    )
+  })
+  return {
+    notices, items,
+    onDeleted: (gone, at) => { setProblems({}); setItems((now) => [{ ...gone, at }, ...now.filter((n) => n.id !== gone.id)]) },
+  }
 }

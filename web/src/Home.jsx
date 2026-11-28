@@ -49,8 +49,8 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
         help={none && bare ? 'When you press a button, or by itself every morning.' : undefined}
         above={offline && <p role="status">{UNREACHABLE} Trying again…</p>}
         tools={!none && <button data-testid="new-flow" onClick={onNew}><Icon name="plus" size={20} /> New flow</button>}>
-        {none && !undo.notice ? <FirstDay onNew={onNew} onFirstDay={setBare} /> : (
-          <ul className="flows">{withNotice(
+        {none && undo.items.length === 0 ? <FirstDay onNew={onNew} onFirstDay={setBare} /> : (
+          <ul className="flows">{withNotices(
             flows.map((flow, place) => (
               <Flow key={flow.id} flow={flow} title={flowTitle(flow.id, flows)} following={following} reload={reload} place={place}
                 stopped={stopped.find((item) => item.flow === flow.id)} tryAgain={tried.tryAgain} clearTried={tried.clearDone}
@@ -63,8 +63,12 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
   )
 }
 
-// The undo notice stands where the deleted flow was, under one key so it is the same element while the list changes around it.
-const withNotice = (rows, { notice, at }) => (notice ? rows.toSpliced(Math.min(at, rows.length), 0, <li key="undo-notice">{notice}</li>) : rows)
+// Each undo notice stands where its flow was, under its own key so it is the same element while the list changes around it.
+const withNotices = (rows, { notices, items }) => {
+  const out = [...rows]
+  notices.forEach((notice, n) => out.splice(Math.min(items[n].at, out.length), 0, <li key={`undo-${items[n].id}`}>{notice}</li>))
+  return out
+}
 
 function Flow({ flow, title, following: { runs, follow, attach, forget }, reload, stopped, tryAgain, clearTried, place, onOpen, onDeleted }) {
   const { id } = flow
