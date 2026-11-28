@@ -198,6 +198,12 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .search-panel summary::before { content: '▸' / ''; color: var(--muted); }
 .search-panel details[open] > summary::before { content: '▾' / ''; }
 .search-panel summary h3 { margin: 0; }
+.section > summary { font-size: 17px; font-weight: 600; }
+.section > ul, .section > .empty { margin-bottom: 8px; }
+.chooser { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; border: 1.5px solid var(--line); border-radius: 12px;
+  background: var(--sunk); }
+.chooser p { flex: 1 1 100%; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.chooser button { min-height: 44px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; border-radius: 12px; font-weight: 600; }
 .search-panel input { min-height: 44px; box-sizing: border-box; padding: 8px 14px; border-radius: 12px; }
 .panel-app { display: flex; align-items: center; gap: 10px; }
 .panel-app .chip { width: 44px; height: 44px; font-size: 20px; }

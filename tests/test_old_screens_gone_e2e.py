@@ -10,7 +10,7 @@ from contextlib import contextmanager
 import pytest
 from fake_scheduler import FOREIGN, FakeScheduler
 from test_canvas_e2e import stub_clipboard
-from test_editor_e2e import DIST, open_page
+from test_editor_e2e import DIST, open_page, reveal
 from test_editor_safety_e2e import CONTRAST
 from test_home_e2e import NO_SIDEWAYS_SCROLL, at_home, on_the_flow_screen, put_flow, put_flows, row, run_button, says, tab_to
 
@@ -170,7 +170,7 @@ def test_closing_with_a_change_that_is_not_kept_asks_first(tmp_path):
         page.get_by_test_id("open-flow-template").click()  # a built-in template cannot be kept as it is edited
         page.locator('.react-flow__node[data-id="n1"]').wait_for()
         page.get_by_test_id("search").fill("wait")
-        page.get_by_test_id("system-wait").click()
+        reveal(page, "system-wait").click()
         page.get_by_test_id("run-status").filter(has_text="Not kept").wait_for()
 
         page.get_by_test_id("app-more-toggle").click()

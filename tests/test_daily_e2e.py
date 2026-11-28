@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 import pytest
 from fake_scheduler import FOREIGN, FakeScheduler
-from test_editor_e2e import DIST, open_page
+from test_editor_e2e import DIST, open_page, reveal
 from test_editor_safety_e2e import CONTRAST
 from test_home_e2e import (
     BUTTONS,
@@ -289,8 +289,7 @@ def test_adding_and_removing_the_daily_node_on_the_canvas_sets_and_stops_the_win
         page.get_by_test_id("open-flow-morning").click()
         on_the_flow_screen(page, "Morning report", 2)
 
-        page.get_by_text("Other nodes").click()
-        page.get_by_test_id("system-daily-trigger").click()  # 09:00, as the panel offers it
+        reveal(page, "system-daily-trigger").click()  # 09:00, as the panel offers it
         page.get_by_test_id("run-status").filter(has_text="Saved").wait_for()
         assert mine(scheduler) == [TASK + "0900"]
         start_node(page).filter(has_text="Start: every day at 09:00").wait_for()

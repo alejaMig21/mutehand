@@ -11,7 +11,7 @@ from itertools import pairwise
 
 import pytest
 from fake_scheduler import FakeScheduler
-from test_editor_e2e import DIST, open_page
+from test_editor_e2e import DIST, open_page, reveal
 
 from workflow_factory import Flow, Node, load_flow, save_flow, save_step
 from workflow_factory.api import ApiServer
@@ -119,7 +119,7 @@ def test_a_flow_drawn_left_to_right_opens_top_to_bottom_and_keeps_every_node_and
 
 def add(page, *entries):
     for entry in entries:
-        page.get_by_test_id(entry).click()
+        reveal(page, entry).click()
         page.wait_for_timeout(300)  # the canvas re-fits
 
 
@@ -190,7 +190,6 @@ def test_a_repeat_takes_the_next_action_and_a_start_node_leads_to_the_first_one(
     db = three_actions(tmp_path)
     with editor(tmp_path) as page:
         add(page, "system-foreach", "palette-open-menu", "palette-save-file")  # n2 is repeated, n3 follows
-        page.get_by_text("Other nodes").click()
         add(page, "system-manual-trigger")  # n4 goes above the first node
         assert page.get_by_test_id("unwired").count() == 0
         assert node(page, "n4").bounding_box()["y"] < node(page, "n1").bounding_box()["y"]
@@ -220,7 +219,7 @@ def panel(page):
 
 
 def offered(page):
-    return panel(page).get_by_role("list", name="Steps").locator("b").all_inner_texts()  # the names, not the programs beside them
+    return page.get_by_test_id("section-steps").locator("b").all_inner_texts()  # the names, not the programs beside them
 
 
 def test_the_panel_offers_each_step_once_by_name_whatever_programs_it_is_learned_for_and_finds_them_by_plain_words(tmp_path):
@@ -233,7 +232,7 @@ def test_the_panel_offers_each_step_once_by_name_whatever_programs_it_is_learned
         assert page.get_by_test_id("app-name").count() == 0
         assert offered(page) == ["close-node", "open-menu", "save-file", "write-text"]  # save-file once, for both programs
 
-        find = page.get_by_role("searchbox", name="Find a step")
+        find = page.get_by_role("searchbox", name="Find a node")
         find.fill("file save")  # plain words, in any order
         page.get_by_test_id("palette-open-menu").wait_for(state="detached")
         assert offered(page) == ["save-file"]
@@ -244,20 +243,24 @@ def test_the_panel_offers_each_step_once_by_name_whatever_programs_it_is_learned
         panel(page).get_by_text("Nothing matches").wait_for()
 
 
-def test_decisions_repeats_and_waits_are_in_plain_words_and_every_other_node_and_recipe_is_still_there(tmp_path):
+def test_every_system_node_sits_under_its_own_group_in_plain_words_and_recipes_are_still_there(tmp_path):
     from workflow_factory.recipes import save_recipe
 
     db = three_actions(tmp_path)
     save_recipe(db, "two-presses", [{"hole": name, "role": "button", "control_name": name} for name in ("Alpha", "Beta")])
     with editor(tmp_path) as page:
         page.get_by_test_id("recipe-two-presses").wait_for()
-        decisions = panel(page).get_by_role("region", name="Decisions and repeats")
-        assert decisions.get_by_role("button").all_inner_texts() == ["Two paths: yes or no", "Repeat for each", "Wait a while"]
+        assert page.get_by_text("Decisions and repeats").count() == 0
+        order = page.get_by_test_id("section-order")
+        order.locator("summary").click()
+        assert [t.split("\n")[0] for t in order.get_by_role("button").all_inner_texts()] == [
+            "Repeat for each", "Two paths: yes or no", "Wait a while", "Join", "Stop"]
         assert panel(page).get_by_role("heading", name="Recipes").is_visible()
         assert page.get_by_test_id("recipe-two-presses").is_visible()
-        assert not page.get_by_test_id("system-compare").is_visible()  # kept under its own heading, closed at first
+        assert not page.get_by_test_id("system-compare").is_visible()  # in Logic, closed at first
 
-        page.get_by_text("Other nodes").click()
+        for section in ("triggers", "logic", "data"):
+            page.get_by_test_id(f"section-{section}").locator("summary").click()
         for key in ("manual-trigger", "daily-trigger", "join", "stop", "compare", "and", "or", "not", "fixed", "convert",
                     "split", "join-text", "format", "regex", "get", "set", "math"):
             assert page.get_by_test_id(f"system-{key}").is_visible(), key
@@ -443,7 +446,7 @@ def test_in_a_narrow_window_everything_added_fits_is_readable_and_works_from_the
         entry = page.get_by_test_id(f"palette-{long_step}")
         entry.press("Enter")
         node(page, "n1").wait_for()
-        page.get_by_text("Other nodes").press("Enter")
+        page.get_by_test_id("section-order").locator("summary").press("Enter")
         page.get_by_test_id("system-join").press("Enter")
         node(page, "n2").wait_for()
         page.get_by_role("button", name="It is not here: teach it").press("Enter")
@@ -471,7 +474,7 @@ def test_the_panel_and_zoom_buttons_are_large_enough_and_readable_in_a_wide_wind
     three_actions(tmp_path)
     with editor(tmp_path) as page:
         page.get_by_test_id("palette-open-menu").wait_for()
-        page.get_by_text("Other nodes").click()
+        page.get_by_test_id("section-order").locator("summary").click()
         page.get_by_role("button", name="It is not here: teach it").click()
 
         assert page.evaluate(CONTRAST) == [] and page.evaluate(SMALL) == []

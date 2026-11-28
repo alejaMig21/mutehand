@@ -41,6 +41,14 @@ def editor(tmp_path):
     server.stop()
 
 
+def reveal(page, testid):
+    """Open the panel section that holds a system node: Triggers, Order, Logic and Data start closed."""
+    entry = page.get_by_test_id(testid)
+    if not entry.is_visible():
+        page.locator("details.section", has=entry).locator("summary").click()
+    return entry
+
+
 def drag_between(page, source, target):
     page.wait_for_timeout(400)  # the canvas re-fits (animated) after a node is added
     a, b = source.bounding_box(), target.bounding_box()
@@ -207,10 +215,9 @@ def test_system_nodes_and_steps_are_added_wired_deleted_saved_and_reopened(edito
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         page.get_by_test_id("flow-title").fill("built")
-        page.get_by_text("Other nodes").click()
-        page.get_by_test_id("system-manual-trigger").click()  # n1
+        reveal(page, "system-manual-trigger").click()  # n1
         page.get_by_test_id("palette-open-menu").click()  # n2
-        page.get_by_test_id("system-daily-trigger").click()  # n3, deleted again below
+        reveal(page, "system-daily-trigger").click()  # n3, deleted again below
         page.get_by_test_id("palette-save-file").click()  # n4
         page.locator('.react-flow__node[data-id="n4"]').wait_for()
         drag_between(page, page.locator('.react-flow__node[data-id="n1"] .react-flow__handle.source'),
@@ -268,7 +275,7 @@ def test_a_flow_with_an_if_and_a_for_each_keeps_what_the_wires_mean_after_saving
     with sync_playwright() as playwright:
         browser, page = open_page(playwright, server)
         page.get_by_test_id("flow-title").fill("looped")
-        page.get_by_test_id("system-foreach").click()  # n1
+        reveal(page, "system-foreach").click()  # n1
         page.get_by_test_id("palette-open-menu").click()  # n2: the body
         page.get_by_test_id("palette-save-file").click()  # n3: after the loop
         page.locator('.react-flow__node[data-id="n3"]').wait_for()

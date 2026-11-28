@@ -61,28 +61,6 @@ export const appLabel = (app) => {
   return base.charAt(0).toUpperCase() + base.slice(1)
 }
 
-// 'open-menu', 'Open_menu' and 'open menu' are the same words
-const plain = (text) => String(text).toLowerCase().replace(/[-_]+/g, ' ')
-
-// What the panel shows for a search, which is plain words in any order: system nodes by name, hint or group; steps by
-// name, app or origin.
-export function searchCatalog(query, steps, systemNodes = SYSTEM_NODES, recipes = []) {
-  const words = plain(query).split(/\s+/).filter(Boolean)
-  const matches = (texts) => {
-    const text = plain(texts.join(' '))
-    return words.every((word) => text.includes(word))
-  }
-  const system = systemNodes.filter((n) => matches([n.title, n.hint, n.group]))
-  const apps = steps
-    .filter((s) => matches([s.name, s.app, appLabel(s.app), s.origin]))
-    .sort((a, b) => appLabel(a.app).localeCompare(appLabel(b.app)) || a.name.localeCompare(b.name))
-  const found = recipes.filter((r) => matches([r.name, ...r.holes.map((h) => h.hole), ...Object.keys(r.apps).map(appLabel)]))
-  return { system, apps, recipes: found }
-}
-
-// The system nodes a person meets first: a choice, a repeat and a pause, in this order.
-export const DECISIONS = ['if', 'foreach', 'wait']
-
 // Letter chip colours: white text on each is at least 4.5:1 (checked by the tests).
 export const CHIP_COLOURS = ['#1F6FA8', '#7B4FC4', '#1B7A4E', '#B0405F', '#3F5FB8', '#8A5A12']
 
@@ -91,14 +69,6 @@ export function technologiesOf(rows, name) {
   const seen = new Map()
   for (const row of rows) if (row.name === name && !seen.has(appKey(row.app))) seen.set(appKey(row.app), row)
   return [...seen.values()].sort((a, b) => appLabel(a.app).localeCompare(appLabel(b.app))).map((row) => row.app)
-}
-
-// One row per step name for the panel: its programs, and the row of the first one (what pressing the entry adds).
-export function groupByName(rows) {
-  return [...new Set(rows.map((row) => row.name))].sort((a, b) => a.localeCompare(b)).map((name) => {
-    const technologies = technologiesOf(rows, name)
-    return { name, technologies, step: rows.find((row) => row.name === name && appKey(row.app) === appKey(technologies[0])) }
-  })
 }
 
 // The same app always gets the same chip, whatever the case of its name: the letter of the name on screen, and a colour
