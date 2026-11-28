@@ -1,11 +1,11 @@
 // What the person reads instead of the codes the engine stores. Pure, so node can test it.
 
 const REASONS = {
-  no_consent: 'You have not given permission for this action.',
+  no_consent: 'You have not given permission for this step.',
   control_not_found: 'The button or field this step uses is not on the screen.',
   unreadable: 'The control is there but cannot be read.',
   out_of_frame: 'The app window is not set up the way it was when the step was learned.',
-  rejected: 'This step is rejected.',
+  rejected: 'This step is blocked.',
   to_revalidate: 'The app was updated, so this step needs a re-check.',
   template_no_match: 'The picture this step looks for is not on the screen.',
   missing_input: 'A value this node needs was not there.',
@@ -15,7 +15,7 @@ const REASONS = {
   effect_mismatch: 'The screen did not change the way it did when the step was learned.',
   step_missing: 'There is no step with this name for the app.',
   secure_field_requires_type_secret: 'A password field can only be filled from a stored secret.',
-  action_failed: 'The app refused the action.',
+  action_failed: 'The app refused the step.',
   wrong_window: 'Another window was in front of the app.',
   user_active: 'You kept using the mouse or keyboard.',
   precondition_not_met: 'Something the step needs was not ready.',
@@ -27,7 +27,7 @@ const EFFECTS = {
 }
 const ROLES = {
   textfield: 'text field', menubutton: 'menu button', menuitem: 'menu item', combobox: 'drop-down list',
-  checkbox: 'check box', radiobutton: 'option button', listitem: 'list item', treeitem: 'list item',
+  checkbox: 'checkbox', radiobutton: 'option button', listitem: 'list item', treeitem: 'list item',
 }
 export const roleWords = (role) => ROLES[role] ?? role
 
@@ -97,7 +97,7 @@ export function runNoteWords(run, app) {
 }
 
 const BLOCKED = {
-  empty: 'It has no steps yet. Open it to add some.', no_app: 'No app is chosen for it. Open it, choose one and press Save.',
+  empty: 'It has no steps yet. Open it to add some.',
   expression: 'It uses an expression, which cannot run yet.', unreadable: 'It cannot be read.',
   question: 'It stopped earlier and is waiting for you.',
 }
@@ -109,22 +109,22 @@ export function blockedWords(blocked, app) {
   const names = steps.map((step) => `“${step}”`).join(', ')
   const one = steps.length === 1
   if (why === 'not_learned') return `${names} ${one ? 'is' : 'are'} not learned ${app ? `for ${app} ` : ''}yet.`
-  if (why === 'rejected') return `${names} ${one ? 'is' : 'are'} rejected. To run this chore, press “Allow again”: on Home, in “Needs your attention”, or on Apps.`
+  if (why === 'rejected') return `${names} ${one ? 'is' : 'are'} blocked. To run this flow, press “Allow again”: on Home, in “Needs your attention”, or on Apps.`
   if (why === 'to_revalidate') return `${app} was updated: ${names} ${one ? 'has' : 'have'} to be learned again.`
   return BLOCKED[why] ?? `It cannot run: ${spaced(why)}.`
 }
 
-// What rejected a step: {kind: 'person'} or {kind: 'different_effect', expected, got, at}.
+// What blocked a step: {kind: 'person'} or {kind: 'different_effect', expected, got, at}.
 export function whyWords(why) {
-  if (why?.kind === 'person') return 'You rejected it.'
-  if (why?.kind !== 'different_effect') return 'Why it was rejected was not recorded.'
+  if (why?.kind === 'person') return 'You blocked it.'
+  if (why?.kind !== 'different_effect') return 'Why it was blocked was not recorded.'
   return `When it was learned, ${effectWords(why.expected)}. The last time it ran, ${effectWords(why.got)}.`
     + (why.at ? ` (${whenWords(why.at)})` : '')
 }
 
-// How far the shown run got with one box: undefined when the run knows nothing of it; 'unreached' for what has not run
+// How far the shown run got with one node: undefined when the run knows nothing of it; 'unreached' for what has not run
 // or was on the path not taken; and, once the run is over, what was still going is where it stopped.
-export function boxState(run, id) {
+export function nodeState(run, id) {
   const state = run?.nodes[id]
   if (state === 'pending' || state === 'skipped') return 'unreached'
   if (run?.status !== 'running' && (state === 'running' || state === 'paused')) return 'blocked'
@@ -132,7 +132,7 @@ export function boxState(run, id) {
 }
 
 // A name no stored flow has yet, whatever the capitals.
-export function freshTitle(flows, base = 'New chore') {
+export function freshTitle(flows, base = 'New flow') {
   const taken = flows.map((f) => f.title.toLowerCase())
   let title = base
   for (let n = 2; taken.includes(title.toLowerCase()); n++) title = `${base} ${n}`

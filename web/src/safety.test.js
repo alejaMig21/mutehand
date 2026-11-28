@@ -18,14 +18,21 @@ test('every mark says its words as well as its icon, and a clean flow says nothi
   assert.deepEqual(summaryMarks({ rejected: [], missing: [], needsConsent: 0 }), [])
   const marks = summaryMarks({ rejected: [{ id: 'c', step: 'Old' }], missing: [{ id: 'z', step: 'x' }], needsConsent: 2 })
 
-  assert.deepEqual(marks.map((m) => m[1]), ['1 rejected step', '1 step not taught yet', '2 steps need consent'])
+  assert.deepEqual(marks.map((m) => m[1]), ['1 blocked step', '1 step not taught yet', '2 steps need consent'])
   assert.ok(marks.every(([icon, words]) => icon && words))
 })
 
 test('a flow with a rejected step says which one will not let it start', () => {
   assert.equal(whyNotRunnable({ rejected: [], missing: [] }), '')
-  assert.match(whyNotRunnable({ rejected: [{ id: 'c', step: 'Old' }], missing: [] }), /'Old' is rejected\. Open Apps/)
-  assert.match(whyNotRunnable({ rejected: [{ id: 'c', step: 'Old' }, { id: 'd', step: 'Odd' }], missing: [] }), /'Old', 'Odd' are rejected/)
+  assert.match(whyNotRunnable({ rejected: [{ id: 'c', step: 'Old' }], missing: [] }), /'Old' is blocked\. Open Apps/)
+  assert.match(whyNotRunnable({ rejected: [{ id: 'c', step: 'Old' }, { id: 'd', step: 'Odd' }], missing: [] }), /'Old', 'Odd' are blocked/)
+})
+
+test('a missing step names the program of its own node', () => {
+  const missing = [{ id: 'q', step: 'Lonely', technology: 'word.exe' }, { id: 'r', step: 'Other', technology: 'word.exe' }]
+  assert.match(whyNotRunnable({ rejected: [], missing }), /'Lonely', 'Other' has no step for Word yet/)
+  const nodes = [{ id: 'm', data: { node: { step: 'Lonely', technology: 'word.exe' }, meta: { missing: true } } }]
+  assert.equal(safetySummary(nodes).missing[0].technology, 'word.exe')
 })
 
 test('a flow with a recipe hole nobody filled says which hole and cannot start', () => {

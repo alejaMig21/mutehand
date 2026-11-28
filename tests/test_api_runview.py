@@ -5,19 +5,19 @@ import time
 import pytest
 from test_api import call, wait_until_finished
 
-from workflow_factory import Flow, Node, Sensitivity, grant_consent, reject_step, save_flow, save_step
+from workflow_factory import Flow, Node, Sensitivity, grant_consent, reject_step, save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.flow import EMERGENCY_STOP
 from workflow_factory.steps import find_step, record_outcome
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 
 def make(tmp_path, nodes, **desktop_kw):
     save_step(tmp_path / "user.db", step("open-menu", "Alpha"))
     save_step(tmp_path / "user.db", step("save-file", "Beta"))
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")], **desktop_kw)
-    save_flow(tmp_path / "user.db", Flow(id="f", nodes=nodes))
+    save_flow_on(tmp_path / "user.db", Flow(id="f", nodes=nodes), app="paint.exe")
     server = ApiServer(tmp_path / "user.db", None, lambda app: desktop, token="secret-token")
     server.start()
     return server, desktop

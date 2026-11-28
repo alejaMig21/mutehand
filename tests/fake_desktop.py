@@ -6,9 +6,10 @@ from datetime import UTC, datetime, timedelta
 
 from fake_clipboard import FakeClipboard
 
-from workflow_factory import Locator, Step
+from workflow_factory import Locator, Step, save_flow
 from workflow_factory.clipboard import backup, restore, set_text
 from workflow_factory.desktop import AppKey, Control, DesktopError, Frame
+from workflow_factory.flows import with_technology
 
 
 class FakeDesktop:
@@ -218,3 +219,15 @@ def icon(name, x, y, width, height):
 
 def pane(name, x, y, width, height):
     return Control(role="pane", name=name, bounds=(x, y, width, height))
+
+
+def save_flow_on(db, flow, title=None, app=None):
+    """Save a flow whose step nodes that name no technology act on `app`."""
+    save_flow(db, with_technology(flow, app) if app else flow, title)
+
+
+def save_flow_paint(db, flow, title=None):
+    """`save_flow_on` for the many tests whose steps are all taught on Paint, the stand-in desktop's default."""
+    save_flow_on(db, flow, title, "paint.exe")
+
+

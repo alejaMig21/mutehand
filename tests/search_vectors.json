@@ -1,0 +1,17 @@
+[
+  {"why": "an empty query matches everything", "query": "", "name": "Save", "tags": [], "match": true},
+  {"why": "a prefix of a word of the name", "query": "sav", "name": "Save", "tags": [], "match": true},
+  {"why": "capitals do not matter", "query": "SAVE", "name": "save as", "tags": [], "match": true},
+  {"why": "accents do not matter, in the query", "query": "export", "name": "Éxport data", "tags": [], "match": true},
+  {"why": "accents do not matter, in the name", "query": "éxp", "name": "Export", "tags": [], "match": true},
+  {"why": "a word is matched at its start, not in the middle", "query": "ave", "name": "Save", "tags": [], "match": false},
+  {"why": "any word of the name starts the match", "query": "data", "name": "Export data", "tags": [], "match": true},
+  {"why": "every word of the query must match, in any order", "query": "data exp", "name": "Export data", "tags": [], "match": true},
+  {"why": "one word that matches nothing fails the query", "query": "export report", "name": "Export data", "tags": [], "match": false},
+  {"why": "a tag matches", "query": "fil", "name": "Save", "tags": ["file"], "match": true},
+  {"why": "a technology name is a tag", "query": "excel", "name": "Save", "tags": ["Excel", "file"], "match": true},
+  {"why": "words may be spread over the name and the tags", "query": "save excel", "name": "Save", "tags": ["Excel"], "match": true},
+  {"why": "a step with no tag does not match a tag word", "query": "excel", "name": "Mouse move", "tags": [], "match": false},
+  {"why": "punctuation splits words", "query": "picture save", "name": "save_the-picture", "tags": [], "match": true},
+  {"why": "digits are words", "query": "2", "name": "Step 2", "tags": [], "match": true}
+]

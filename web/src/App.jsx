@@ -11,11 +11,11 @@ import { useRuns } from './useRuns.js'
 const SCREENS = [
   ['home', 'Home', null],
   ['apps', 'Apps', Apps],
-  ['editor', 'Chore', null],
+  ['editor', 'Flow', null],
 ]
 const TABS = SCREENS.filter(([id]) => id !== 'editor')
 
-// the screen survives a reload of this tab (the flow screen brings back the chore it showed)
+// the screen survives a reload of this tab (the flow screen brings back the flow it showed)
 const remembered = () => {
   const id = sessionStorage.getItem('wf-screen')
   return SCREENS.some(([known]) => known === id) ? id : 'home'
@@ -65,7 +65,7 @@ export default function App() {
   // it asks only when something would be lost: a run in progress or a change not kept. Nothing is lost otherwise.
   const running = Object.values(following.runs).some((run) => run.status === 'running')
   async function quit() {
-    const lost = [running && 'The chore that is running will be stopped.', unsaved && 'Changes that are not saved will be lost.'].filter(Boolean)
+    const lost = [running && 'The flow that is running will be stopped.', unsaved && 'Changes that are not saved will be lost.'].filter(Boolean)
     if (lost.length && !window.confirm(`Close the program? ${lost.join(' ')} ${OPEN_AGAIN}`)) return
     await api('/api/quit', { method: 'POST' }).catch(() => {})
     setClosed(true)
@@ -85,7 +85,7 @@ export default function App() {
   return (
     <div className="shell">
       <nav className="tabs" aria-label="screens">
-        <span className="brand">Mutehand</span>
+        <button className="brand" data-testid="brand" aria-label="Mutehand: go to Home" onClick={() => setScreen('home')}>Mutehand</button>
         {/* the flow screen belongs to Home: its tab stays the current one */}
         {TABS.map(([id, name]) => (
           <button key={id} data-testid={`tab-${id}`} aria-current={id === screen || (id === 'home' && screen === 'editor') ? 'page' : undefined}

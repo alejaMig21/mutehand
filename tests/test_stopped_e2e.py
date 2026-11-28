@@ -1,4 +1,4 @@
-"""A stopped chore: it comes first on Home, and Try again and Ask for help sit beside it and under its red box (editor
+"""A stopped flow: it comes first on Home, and Try again and Ask for help sit beside it and under its red node (editor
 rethink, ticket 09). Driven in the built editor against the real API, with the stand-in desktop and Windows scheduler.
 Opt-in: `pytest -m web`."""
 
@@ -7,7 +7,7 @@ import re
 import pytest
 from test_canvas_e2e import node, stub_clipboard
 from test_editor_safety_e2e import CONTRAST
-from test_home_e2e import NO_SIDEWAYS_SCROLL, chore, chores, home, row, says
+from test_home_e2e import NO_SIDEWAYS_SCROLL, home, put_flow, put_flows, row, says
 
 from workflow_factory import list_doubts, reject_step, run_flow, save_step
 from workflow_factory.tutor import list_open_doubts, mark_private
@@ -18,12 +18,12 @@ pytestmark = pytest.mark.web
 
 
 def stopped(tmp_path, title="Weekly export", *, third=False):
-    """A chore that did its first box and stopped at its second: Paint did not show the button."""
+    """A flow that did its first node and stopped at its second: Paint did not show the button."""
     db = tmp_path / "user.db"
     names = ["open-menu", "close-message"] + (["save-picture"] if third else [])
     for name, control in zip(names, ("Alpha", "Beta", "Gamma"), strict=False):
         save_step(db, step(name, control))
-    flow = chore(tmp_path, "weekly", title, *names)
+    flow = put_flow(tmp_path, "weekly", title, *names)
     run_flow(flow, desktop=FakeDesktop(controls=[button("Alpha")]), user_db=db)
     return db
 
@@ -40,9 +40,9 @@ def clicked(desktop):
     return [c.name for c in desktop.clicks]
 
 
-def test_a_stopped_chore_comes_first_on_home_with_a_count_and_says_which_box_and_why_in_plain_words(tmp_path):
+def test_a_stopped_flow_comes_first_on_home_with_a_count_and_says_which_node_and_why_in_plain_words(tmp_path):
     stopped(tmp_path)
-    chores(tmp_path)
+    put_flows(tmp_path)
     with home(tmp_path) as (page, _):
         card(page).wait_for()
         assert "Needs your attention (1)" in page.get_by_test_id("attention").inner_text()
@@ -51,20 +51,20 @@ def test_a_stopped_chore_comes_first_on_home_with_a_count_and_says_which_box_and
         assert "“close-message”: The button or field this step uses is not on the screen." in text
         assert "Paint" in text and "control_not_found" not in text and ".exe" not in text
         above = page.get_by_test_id("attention").bounding_box()["y"]
-        assert above < page.get_by_role("heading", name="Your chores").bounding_box()["y"]  # first on the screen
+        assert above < page.get_by_role("heading", name="Your flows").bounding_box()["y"]  # first on the screen
         assert "See above" in row(page, "weekly").inner_text()
         assert row(page, "weekly").get_by_test_id("run-now-weekly").inner_text().strip() == "Try again"
         assert row(page, "morning").get_by_test_id("run-now-morning").inner_text().strip() == "Run now"
 
 
-def test_the_attention_section_is_absent_when_nothing_has_stopped_and_counts_every_stopped_chore(tmp_path):
-    chores(tmp_path)
+def test_the_attention_section_is_absent_when_nothing_has_stopped_and_counts_every_stopped_flow(tmp_path):
+    put_flows(tmp_path)
     with home(tmp_path) as (page, _):
         says(page, "morning", "Never run")
         assert page.get_by_test_id("attention").count() == 0 and "attention" not in page.inner_text("body").lower()
     stopped(tmp_path)
     save_step(tmp_path / "user.db", step("print-it", "Gamma"))
-    other = chore(tmp_path, "other", "Other chore", "print-it")
+    other = put_flow(tmp_path, "other", "Other flow", "print-it")
     run_flow(other, desktop=FakeDesktop(controls=[]), user_db=tmp_path / "user.db")
     with home(tmp_path) as (page, _):
         page.get_by_test_id("attention").wait_for()
@@ -80,7 +80,7 @@ def test_try_again_closes_the_doubt_goes_on_from_where_it_stopped_and_says_it_is
         fixed = page.get_by_test_id("tried-weekly")
         fixed.filter(has_text="Fixed: “Weekly export” ran to the end just now.").wait_for()
         assert "2 steps finished." in fixed.inner_text()  # the one done before counts too
-        assert clicked(desktop) == ["Beta"]  # the first box was not done again
+        assert clicked(desktop) == ["Beta"]  # the first node was not done again
         assert [(d.status, d.closed_as) for d in list_doubts(db)] == [("answered", "tried_again")]
         assert page.get_by_test_id("attention-weekly").count() == 0  # the red card is gone: the answer stands where it was
         says(page, "weekly", r"Worked .+ at \d\d:\d\d")
@@ -159,7 +159,7 @@ def test_ask_for_help_shows_the_message_copies_it_and_keeps_the_note_on_the_open
         assert not [p for p in posts if "/answer" in p or "/dismiss" in p or "try-again" in p] and clicked(desktop) == []
 
 
-def test_giving_the_chore_a_daily_time_after_it_stopped_does_not_send_it_back_to_the_start(tmp_path):
+def test_giving_the_flow_a_daily_time_after_it_stopped_does_not_send_it_back_to_the_start(tmp_path):
     stopped(tmp_path)
     with home(tmp_path) as (page, desktop):
         card(page).wait_for()
@@ -173,11 +173,11 @@ def test_giving_the_chore_a_daily_time_after_it_stopped_does_not_send_it_back_to
         assert clicked(desktop) == ["Beta"]  # Alpha was done before the stop and is not done twice
 
 
-def test_the_stopped_box_is_red_and_chosen_on_the_flow_screen_with_the_reason_and_the_same_two_buttons(tmp_path):
+def test_the_stopped_node_is_red_and_chosen_on_the_flow_screen_with_the_reason_and_the_same_two_buttons(tmp_path):
     db = stopped(tmp_path)
     with home(tmp_path) as (page, desktop):
-        page.get_by_test_id("open-chore-weekly").click()
-        strip = page.get_by_role("region", name="About the chosen box")
+        page.get_by_test_id("open-flow-weekly").click()
+        strip = page.get_by_role("region", name="About the chosen node")
         strip.get_by_test_id("strip-reason").wait_for()
 
         assert "status-blocked" in node(page, "n2").get_attribute("class") and "Stopped here" in node(page, "n2").inner_text()
@@ -197,7 +197,7 @@ def test_asking_for_help_from_the_flow_screen_keeps_the_note_and_changes_nothing
     db = stopped(tmp_path)
     with home(tmp_path) as (page, desktop):
         stub_clipboard(page)
-        page.get_by_test_id("open-chore-weekly").click()
+        page.get_by_test_id("open-flow-weekly").click()
         page.get_by_test_id("strip-ask-help").click()
         page.get_by_test_id("strip-note").fill("Paint was behind another window")
         page.get_by_role("button", name="Copy this message").click()
@@ -208,19 +208,19 @@ def test_asking_for_help_from_the_flow_screen_keeps_the_note_and_changes_nothing
         assert clicked(desktop) == []
 
 
-def test_pressing_run_on_a_stopped_chore_points_to_the_stopped_box_instead_of_a_queue(tmp_path):
+def test_pressing_run_on_a_stopped_flow_points_to_the_stopped_node_instead_of_a_queue(tmp_path):
     stopped(tmp_path)
     with home(tmp_path) as (page, _):
-        page.get_by_test_id("open-chore-weekly").click()
+        page.get_by_test_id("open-flow-weekly").click()
         page.get_by_test_id("strip-reason").wait_for()
-        node(page, "n1").click()  # looking at another box
+        node(page, "n1").click()  # looking at another node
         assert page.get_by_test_id("strip-reason").count() == 0
 
         page.get_by_test_id("run").click()
         outcome = page.get_by_test_id("run-outcome")
         outcome.filter(has_text="stopped earlier").wait_for()
         assert "Tutor queue" not in outcome.inner_text()
-        outcome.get_by_role("button", name="Show the stopped box").click()
+        outcome.get_by_role("button", name="Show the stopped node").click()
         page.get_by_test_id("strip-reason").wait_for()
 
 
@@ -247,7 +247,7 @@ def test_trying_again_and_asking_for_help_work_from_the_keyboard_alone(tmp_path)
 def test_no_screen_content_of_a_private_app_reaches_a_stopped_card_or_its_message(tmp_path):
     db = tmp_path / "user.db"
     save_step(db, step("open-chat", "Chat with Ana Ruiz", app="telegram.exe"))
-    flow = chore(tmp_path, "greet", "Say hello", "open-chat", app="telegram.exe")
+    flow = put_flow(tmp_path, "greet", "Say hello", "open-chat", app="telegram.exe")
     mark_private(db, "telegram.exe")
     run_flow(flow, desktop=FakeDesktop(controls=[button("Bank code 4471")], app="telegram.exe"), user_db=db)
     with home(tmp_path, FakeDesktop(controls=[], app="telegram.exe")) as (page, _):
@@ -262,13 +262,13 @@ def test_no_screen_content_of_a_private_app_reaches_a_stopped_card_or_its_messag
 
 
 @pytest.mark.parametrize("width,height", [(683, 384), (390, 740)])
-def test_the_stopped_chore_fits_a_narrow_window_on_home_and_on_the_flow_screen_with_readable_buttons(tmp_path, width, height):
+def test_the_stopped_flow_fits_a_narrow_window_on_home_and_on_the_flow_screen_with_readable_buttons(tmp_path, width, height):
     stopped(tmp_path, "Weekly-export-" + "x" * 70)
-    chores(tmp_path)
+    put_flows(tmp_path)
     buttons = """(width) => [...document.querySelectorAll('.attention button, .tried button, .strip button, .strip-reason button')]
       .filter((b) => b.offsetParent).map((b) => {
-        const box = b.getBoundingClientRect()
-        return [b.innerText.trim(), box.left >= 0 && box.right <= width && box.height >= 44 && b.scrollWidth <= b.clientWidth]
+        const rect = b.getBoundingClientRect()
+        return [b.innerText.trim(), rect.left >= 0 && rect.right <= width && rect.height >= 44 && b.scrollWidth <= b.clientWidth]
       }).filter(([, fits]) => !fits)"""
     with home(tmp_path) as (page, _):
         page.set_viewport_size({"width": width, "height": height})
@@ -286,12 +286,12 @@ def test_the_stopped_chore_fits_a_narrow_window_on_home_and_on_the_flow_screen_w
     stopped(stopped_again)
     with home(stopped_again) as (page, _):
         page.set_viewport_size({"width": width, "height": height})
-        page.get_by_test_id("open-chore-weekly").click()
+        page.get_by_test_id("open-flow-weekly").click()
         strip = page.get_by_test_id("strip-reason")
         strip.wait_for()
         page.get_by_test_id("strip-ask-help").click()
         for name in ("Try again", "Ask for help"):
-            shown = page.get_by_role("region", name="About the chosen box").get_by_role("button", name=re.compile(name)).bounding_box()
+            shown = page.get_by_role("region", name="About the chosen node").get_by_role("button", name=re.compile(name)).bounding_box()
             assert shown["height"] >= 44 and shown["x"] >= 0 and shown["x"] + shown["width"] <= width
         assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth")
         assert page.evaluate(CONTRAST) == []

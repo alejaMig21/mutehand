@@ -33,7 +33,7 @@ summary { cursor: pointer; }
 .app-more-menu { position: absolute; right: 0; top: 100%; z-index: 50; padding: 6px; background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0, 0, 0, .45); white-space: nowrap; }
 .app-more-menu button { color: var(--ink); }
-.tabs .brand { align-self: center; padding: 0 12px 0 4px; font-weight: 700; }
+.tabs .brand { align-self: center; padding: 0 12px 0 4px; font-weight: 700; color: var(--ink); }
 .tabs button { min-height: 44px; }
 .screen { flex: 1; min-height: 0; overflow: auto; }
 .notice-page { max-width: 560px; margin: 80px auto; padding: 0 16px; }
@@ -48,42 +48,44 @@ summary { cursor: pointer; }
   box-sizing: border-box; padding: 10px 16px; background: var(--surface); border: 1px solid var(--ok); border-radius: var(--radius);
   box-shadow: 0 12px 32px rgba(0, 0, 0, .45); color: var(--ok); font-weight: 600; }
 .announce:empty { display: none; }
-.empty-state { padding: 32px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
+.empty-state { overflow-wrap: anywhere; padding: 32px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
 
-/* Home: the list of chores, with the larger type and targets of the mockup */
+/* Home: the list of flows, with the larger type and targets of the mockup */
 .home .page { max-width: 1160px; font-size: 16px; }
 .home .page-head { align-items: center; }
 .home h1 { font-size: 20px; }
 .home button { min-height: 44px; border-radius: 12px; font-weight: 600; }
-.chores { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.chore { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 20px;
+.flows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.flow { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 20px;
   background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; }
-.chore .chip { width: 48px; height: 48px; border-radius: 14px; font-size: 22px; }
-.chore-words { flex: 1; min-width: min(220px, 100%); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
-.chore h2 { font-size: 18px; }
-.home .chore-open { display: inline; min-height: 0; padding: 0; background: transparent; border: 0; font: inherit; text-align: left; overflow-wrap: anywhere; }
-.chore-open::after { content: ''; position: absolute; inset: 0; border-radius: 14px; }
-.chore-open:focus-visible { outline: none; }
-.chore-open:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
-.chore:has(.chore-open:hover) { border-color: var(--muted); }
-.chore-run { position: relative; z-index: 1; } /* above the row's own button */
-.chore-line { display: flex; align-items: flex-start; gap: 6px; }
-.chore-line svg { flex: none; margin-top: 2px; }
-.home .chore-run { min-width: 180px; min-height: 56px; font-size: 18px; }
-.chore-run[aria-disabled="true"] { cursor: default; }
-.chore-line:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-.daily-saved { flex: 1 1 100%; }
-.chore-run.busy svg { animation: spin 1s linear infinite; }
-.chore-run.cannot { background: transparent; border-style: dashed; color: var(--muted); }
-.chore-run.cannot:hover { border-color: var(--line); }
+.flow .chip { width: 48px; height: 48px; border-radius: 14px; font-size: 22px; }
+.flow-words { flex: 1; min-width: min(220px, 100%); display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.flow h2 { font-size: 18px; }
+.home .flow-open { display: inline; min-height: 0; padding: 0; background: transparent; border: 0; font: inherit; text-align: left; overflow-wrap: anywhere; }
+.flow-open::after { content: ''; position: absolute; inset: 0; border-radius: 14px; }
+.flow-open:focus-visible { outline: none; }
+.flow-open:focus-visible::after { outline: 2px solid var(--accent); outline-offset: 2px; }
+.flow:has(.flow-open:hover) { border-color: var(--muted); }
+.flow-run { position: relative; z-index: 1; } /* above the row's own button */
+.flow-line { display: flex; align-items: flex-start; gap: 6px; }
+.flow-line svg { flex: none; margin-top: 2px; }
+.home .flow-run { min-width: 180px; min-height: 56px; font-size: 18px; }
+.flow-run[aria-disabled="true"] { cursor: default; }
+.flow-line:focus { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+/* a confirmation of the row hangs on its lower edge: it takes no room, so no button of the row moves */
+.flow-note { position: absolute; z-index: 2; left: 16px; bottom: -14px; max-width: calc(100% - 32px); box-sizing: border-box; margin: 0; padding: 3px 12px;
+  background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; }
+.flow-run.busy svg { animation: spin 1s linear infinite; }
+.flow-run.cannot, .topbar .cannot { background: transparent; border-style: dashed; color: var(--muted); } /* a button that cannot be pressed yet does not look like one */
+.flow-run.cannot:hover { border-color: var(--line); }
 
-/* a chore's More: rename, history, delete, and the undo notice */
-.chore-more { position: relative; z-index: 1; }
+/* a flow's More: rename, history, delete, and the undo notice */
+.flow-more { position: relative; z-index: 1; }
 .more-panel { position: relative; z-index: 1; flex: 1 1 100%; display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
-.more-actions, .more-rename { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.more-buttons, .more-rename { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .more-rename label { font-weight: 600; }
 .more-rename input { flex: 1 1 220px; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 8px 14px; border-radius: 12px; }
-.more-rename .chore-line { flex: 1 1 100%; }
+.more-rename .flow-line { flex: 1 1 100%; }
 .more-history ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; max-height: 320px; overflow-y: auto; }
 .more-history h3 { margin: 0 0 4px; font-size: 16px; }
 .more-history ul { margin: 0; padding-left: 20px; overflow-wrap: anywhere; }
@@ -132,7 +134,7 @@ input, select, textarea { background: var(--sunk); border: 1px solid var(--line)
   border-left: 4px solid var(--bad); color: var(--ink); }
 .error span { overflow-wrap: anywhere; }
 
-/* the canvas, and the column of boxes to add on its right */
+/* the canvas, and the column of nodes to add on its right */
 .workspace { position: relative; flex: 1; min-height: 220px; display: grid; grid-template-columns: minmax(0, 1fr) 340px;
   grid-template-rows: minmax(0, 1fr); }
 .canvas { position: relative; min-width: 0; }
@@ -162,7 +164,7 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .card-head { display: flex; align-items: center; gap: 10px; }
 .card-text { min-width: 0; }
 .card-title { font-weight: 700; overflow-wrap: anywhere; }
-.card-sub { color: var(--muted); font-size: 12px; }
+.card-sub { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .card-marks { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .card-mark { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; }
 .chip { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: #fff; font-weight: 700; font-size: 14px; }
@@ -171,14 +173,14 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 
 .stage { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .stage .canvas { flex: 1; min-height: 0; }
-/* under the canvas: what the chosen box does, and what can be done with it */
+/* under the canvas: what the chosen node does, and what can be done with it */
 .strip { min-height: 150px; display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--line); }
 .strip h2 { font-size: 16px; }
 .strip-says { margin: 0; font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; }
 .strip-says strong { color: var(--ink); }
-.strip-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.strip-actions button { min-height: 44px; }
-.strip .warning { margin: 0; }
+.strip-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.strip-buttons button { min-height: 44px; }
+.strip .warning { margin: 0; overflow-wrap: anywhere; }
 .strip-wires { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 .strip-wires select { min-height: 36px; max-width: 100%; }
 .wires { list-style: none; margin: 0; padding: 0; font-size: 12px; }
@@ -187,7 +189,7 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .row { display: flex; gap: 6px; }
 .row input, .row select { flex: 1; min-width: 0; }
 
-/* "Add a box": the column on the right of the canvas */
+/* "Add a node": the column on the right of the canvas */
 .search-panel { min-width: 0; overflow: auto; display: flex; flex-direction: column; gap: 12px; padding: 20px;
   background: var(--surface); border-left: 1.5px solid var(--line); font-size: 16px; }
 .search-panel > * { flex: none; } /* a long list scrolls; nothing is squeezed */
@@ -198,6 +200,13 @@ button.card-mark { padding: 2px 6px; margin-left: -6px; background: transparent;
 .search-panel summary::before { content: '▸' / ''; color: var(--muted); }
 .search-panel details[open] > summary::before { content: '▾' / ''; }
 .search-panel summary h3 { margin: 0; }
+.section > summary { font-size: 17px; font-weight: 600; }
+.section > ul, .section > .empty { margin-bottom: 8px; }
+.chooser { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; border: 1.5px solid var(--line); border-radius: 12px;
+  background: var(--sunk); max-height: min(60vh, 420px); }
+.chooser p { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.chooser-apps { display: flex; flex-wrap: wrap; gap: 8px; overflow-y: auto; min-height: 0; } /* the programs scroll, Cancel stays below them */
+.chooser button { min-height: 44px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; border-radius: 12px; font-weight: 600; }
 .search-panel input { min-height: 44px; box-sizing: border-box; padding: 8px 14px; border-radius: 12px; }
 .panel-app { display: flex; align-items: center; gap: 10px; }
 .panel-app .chip { width: 44px; height: 44px; font-size: 20px; }
@@ -264,7 +273,7 @@ input[type="number"] { width: 70px; }
 .notice button { min-height: 44px; }
 .notice-stopped, .notice-error { border-left: 4px solid var(--bad); }
 .notice-waiting, .notice-emergency, .notice-busy { border-left: 4px solid var(--warn); }
-/* the run log floats over the corner of the canvas: it never takes the boxes' height */
+/* the run log floats over the corner of the canvas: it never takes the nodes' height */
 .run-log { position: absolute; right: 12px; bottom: 12px; z-index: 5; width: min(440px, calc(100% - 24px)); box-sizing: border-box; padding: 6px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 18px rgba(0, 0, 0, .35); }
 .run-log header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .run-log h2 { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0; }
@@ -276,10 +285,10 @@ input[type="number"] { width: 70px; }
 .run-progress li { border-bottom: 1.5px solid currentColor; }
 .run-log time { color: var(--muted); margin-right: 6px; }
 .muted { color: var(--muted); }
-.status-running .card-mark.tone-info svg, .run-progress .tone-info svg, .chore-line.tone-info svg { animation: spin 1s linear infinite; }
+.status-running .card-mark.tone-info svg, .run-progress .tone-info svg, .flow-line.tone-info svg { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .status-running .card-mark.tone-info svg, .chore-line.tone-info svg, .chore-run.busy svg { animation: none; } }
-@media (max-width: 560px) { .home .chore-run { flex: 1 1 100%; } }
+@media (prefers-reduced-motion: reduce) { .status-running .card-mark.tone-info svg, .flow-line.tone-info svg, .flow-run.busy svg { animation: none; } }
+@media (max-width: 560px) { .home .flow-run { flex: 1 1 100%; } }
 
 /* narrow windows and 200% zoom */
 @media (max-width: 860px) {
@@ -302,21 +311,22 @@ input[type="number"] { width: 70px; }
   .panes { overflow: visible; }
 }
 
-/* the daily time: a button on each chore's row and on the first box, and the form it opens */
-.chore-daily { position: relative; z-index: 1; min-width: 150px; text-align: left; }
-.chore-daily span { display: flex; flex-direction: column; }
-.chore-daily small { color: var(--muted); font-weight: 400; }
+/* the daily time: a button on each flow's row and on the first node, and the form it opens */
+.flow-daily { position: relative; z-index: 1; min-width: 150px; text-align: left; }
+.home .flow-daily { min-height: 76px; min-width: 200px; } /* as big with its time as without, so the row does not grow when a time is set */
+.flow-daily span { display: flex; flex-direction: column; }
+.flow-daily small { color: var(--muted); font-weight: 400; }
 .daily-form { position: relative; z-index: 1; flex: 1 1 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
 .daily-form label { display: flex; align-items: center; gap: 8px; }
 .daily-form input { min-height: 44px; box-sizing: border-box; padding: 8px 12px; border-radius: 12px; font-size: 16px; }
 .daily-form button { min-height: 44px; border-radius: 12px; font-weight: 600; }
 .daily-problem { flex: 1 1 100%; margin: 0; padding: 8px 12px; border-left: 4px solid var(--bad); background: rgba(255, 122, 122, .14); overflow-wrap: anywhere; }
-@media (max-width: 560px) { .home .chore-daily { flex: 1 1 100%; } }
+@media (max-width: 560px) { .home .flow-daily { flex: 1 1 100%; } }
 .daily-button { min-height: 44px; border-radius: 12px; font-weight: 600; }
 .notice .daily-form { flex: 1 1 100%; }
 .start-strip { padding: 6px 16px; background: var(--sunk); border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
 
-/* a stopped chore: the card on Home, the result of trying again, and the same words and buttons under the canvas */
+/* a stopped flow: the card on Home, the result of trying again, and the same words and buttons under the canvas */
 .tried-results, .attention { display: flex; flex-direction: column; gap: 12px; max-width: 1160px; margin: 0 auto; padding: 16px 16px 0; box-sizing: border-box; font-size: 16px; }
 .attention h2 { font-size: 20px; }
 .attention ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
@@ -336,9 +346,9 @@ input[type="number"] { width: 70px; }
 .tried p, .attention-words p { margin: 2px 0 0; }
 .attention-buttons { flex: 0 1 auto; display: flex; flex-direction: column; gap: 8px; max-width: 100%; }
 .attention-buttons > button { min-height: 48px; font-size: 16px; }
-.stopped-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.stopped-actions button { min-height: 48px; font-size: 16px; }
-.stopped-actions button[aria-disabled="true"] { opacity: .55; cursor: default; }
+.stopped-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.stopped-buttons button { min-height: 48px; font-size: 16px; }
+.stopped-buttons button[aria-disabled="true"] { opacity: .55; cursor: default; }
 .help-panel { flex: 1 1 100%; display: flex; flex-direction: column; gap: 10px; padding: 12px 0 0; }
 .help-panel label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
 .help-panel textarea { box-sizing: border-box; width: 100%; padding: 8px 12px; border-radius: 12px; background: var(--sunk); border: 1px solid var(--line); resize: vertical; }
@@ -346,7 +356,7 @@ input[type="number"] { width: 70px; }
 .help-panel .chat-message p { margin: 0; overflow-wrap: anywhere; }
 .help-panel .chat-text { padding: 8px 12px; background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; }
 .stopped-problem { margin: 6px 0 0; padding: 8px 12px; border-left: 4px solid var(--bad); background: rgba(255, 122, 122, .14); overflow-wrap: anywhere; }
-.strip .stopped-actions { display: contents; } /* Try again and Ask for help share the row of the strip's other buttons */
+.strip .stopped-buttons { display: contents; } /* Try again and Ask for help share the row of the strip's other buttons */
 .strip-reason, .strip-hint { margin: 0; overflow-wrap: anywhere; }
 .strip-reason { display: flex; align-items: flex-start; gap: 6px; }
 .strip-reason svg { flex: none; margin-top: 2px; color: var(--bad); }
@@ -355,7 +365,7 @@ input[type="number"] { width: 70px; }
 .notices .tried > svg { width: 20px; height: 20px; }
 .notices .tried h2 { font-size: 15px; }
 .notices .tried button { min-height: 44px; }
-@media (max-width: 560px) { .attention-buttons, .attention-buttons > button, .attention-buttons .stopped-actions, .attention-buttons .stopped-actions button { width: 100%; } }
+@media (max-width: 560px) { .attention-buttons, .attention-buttons > button, .attention-buttons .stopped-buttons, .attention-buttons .stopped-buttons button { width: 100%; } }
 
 /* Home on the first day: the message to send, and the three stages */
 .home:has(.first-day) h1 { font-size: 28px; line-height: 1.25; }
@@ -395,8 +405,8 @@ input[type="number"] { width: 70px; }
 .app-problem > p { flex: 1 1 220px; margin: 0; }
 .app-problem .help-panel { flex: 1 1 100%; }
 /* the actions are only names to read: no fill, no border, no pointer, so none of them looks like a button */
-.app-actions { margin: 0; padding: 0 0 0 20px; columns: 220px; column-gap: 24px; list-style: disc; }
-.app-actions li { padding: 2px 0; overflow-wrap: anywhere; cursor: default; }
+.app-steps { margin: 0; padding: 0 0 0 20px; columns: 220px; column-gap: 24px; list-style: disc; }
+.app-steps li { padding: 2px 0; overflow-wrap: anywhere; cursor: default; }
 .app-card-slot { grid-column: 1 / -1; list-style: none; }
 .app-allowed { border-color: var(--ok); }
 .app-allowed > svg { color: var(--ok); }

@@ -8,6 +8,7 @@ as references.
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import sqlite3
 from collections import Counter
@@ -24,11 +25,18 @@ from workflow_factory.steps import (
     Sensitivity,
     Status,
     Step,
+    add_tags,
+    all_tags,
+    app_names,
     find_step,
+    list_steps,
     record_app_name,
     refused_write,
     save_step,
+    search_matches,
+    step_reports,
     validate_step,
+    words,
 )
 
 # Apps whose content is private by default; the user can mark more.
@@ -77,13 +85,59 @@ _HANDLE_KEY = secrets.token_bytes(16)  # lives as long as the process: a handle 
 
 
 def handle(*names: str) -> str:
-    """An opaque stand-in for names the browser must not see (an action or control of a private app). The same names give the
+    """An opaque stand-in for names the browser must not see (a step or control of a private app). The same names give the
     same handle in this process, so a button can send it back; nothing about the names can be read from it."""
     return "h" + hmac.new(_HANDLE_KEY, json.dumps(names).encode(), hashlib.sha256).hexdigest()[:16]
 
 
 def is_private(user_db: Path, app: str, known: frozenset[str] | None = None) -> bool:
     return plain_app(app) in (known if known is not None else private_apps(user_db))
+
+
+def step_context(user_db: Path, steps: list[Step], private: frozenset[str] | None = None) -> dict[str, dict]:
+    """Per step name: its pattern tags and the technologies (as the screens name them) it has a locator for. A private
+    technology is left out, and a name known only there has no entry, so nothing about it can be found or shown."""
+    private = private_apps(user_db) if private is None else private
+    shown, tags, context = app_names(user_db), all_tags(user_db), {}
+    for step in steps:
+        if plain_app(step.app) not in private:
+            entry = context.setdefault(step.name, {"tags": tags.get(step.name, []), "technologies": set()})
+            entry["technologies"].add(shown.get(plain_app(step.app), step.app))
+    return {name: {**entry, "technologies": sorted(entry["technologies"])} for name, entry in context.items()}
+
+
+def known_steps(user_db: Path, factory_db: Path | None, technology: str | None = None, tag: str | None = None,
+                query: str | None = None) -> list[dict]:
+    """What the apprentice knows, one entry per step name: name, action, pattern tags, technologies and state (trusted
+    if any technology's step is). The filters combine: a technology it has a locator for, a pattern or technology tag,
+    and the search rule on name and tags. A private technology's steps are only counted, in a last {"private", "count"}
+    entry, and only when no tag or text is asked for (they have none to match)."""
+    steps = list_steps(user_db, factory_db, light=True)
+    private = private_apps(user_db)
+    context, reports = step_context(user_db, steps, private), step_reports(user_db, steps)
+    wanted = plain_app(technology) if technology else None
+    grouped: dict[str, list[tuple[Step, str]]] = {}
+    hidden: set[str] = set()
+    for step, report in zip(steps, reports, strict=True):
+        if wanted and plain_app(step.app) != wanted:
+            continue
+        if plain_app(step.app) in private:
+            hidden.add(step.name)
+        else:
+            grouped.setdefault(step.name, []).append((step, report["state"]))
+    entries = []
+    for name, rows in grouped.items():
+        tags, technologies = context[name]["tags"], context[name]["technologies"]
+        if (tag is None or words(tag) in [words(t) for t in [*tags, *technologies]]) \
+                and (not query or search_matches(query, name, [*tags, *technologies])):
+            states = [state for _, state in rows]
+            entries.append({"name": name, "action": rows[0][0].action, "tags": tags, "technologies": technologies,
+                            "state": str(Status.TRUSTED) if Status.TRUSTED in states else states[0]})
+    # names known only on private technologies; with a technology asked for, that technology's own steps
+    count = len(hidden if wanted else hidden - context.keys())
+    if count and tag is None and not query:
+        entries.append({"private": True, "count": count})
+    return sorted(entries, key=lambda entry: entry.get("name", "￿"))
 
 
 def observe(user_db: Path, desktop: Desktop) -> dict:
@@ -148,12 +202,34 @@ def _consent_required(category: Sensitivity, scope: Consent) -> dict:
     }
 
 
+def technology_in(user_db: Path, name: str, taught_on: str, product: str = "") -> str | None:
+    """The technology a step name gives away, as written in the name, or None. Technologies are the apps of every step
+    known, the one being taught and the product names seen; a word counts whole, with or without `.exe`."""
+    known = {plain_app(step.app) for step in list_steps(user_db, None, light=True)} | {plain_app(taught_on)}
+    terms = known | {n.casefold() for n in app_names(user_db).values()} | ({product.casefold()} if product else set())
+    for term in sorted(terms - {""}, key=len, reverse=True):
+        if found := re.search(rf"(?<![^\W_]){re.escape(term)}(?:\.exe)?(?![^\W_])", name, re.IGNORECASE):
+            return found.group()
+    return None
+
+
 def teach_step(
     user_db: Path, desktop: Desktop, name: str, locator: Locator, action: str = "click",
-    sensitive: Sensitivity | None = None, secret_ref: str | None = None,
+    sensitive: Sensitivity | None = None, secret_ref: str | None = None, tags: list[str] | None = None,
 ) -> dict:
-    """Perform the action once, measure its effect and save the step at once (autosave)."""
+    """Perform the action once, measure its effect and save the step at once (autosave). A step is named by what it
+    does: its name is refused if it carries a technology. `tags` are pattern tags, merged into the step's by name."""
     key = desktop.app_key()
+    if given := technology_in(user_db, name, key.process, key.name.strip().removesuffix(".exe")):
+        return {"status": "name_has_technology", "message": (
+            f"A step name must say what it does and must not contain a technology name or a program's process name "
+            f"({given!r} is one). Name the step by its action, for example 'Save', and teach it again.")}
+    elsewhere = [s for s in list_steps(user_db, None, light=True)  # the action kind belongs to the step as a whole
+                 if s.name == name and plain_app(s.app) != plain_app(key.process) and s.action != action]
+    if elsewhere:
+        return {"status": "action_differs", "message": (
+            f"The step {name!r} already exists with the action {elsewhere[0].action!r} on {elsewhere[0].app}, and a step "
+            f"has one action everywhere. Give this {action!r} action its own name and teach it again.")}
     record_app_name(user_db, key)
     candidate = Step(app=key.process, version=key.version, name=name, locator=locator,
                        action=action, sensitive=sensitive, secret_ref=secret_ref)
@@ -190,13 +266,13 @@ def teach_step(
     # no effect a run could contradict: nothing was done, or what a selection changes depends on what is selected
     taught = "" if action in TEXT_ACTIONS or action == "select" else str(effect)
     save_step(user_db, replace(candidate, sensitive=category, effect=taught, frame=desktop.frame()))
-    return {"status": "saved", "step": name, "effect": str(effect)}
+    return {"status": "saved", "step": name, "effect": str(effect), "tags": add_tags(user_db, name, tags or [])}
 
 
 def list_open_doubts(user_db: Path) -> list[dict]:
     return [
         {"id": d.id, "flow_id": d.flow_id, "node_id": d.node_id, "step": d.step,
-         "reason": str(d.reason), "detail": d.detail, "capture": d.capture, "status": d.status,
+         "technology": d.technology, "reason": str(d.reason), "detail": d.detail, "capture": d.capture, "status": d.status,
          "note": d.note}  # what the person wrote when asking for help
         for d in list_doubts(user_db, status="open")
     ]

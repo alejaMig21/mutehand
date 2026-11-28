@@ -17,7 +17,8 @@ from workflow_factory.dataops import OPS
 from workflow_factory.desktop import Desktop
 from workflow_factory.flow import KINDS
 from workflow_factory.paths import default_user_db
-from workflow_factory.steps import Locator, Sensitivity, list_steps, step_reports
+from workflow_factory.steps import Locator, Sensitivity
+from workflow_factory.upgrade import start_user_db
 
 
 def _code_only(tool):
@@ -65,13 +66,17 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop], factory_d
     def teach_step(
         app: str, name: str, role: str, control_name: str, automation_id: str | None = None,
         action: str = "click", sensitive: str | None = None, secret_ref: str | None = None,
+        tags: list[str] | None = None,
     ) -> dict:
-        """Do the action once, measure its effect and save the step at once. An action that writes
+        """Do the action once, measure its effect and save the step at once. Name the step by what it does
+        ("Save"), never by a program: a name with a technology in it is refused. Teaching the same name on another
+        app adds a locator there, with the same action: a different action under a known name is refused
+        (action_differs). `tags` are optional pattern tags ("file", "mouse") kept with the step. An action that writes
         text only checks that the control can be reached: nothing is clicked or written. A sensitive
         action returns consent_required: ask the user, then call record_consent and teach again."""
         return tutor.teach_step(
             user_db, desktop_for(app), name, Locator(role, control_name, automation_id), action,
-            Sensitivity(sensitive) if sensitive else None, secret_ref)
+            Sensitivity(sensitive) if sensitive else None, secret_ref, tags)
 
     @server.tool(name="teach_lesson")
     @_code_only
@@ -134,39 +139,41 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop], factory_d
         tutor.record_consent(user_db, app, control, action)
 
     @server.tool(name="list_known_steps")
-    def list_known_steps(app: str) -> list[dict]:
-        """What the apprentice already knows how to do in an app: each step's name, action and state."""
-        known = [step for step in list_steps(user_db, factory_db, light=True) if step.app == app]
-        if tutor.is_private(user_db, app):  # the names of a private app's actions stay out, like what observe_app shows
-            return [{"private": True, "count": len(known)}] if known else []
-        return [{"name": step.name, "action": step.action, "state": report["state"]}
-                for step, report in zip(known, step_reports(user_db, known), strict=True)]
+    def list_known_steps(technology: str | None = None, tag: str | None = None, query: str | None = None) -> list[dict]:
+        """What the apprentice already knows how to do, one entry per step: name, action, tags, the technologies it is
+        known on and its state. Narrow it by technology (a program), by tag (a pattern tag or a technology name) or by
+        text (words that start a word of the name or tags; capitals and accents do not matter). A private technology's
+        steps are only counted, never named."""
+        return tutor.known_steps(user_db, factory_db, technology, tag, query)
 
     @server.tool(name="list_node_kinds")
     def list_node_kinds() -> dict:
-        """The kinds of box a chore can hold, the data operations a data box can run (with the fields each takes) and the
-        forms a box's field can be written in. Use it before writing nodes for create_flow."""
+        """The kinds of node a flow can hold, the data operations a data node can run (with the fields each takes) and the
+        forms a node's field can be written in. Use it before writing nodes for create_flow."""
         return {
             "kinds": list(KINDS),
             "data_operations": {op: {"required": list(required), "optional": list(optional)}
                                 for op, (required, optional, _) in OPS.items()},
             "field_forms": [
                 {"form": "value", "example": {"value": "any JSON"}},
-                {"form": "ref", "example": {"ref": {"node": "id of another box", "field": "name of its output"}}},
+                {"form": "ref", "example": {"ref": {"node": "id of another node", "field": "name of its output"}}},
                 {"form": "expression", "example": {"expression": "text kept for later: no run uses it yet"}},
             ],
         }
 
     @server.tool(name="create_flow")
-    def create_flow(title: str, app: str, nodes: list[dict], edges: list[list[str]] | None = None) -> dict:
-        """Save a chore the person described. Nodes are {id, step, kind?, fields?, inputs?}; edges are [from, to] pairs
-        (None: the nodes run in order). A step not taught yet is allowed: the answer's missing_steps lists the lessons
-        still to teach with teach_step, then flow_status says when the chore is ready."""
-        return flows.create_flow(user_db, title, app, nodes, edges, factory_db)
+    def create_flow(title: str, nodes: list[dict], edges: list[list[str]] | None = None) -> dict:
+        """Save a flow the person described. Nodes are {id, step, technology, kind?, fields?, inputs?}: a step node names
+        the technology (program) it acts on, so one flow can mix programs; edges are [from, to] pairs (None: the nodes
+        run in order). A step with no lesson for its node's technology is allowed: the answer's missing_lessons lists
+        each such node as {node, step, technology}, to teach with teach_step on that technology, then flow_status says
+        when the flow is ready."""
+        return flows.create_flow(user_db, title, nodes, edges, factory_db)
 
     @server.tool(name="flow_status")
     def flow_status(flow_id: str) -> dict:
-        """Whether a chore can run now, why not if it cannot, and which steps are still to be taught."""
+        """Whether a flow can run now, why not if it cannot, and missing_lessons: the nodes ({node, step, technology})
+        whose step is still to be taught on their technology."""
         return flows.flow_readiness(user_db, flow_id, factory_db)
 
     return server
@@ -175,6 +182,7 @@ def build_server(user_db: Path, desktop_for: Callable[[str], Desktop], factory_d
 def main() -> None:
     user_db = default_user_db()
     user_db.parent.mkdir(parents=True, exist_ok=True)
+    start_user_db(user_db)
     factory = os.environ.get("WORKFLOW_FACTORY_FACTORY_DB")
     build_server(user_db, AgentDesktop, Path(factory) if factory else None).run()
 

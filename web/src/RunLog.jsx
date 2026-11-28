@@ -8,8 +8,8 @@ const WORDS = {
   paused: 'paused: you moved the mouse',
 }
 
-// A small card over the corner of the canvas: one picture per box (so the progress reads without words), and the
-// full list of what each box did one button away. It floats, so a run never shrinks the boxes.
+// A small card over the corner of the canvas: one picture per node (so the progress reads without words), and the
+// full list of what each node did one button away. It floats, so a run never shrinks the nodes.
 export default function RunLog({ log, nodes, steps, running, onClose }) {
   const [open, setOpen] = useState(false)
   const title = (id) => {
@@ -20,12 +20,12 @@ export default function RunLog({ log, nodes, steps, running, onClose }) {
     <section className="run-log" aria-label="Run log" data-testid="run-log">
       <header>
         <h2>Run</h2>
-        <ul className="run-progress" aria-label="Progress by box">
+        <ul className="run-progress" aria-label="Progress by node">
           {steps.map(({ id, number, state }) => {
             const [glyph, word, tone] = RUN_MARKS[state] ?? RUN_MARKS.unreached
             return (
               <li key={id} className={`tone-${tone}`} data-testid={`progress-${id}`} data-state={state} title={`${number}. ${title(id)}: ${word}`}>
-                {number}<Icon name={glyph} size={16} /><span className="sr-only">{`Box ${number}: ${word}`}</span>
+                {number}<Icon name={glyph} size={16} /><span className="sr-only">{`Node ${number}: ${word}`}</span>
               </li>
             )
           })}

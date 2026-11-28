@@ -6,17 +6,17 @@ const system = (key, title, hint, group, icon, node) => ({ key, title, hint, gro
 const data = (op, fields) => ({ kind: 'data', op, fields: Object.fromEntries(Object.entries(fields).map(([k, v]) => [k, fixed(v)])) })
 
 export const SYSTEM_NODES = [
-  system('manual-trigger', 'Manual trigger', 'Starts a chore by hand', 'Triggers', 'play',
+  system('manual-trigger', 'Manual trigger', 'Starts a flow by hand', 'Triggers', 'play',
     { kind: 'trigger', fields: { mode: fixed('manual') } }),
-  system('daily-trigger', 'Daily trigger', 'Starts a chore every day at a time', 'Triggers', 'clock',
+  system('daily-trigger', 'Daily trigger', 'Starts a flow every day at a time', 'Triggers', 'clock',
     { kind: 'trigger', fields: { mode: fixed('daily'), at: fixed('09:00') } }),
-  system('foreach', 'Repeat for each', 'Repeats the first action it connects to, once per item', 'Order', 'repeat',
+  system('foreach', 'Repeat for each', 'Repeats the first step it connects to, once per item', 'Order', 'repeat',
     { kind: 'foreach', fields: { items: fixed([]) } }),
   system('if', 'Two paths: yes or no', 'Chooses a path: the first line is yes, the second is no', 'Order', 'branch',
     { kind: 'if', fields: { condition: fixed(true) } }),
-  system('wait', 'Wait a while', 'Pauses the chore', 'Order', 'clock', { kind: 'wait', fields: { seconds: fixed(5) } }),
+  system('wait', 'Wait a while', 'Pauses the flow', 'Order', 'clock', { kind: 'wait', fields: { seconds: fixed(5) } }),
   system('join', 'Join', 'Waits for every path that leads to it', 'Order', 'merge', { kind: 'join' }),
-  system('stop', 'Stop', 'Ends the chore on purpose', 'Order', 'stop', { kind: 'stop' }),
+  system('stop', 'Stop', 'Ends the flow on purpose', 'Order', 'stop', { kind: 'stop' }),
   system('compare', 'Compare', 'Two values: equal, greater, contains...', 'Logic', 'scale',
     data('compare', { a: 0, b: 0, operator: 'equals' })),
   system('and', 'And', 'True when both are true', 'Logic', 'scale', data('and', { a: true, b: true })),
@@ -61,30 +61,15 @@ export const appLabel = (app) => {
   return base.charAt(0).toUpperCase() + base.slice(1)
 }
 
-// 'open-menu', 'Open_menu' and 'open menu' are the same words
-const plain = (text) => String(text).toLowerCase().replace(/[-_]+/g, ' ')
-
-// What the panel shows for a search, which is plain words in any order: system nodes by name, hint or group; steps by
-// name, app or origin.
-export function searchCatalog(query, steps, systemNodes = SYSTEM_NODES, recipes = []) {
-  const words = plain(query).split(/\s+/).filter(Boolean)
-  const matches = (texts) => {
-    const text = plain(texts.join(' '))
-    return words.every((word) => text.includes(word))
-  }
-  const system = systemNodes.filter((n) => matches([n.title, n.hint, n.group]))
-  const apps = steps
-    .filter((s) => matches([s.name, s.app, appLabel(s.app), s.origin]))
-    .sort((a, b) => appLabel(a.app).localeCompare(appLabel(b.app)) || a.name.localeCompare(b.name))
-  const found = recipes.filter((r) => matches([r.name, ...r.holes.map((h) => h.hole), ...Object.keys(r.apps).map(appLabel)]))
-  return { system, apps, recipes: found }
-}
-
-// The system nodes a person meets first: a choice, a repeat and a pause, in this order.
-export const DECISIONS = ['if', 'foreach', 'wait']
-
 // Letter chip colours: white text on each is at least 4.5:1 (checked by the tests).
 export const CHIP_COLOURS = ['#1F6FA8', '#7B4FC4', '#1B7A4E', '#B0405F', '#3F5FB8', '#8A5A12']
+
+// The programs a step has been learned for, in the order of their names on screen (a program is one whatever its case).
+export function technologiesOf(rows, name) {
+  const seen = new Map()
+  for (const row of rows) if (row.name === name && !seen.has(appKey(row.app))) seen.set(appKey(row.app), row)
+  return [...seen.values()].sort((a, b) => appLabel(a.app).localeCompare(appLabel(b.app))).map((row) => row.app)
+}
 
 // The same app always gets the same chip, whatever the case of its name: the letter of the name on screen, and a colour
 // that does not change when that name arrives.
@@ -101,8 +86,3 @@ export const systemEntryFor = (node) => SYSTEM_NODES.find((s) => s.node.kind ===
 // What a node is called on screen.
 export const titleOf = (node) => (node.kind && node.kind !== 'step' ? systemEntryFor(node)?.title ?? node.kind : node.step)
 
-// The app as the taught steps spell it, so a run finds them: 'Telegram' is telegram.exe.
-export function taughtApp(typed, apps) {
-  const app = typed.trim()
-  return apps.includes(app) ? app : apps.find((known) => appKey(known) === appKey(app)) ?? app
-}

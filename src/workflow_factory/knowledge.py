@@ -19,7 +19,6 @@ from pathlib import Path
 from workflow_factory.daily import with_daily
 from workflow_factory.flows import SCHEMA as FLOW_SCHEMA
 from workflow_factory.flows import (
-    check_app,
     check_title,
     flow_from_dict,
     flow_to_dict,
@@ -77,8 +76,9 @@ def _parse(data: dict, origin: Origin):
         for item in data["flows"]:
             if not FLOW_ID.fullmatch(str(item["id"])):
                 raise ValueError(f"flow id {item['id']!r} may only use letters, digits, '_', '.' and '-'")
-            words = {key: check(item[key]) for key, check in (("title", check_title), ("app", check_app)) if key in item}
-            flows.append((flow_from_dict(item["id"], item), words))
+            words = {"title": check_title(item["title"])} if "title" in item else {}
+            flow = flow_from_dict(item["id"], item)
+            flows.append((flow, words))
     except (KeyError, TypeError, AttributeError) as error:
         raise ValueError(f"the file is not valid knowledge: {error}") from None
     if origin == Origin.LOCAL:  # a file from elsewhere cannot vouch for itself
@@ -127,7 +127,7 @@ def build_factory(out_path: Path, data: dict) -> None:
 def duplicate_flow(user_db: Path, factory_db: Path | None, flow_id: str, new_id: str | None = None,
                    title: str | None = None):
     """Copy a flow (typically a factory template) into the user layer, where it can be edited. The copy keeps the
-    title and app unless a title is given; without a new_id its identifier is made from the title."""
+    title unless a title is given; without a new_id its identifier is made from the title."""
     if new_id is not None and not FLOW_ID.fullmatch(new_id):
         raise ValueError("a flow id may only use letters, digits, '_', '.' and '-'")
     original = load_flow(user_db, factory_db, flow_id)
@@ -139,9 +139,9 @@ def duplicate_flow(user_db: Path, factory_db: Path | None, flow_id: str, new_id:
         new_id = new_flow_id(title or flow_id, [entry["id"] for entry in list_flows(user_db, factory_db)])
     elif new_id.casefold() in (entry["id"].casefold() for entry in list_flows(user_db, None)):
         raise ValueError(f"a flow named {new_id!r} already exists")
-    # a daily box without its Windows task would lie: the copy starts without one, its time can be set again
+    # a daily node without its Windows task would lie: the copy starts without one, its time can be set again
     copy, _ = with_daily(replace(original, id=new_id), None, {})
-    save_flow(user_db, copy, title, info.get("app"))
+    save_flow(user_db, copy, title)
     return copy
 
 

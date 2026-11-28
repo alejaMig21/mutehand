@@ -1,6 +1,6 @@
-// What the strip under the canvas says about the chosen box. Pure, so node can test it.
+// What the strip under the canvas says about the chosen node. Pure, so node can test it.
 //
-// A sentence is made only of the box's kind, operation, action, control and app. Field values are never read: they hold
+// A sentence is made only of the node's kind, operation, action, control and app. Field values are never read: they hold
 // what was typed. In a private app the control's name may be screen content, so only its role is said.
 
 import { appLabel } from './catalog.js'
@@ -19,21 +19,21 @@ const ACTIONS = {
 }
 const OTHER_ACTION = (app) => ['Acts on', ` in ${app}.`] // an action newer than this screen
 
-// system box -> its sentence; a trigger is told apart by its mode, a data box by its operation
+// system node -> its sentence; a trigger is told apart by its mode, a data node by its operation
 const SYSTEM = {
-  'trigger:manual': 'Starts the chore when you run it.',
-  'trigger:daily': 'Starts the chore on its daily run.',
-  foreach: 'Repeats the action it leads to, once for each item in its list.',
+  'trigger:manual': 'Starts the flow when you run it.',
+  'trigger:daily': 'Starts the flow on its daily run.',
+  foreach: 'Repeats the step it leads to, once for each item in its list.',
   if: 'Takes the yes path or the no path, depending on its condition.',
-  'if:effect': 'Takes the yes path or the no path, depending on what an earlier box changed on screen.',
+  'if:effect': 'Takes the yes path or the no path, depending on what an earlier node changed on screen.',
   join: 'Waits for every path that leads here, then goes on.',
-  wait: 'Waits a while before the chore goes on.',
-  stop: 'Ends the chore here on purpose.',
+  wait: 'Waits a while before the flow goes on.',
+  stop: 'Ends the flow here on purpose.',
   'data:compare': 'Compares two values.',
   'data:and': 'Answers yes when both values are true.',
   'data:or': 'Answers yes when at least one of two values is true.',
   'data:not': 'Turns true into false, and false into true.',
-  'data:fixed': 'Gives later boxes a value set here.',
+  'data:fixed': 'Gives later nodes a value set here.',
   'data:convert': 'Turns a value into another kind, such as a number or a text.',
   'data:split': 'Cuts a text into a list.',
   'data:join': 'Puts a list together into one text.',
@@ -56,7 +56,7 @@ function actionSentence(meta, app) {
     const where = app ? appLabel(app) : 'this app'
     const hole = meta?.hole
     return [hole ? `The “${hole.hole}” part of the recipe “${hole.recipe}” has not been taught for ${where} yet.`
-      : `Nobody has taught this action for ${where} yet.`, '', '']
+      : `Nobody has taught this step for ${where} yet.`, '', '']
   }
   const [lead, tail] = (ACTIONS[meta.action] ?? OTHER_ACTION)(appLabel(meta.app))
   const role = roleWords(meta.locator?.role || 'item')
@@ -71,7 +71,7 @@ export function sentenceOf(node, meta, app = '') {
     const repeated = meta && !meta.missing ? before.charAt(0).toLowerCase() + before.slice(1) : before
     return [`Repeats this until it reaches its limit: ${repeated}`, name, after]
   }
-  return [SYSTEM[systemKey(node)] ?? 'This screen cannot say what this box does.', '', '']
+  return [SYSTEM[systemKey(node)] ?? 'This screen cannot say what this node does.', '', '']
 }
 
 const times = (n) => (n === 1 ? 'once' : `${n} times`)

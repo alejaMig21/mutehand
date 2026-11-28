@@ -33,7 +33,8 @@ def test_a_stop_writes_one_open_doubt_with_a_structural_capture(tmp_path):
     assert result.stopped == "n1"
     assert list_doubts(user_db) == [Doubt(
         id=1, flow_id="morning", node_id="n1", step="open-menu", reason="control_not_found",
-        capture={"button": 2, "textfield": 1}, status="open", detail="control_not_found")]
+        capture={"button": 2, "textfield": 1}, status="open", detail="control_not_found",
+            technology="paint.exe")]
 
 
 def test_the_structural_capture_holds_no_text_content(tmp_path):
@@ -185,7 +186,7 @@ def test_giving_a_stopped_flow_a_daily_time_does_not_make_it_start_over(tmp_path
     desktop = FakeDesktop(controls=[button("Menu"), button("Save")])
     result = run_flow(with_time, desktop=desktop, user_db=user_db)
 
-    assert [c.name for c in desktop.clicks] == ["Save"]  # the first box was not done twice
+    assert [c.name for c in desktop.clicks] == ["Save"]  # the first node was not done twice
     assert result.stopped is None
 
 

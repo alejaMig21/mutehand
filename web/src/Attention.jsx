@@ -6,7 +6,7 @@ import { Icon } from './icons.jsx'
 import { helpMessage, rejectedWords, relearnWords, stoppedWords, titles, triedResult } from './stopped.js'
 
 // Trying again, shared by Home and the flow screen so that a try started on one is reported on both. `tries` holds, by
-// chore, what was tried and, once the run ends, how it went. `ensure` runs first on the flow screen: what is stored
+// flow, what was tried and, once the run ends, how it went. `ensure` runs first on the flow screen: what is stored
 // must be what is on screen.
 export function useTryAgain({ runs, follow, forget }) {
   const [tries, setTries] = useState({})
@@ -21,7 +21,7 @@ export function useTryAgain({ runs, follow, forget }) {
     try {
       if (ensure) await ensure()
       forget(item.flow)
-      const { run_id } = await api(`/api/flows/${encode(item.flow)}/try-again`, { method: 'POST', body: { app: item.app, context: {} } })
+      const { run_id } = await api(`/api/flows/${encode(item.flow)}/try-again`, { method: 'POST', body: { context: {} } })
       setTries((all) => ({ ...all, [item.flow]: { before: item, runId: run_id, result: null } }))
       follow(item.flow, run_id)
     } catch (e) {
@@ -31,7 +31,7 @@ export function useTryAgain({ runs, follow, forget }) {
     }
   }, [follow, forget])
 
-  // a try that ended is told how it went: the chore is read again, to see whether it stopped again and where
+  // a try that ended is told how it went: the flow is read again, to see whether it stopped again and where
   useEffect(() => {
     for (const [flow, tried] of Object.entries(tries)) {
       const run = runs[flow]
@@ -86,7 +86,7 @@ const keepTyped = (doubt, note) => {
   } catch { /* the note simply is not remembered */ }
 }
 
-// "Try again" and "Ask for help" for a stopped chore. A step the person rejected is not lifted by trying again: it is
+// "Try again" and "Ask for help" for a stopped flow. A step the person rejected is not lifted by trying again: it is
 // allowed again first. `prefix` and `suffix` keep the test ids of the card and of the strip apart.
 export function StoppedActions({ item, onTry, onChanged, trying, prefix, suffix = '' }) {
   const [asking, setAsking] = useState(false)
@@ -119,7 +119,7 @@ export function StoppedActions({ item, onTry, onChanged, trying, prefix, suffix 
 
   return (
     <>
-      <div className="stopped-actions">
+      <div className="stopped-buttons">
         {blocked
           ? <button className="primary" data-testid={`${prefix}-allow-again${suffix}`} aria-disabled={allowing || undefined} onClick={allow}>Allow again</button>
           : (
@@ -187,7 +187,7 @@ function Rejected({ item, onAllowed }) {
     setProblem('')
     try {
       await api(`/api/steps/${encode(item.app)}/${encode(item.step)}/restore`, { method: 'POST' })
-      onAllowed(item.private ? `An action in ${appLabel(item.app)} is allowed again.` : `“${item.step}” is allowed again.`)
+      onAllowed(item.private ? `A step in ${appLabel(item.app)} is allowed again.` : `“${item.step}” is allowed again.`)
     } catch (e) {
       setProblem(e.message)
       setAllowing(false)
@@ -206,15 +206,38 @@ function Setup({ item }) {
   return <Card id={`setup-${item.id}`} title={`${item.title}: missing`} detail={item.why} hint={`To fix: ${item.fix}`} />
 }
 
-const rejectedKey = (item) => `rejected-${item.app}-${item.step}`
+// Told once, after an upgrade starts the person's data again: where the earlier data was kept.
+function Notice({ item, onDismissed }) {
+  const [problem, setProblem] = useState('')
+  const tell = () => api(`/api/notices/${encode(item.id)}/dismiss`, { method: 'POST' })
+  useEffect(() => { tell().catch(() => {}) }, [item.id]) // eslint-disable-line react-hooks/exhaustive-deps -- shown, so told: never again
+  const dismiss = () => tell().then(onDismissed, (e) => setProblem(e.message))
+  return (
+    <Card id={`notice-${item.id}`} title="A fresh start"
+      detail={`This version starts with no Steps and no Flows. Everything you had before was kept in a copy: ${item.copy}`}
+      hint="Nothing was moved into the new data. Keep that file if you want to look at the old one later.">
+      <button className="primary" data-testid={`attention-notice-dismiss-${item.id}`} onClick={dismiss}>Got it</button>
+      {problem && <p className="stopped-problem" role="alert">{problem}</p>}
+    </Card>
+  )
+}
 
-// The things that need the person, first on Home. Absent when there are none. A rejected action that was just allowed again
+const rejectedKey =(item) => `rejected-${item.app}-${item.step}`
+
+// The things that need the person, first on Home. Absent when there are none. A rejected step that was just allowed again
 // stays where it was, saying so, until the person dismisses it: the list below does not jump up under the next press.
 //
-// A try again answers the same way: its answer stands in the card, or where the card was once the chore no longer needs
+// A try again answers the same way: its answer stands in the card, or where the card was once the flow no longer needs
 // the person, until it is hidden. `tries` and `hide` are the ones `useTryAgain` gives.
-export function Attention({ items, tries, hide, tryAgain, onChanged, running }) {
+export function Attention({ items: asked, tries, hide, tryAgain, onChanged, running }) {
   const [kept, setKept] = useState({}) // key -> {item, at, words}
+  // a notice is dismissed on the program's side the moment it is shown; it stays on screen until the person presses Got it
+  const [told, setTold] = useState({})
+  useEffect(() => {
+    const fresh = asked.filter((item) => item.kind === 'notice' && !told[item.id])
+    if (fresh.length) setTold((all) => ({ ...all, ...Object.fromEntries(fresh.map((item) => [item.id, item])) }))
+  }, [asked]) // eslint-disable-line react-hooks/exhaustive-deps
+  const items = [...asked, ...Object.values(told).filter((one) => !asked.some((item) => item.kind === 'notice' && item.id === one.id))]
   const placed = useRef({}) // flow -> where its card was when Try again was pressed
   const list = items.map((item) => ({ item }))
   for (const [key, one] of Object.entries(kept)) {
@@ -241,6 +264,8 @@ export function Attention({ items, tries, hide, tryAgain, onChanged, running }) 
               </Card>
             )
           }
+          if (item.kind === 'notice') return <Notice key={`notice-${item.id}`} item={item}
+            onDismissed={() => { setTold(({ [item.id]: _gone, ...rest }) => rest); onChanged() }} />
           if (item.kind === 'relearn') return <Relearn key={`relearn-${item.app}`} item={item} />
           if (item.kind === 'rejected') return <Rejected key={rejectedKey(item)} item={item} onAllowed={allowed(item, at)} />
           if (item.kind === 'setup') return <Setup key={`setup-${item.id}`} item={item} />

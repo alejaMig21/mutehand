@@ -10,7 +10,7 @@ from test_apps_e2e import app_row, apps_screen
 from test_canvas_e2e import stub_clipboard
 from test_editor_e2e import DIST
 from test_flow_more_e2e import more, served
-from test_home_e2e import chore, chores, home, rejected, row, run_button, says
+from test_home_e2e import home, put_flow, put_flows, rejected, row, run_button, says
 
 from workflow_factory import grant_consent, save_step
 from workflow_factory.api import ApiServer
@@ -24,28 +24,28 @@ pytestmark = pytest.mark.web
 
 # --- 1: no screen that is gone is named -------------------------------------------------------------------------------
 
-def test_a_chore_blocked_by_a_rejected_action_points_to_the_allow_again_that_exists(tmp_path):
-    chores(tmp_path)
+def test_a_flow_blocked_by_a_rejected_action_points_to_the_allow_again_that_exists(tmp_path):
+    put_flows(tmp_path)
     rejected(tmp_path / "user.db")
     with home(tmp_path) as (page, _):
-        why = page.get_by_test_id("chore-why-stuck")
+        why = page.get_by_test_id("flow-why-stuck")
         why.wait_for()
         assert "Steps" not in why.inner_text() and "Allow again" in why.inner_text()
-        page.get_by_test_id("attention").get_by_role("button", name="Allow again").wait_for()  # it is read apart from the chore
+        page.get_by_test_id("attention").get_by_role("button", name="Allow again").wait_for()  # it is read apart from the flow
         assert page.get_by_test_id("attention").get_by_role("button", name="Allow again").count() == 1  # what the words point at
 
 
 # --- 2: nothing that looks like a button does nothing -----------------------------------------------------------------
 
-def test_the_actions_of_an_app_are_plain_labels_and_a_chore_that_cannot_run_says_why_when_pressed(tmp_path):
+def test_the_actions_of_an_app_are_plain_labels_and_a_flow_that_cannot_run_says_why_when_pressed(tmp_path):
     db = tmp_path / "user.db"
     save_step(db, step("Open file", "Alpha", app="excel.exe"))
-    chores(tmp_path)
+    put_flows(tmp_path)
     rejected(db)
     with home(tmp_path) as (page, _):
         apps_screen(page)
         app_row(page, "excel.exe").click()
-        label = page.get_by_test_id("app-action-Open file")
+        label = page.get_by_test_id("app-step-Open file")
         look = label.evaluate(
             "(e) => { const s = getComputedStyle(e); return [s.backgroundColor, s.borderTopWidth, s.borderTopLeftRadius] }")
         assert look == ["rgba(0, 0, 0, 0)", "0px", "0px"]
@@ -90,27 +90,27 @@ def test_the_persona_data_has_a_permission_to_take_back(tmp_path, data):
 
 # --- 4: the banners use the screens' words ----------------------------------------------------------------------------
 
-def test_a_run_started_with_run_now_says_which_chore_worked_in_steps(tmp_path):
-    chores(tmp_path)
-    chore(tmp_path, "evening", "Evening report", "open-menu")
+def test_a_run_started_with_run_now_says_which_flow_worked_in_steps(tmp_path):
+    put_flows(tmp_path)
+    put_flow(tmp_path, "evening", "Evening report", "open-menu")
     with home(tmp_path) as (page, _):
         says(page, "morning", "Never run")
         run_button(page, "morning").click()
-        result = page.get_by_test_id("chore-result-morning")
+        result = page.get_by_test_id("flow-result-morning")
         result.wait_for()
         assert re.fullmatch(r"Worked .+ at \d\d:\d\d\. 2 steps finished\.", result.inner_text().strip())
         assert "Morning report" in row(page, "morning").inner_text()
-        assert page.get_by_test_id("chore-result-evening").count() == 0
+        assert page.get_by_test_id("flow-result-evening").count() == 0
         run_button(page, "evening").click()
-        page.get_by_test_id("chore-result-evening").wait_for()
+        page.get_by_test_id("flow-result-evening").wait_for()
         assert "1 step finished." in row(page, "evening").inner_text()
-        assert "box" not in page.locator("main").inner_text().lower()
+        assert "node" not in page.locator("main").inner_text().lower()
 
 
 # --- 5: the list stays where it is --------------------------------------------------------------------------------------
 
 def test_allowing_again_on_home_does_not_move_the_list_and_answers_where_it_was_pressed(tmp_path):
-    chores(tmp_path)
+    put_flows(tmp_path)
     rejected(tmp_path / "user.db")
     with home(tmp_path) as (page, _):
         button = page.get_by_test_id("attention").get_by_role("button", name="Allow again")
@@ -143,35 +143,35 @@ def test_opening_an_app_keeps_the_row_pressed_where_it_was(tmp_path):
         card = page.get_by_test_id("app-card-program08.exe")
         card.wait_for()
         assert abs(target.bounding_box()["y"] - before) <= 2
-        box = card.bounding_box()
-        assert 0 <= box["y"] < page.viewport_size["height"]  # and what it opened is in view
+        rect = card.bounding_box()
+        assert 0 <= rect["y"] < page.viewport_size["height"]  # and what it opened is in view
 
 
 # --- 6: delete can always be undone ------------------------------------------------------------------------------------
 
-def test_the_undo_notice_takes_the_place_of_the_deleted_chore_and_survives_a_reload(tmp_path):
-    chores(tmp_path)
+def test_the_undo_notice_takes_the_place_of_the_deleted_flow_and_survives_a_reload(tmp_path):
+    put_flows(tmp_path)
     for n in range(8):
-        chore(tmp_path, f"extra-{n}", f"Extra chore {n}", "open-menu")
+        put_flow(tmp_path, f"extra-{n}", f"Extra flow {n}", "open-menu")
     with served(tmp_path) as (page, _, _):
         says(page, "extra-6", "Never run")
-        page.get_by_test_id("chore-extra-6").scroll_into_view_if_needed()
-        old = page.get_by_test_id("chore-extra-6").bounding_box()["y"]
+        page.get_by_test_id("flow-extra-6").scroll_into_view_if_needed()
+        old = page.get_by_test_id("flow-extra-6").bounding_box()["y"]
         more(page, "extra-6")
         page.get_by_test_id("more-delete-extra-6").click()
 
         notice = page.get_by_test_id("deleted-notice")
         notice.wait_for()
-        box = notice.bounding_box()
-        assert 0 <= box["y"] and box["y"] + box["height"] <= page.viewport_size["height"]  # no scrolling to find it
-        assert abs(box["y"] - old) < 130  # where the chore was
+        rect = notice.bounding_box()
+        assert 0 <= rect["y"] and rect["y"] + rect["height"] <= page.viewport_size["height"]  # no scrolling to find it
+        assert abs(rect["y"] - old) < 130  # where the flow was
 
         page.reload()
         notice = page.get_by_test_id("deleted-notice")
         notice.wait_for()
-        assert "Extra chore 6" in notice.inner_text()
+        assert "Extra flow 6" in notice.inner_text()
         page.get_by_test_id("undo-delete").click()
-        page.get_by_test_id("chore-extra-6").wait_for()
+        page.get_by_test_id("flow-extra-6").wait_for()
         assert page.get_by_test_id("deleted-notice").count() == 0
 
 
@@ -212,7 +212,7 @@ def test_apps_with_nothing_learned_says_how_to_teach_with_a_copy_button(tmp_path
 # --- 9: the daily time is shown as it was typed --------------------------------------------------------------------------
 
 def test_a_daily_time_is_shown_in_the_clock_the_person_typed_it_in_and_saved_is_said(tmp_path):
-    chores(tmp_path)
+    put_flows(tmp_path)
     with home(tmp_path) as (page, _):
         page.get_by_test_id("daily-morning").click()
         page.get_by_test_id("daily-time-morning").fill("19:05")  # the field's value is always 24 hours; it shows 7:05 PM
@@ -231,27 +231,27 @@ def test_a_daily_time_is_shown_in_the_clock_the_person_typed_it_in_and_saved_is_
 def test_an_app_with_ten_actions_to_learn_again_offers_one_message_in_plain_words(tmp_path):
     db = tmp_path / "user.db"
     for n in range(10):
-        save_step(db, step(f"Action {n}", "Alpha", app="excel.exe", version="0.9"))
+        save_step(db, step(f"Step {n}", "Alpha", app="excel.exe", version="0.9"))
     revalidate_changed_versions(db, "excel.exe", "1.0")
     with home(tmp_path) as (page, _):
         stub_clipboard(page)
         apps_screen(page)
         app_row(page, "excel.exe").click()
         card = page.get_by_test_id("app-card-excel.exe")
-        buttons = card.get_by_role("button", name="Show me what to send")
+        buttons = card.get_by_role("button", name="Show me the message to copy")
         buttons.wait_for()
         assert buttons.count() == 1
         buttons.click()
         assert card.get_by_test_id("chat-message").count() == 1
         text = card.get_by_test_id("chat-message").inner_text()
-        assert "was updated and its actions have to be learned again" in text
+        assert "was updated and its steps have to be learned again" in text
         assert "Claude Code" not in text and "folder" not in text
 
 
 # --- 11: Run now answers at once -----------------------------------------------------------------------------------------
 
 def test_run_now_shows_running_on_the_row_the_moment_it_is_pressed(tmp_path):
-    chores(tmp_path)
+    put_flows(tmp_path)
     held = []
     with home(tmp_path) as (page, _):
         says(page, "morning", "Never run")
@@ -262,4 +262,4 @@ def test_run_now_shows_running_on_the_row_the_moment_it_is_pressed(tmp_path):
         assert "Running…" in run_button(page, "morning").inner_text()
         assert run_button(page, "morning").locator("svg").first.evaluate("(e) => getComputedStyle(e).animationName") == "spin"
         held[0].continue_()
-        page.get_by_test_id("chore-result-morning").wait_for()
+        page.get_by_test_id("flow-result-morning").wait_for()

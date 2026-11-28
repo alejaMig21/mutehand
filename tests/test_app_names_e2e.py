@@ -49,7 +49,7 @@ def browse(tmp_path):
 
 def one_step_flow(folder, app="zzqx.exe"):
     save_step(folder / "user.db", step("open-menu", "Alpha", app=app))
-    save_flow(folder / "user.db", Flow(id="morning", nodes=[Node("n1", "open-menu")]))
+    save_flow(folder / "user.db", Flow(id="morning", nodes=[Node("n1", "open-menu", technology=app)]))
     return folder / "user.db"
 
 
@@ -59,8 +59,7 @@ def test_the_name_seen_in_a_run_is_what_the_screens_say_once_the_app_is_closed(t
     run_flow(Flow(id="morning", nodes=[Node("n1", "open-menu")]), desktop, db)
 
     page = browse()  # the app is closed now
-    page.get_by_test_id("palette-open-menu").wait_for()  # the actions of the app chosen beside them
-    page.wait_for_function("() => document.querySelector('[data-testid=app-name]').selectedOptions[0].text === 'Quill Ledger'")
+    page.get_by_test_id("palette-open-menu").filter(has_text="Quill Ledger").wait_for()  # the programs its step is learned for
     page.get_by_test_id("tab-apps").click()
     page.get_by_test_id("app-row-zzqx.exe").filter(has_text="Quill Ledger").wait_for()
     assert ".exe" not in page.locator("body").inner_text().lower()
@@ -85,7 +84,8 @@ def test_no_screen_shows_a_file_name_and_each_calls_the_app_the_same(tmp_path, b
     db = one_step_flow(tmp_path)
     save_step(db, step("press-send", "Send", app="zzqx.exe", sensitive=Sensitivity.OUTWARD_ACTION))
     save_step(db, step("stamp", "Stamp", app="vvrt.exe"))
-    save_flow(db, Flow(id="mixed", nodes=[Node("n1", "open-menu"), Node("n2", "stamp")]))  # one step is another app's
+    save_flow(db, Flow(id="mixed", nodes=[Node("n1", "open-menu", technology="zzqx.exe"),
+                                          Node("n2", "stamp", technology="zzqx.exe")]))  # one step is another app's
     grant_consent(db, "zzqx.exe", "Send", "click")
     observe(db, FakeDesktop(controls=[], app="zzqx.exe", product_name=product_name))
 
@@ -93,8 +93,6 @@ def test_no_screen_shows_a_file_name_and_each_calls_the_app_the_same(tmp_path, b
     page.get_by_test_id("open-flows").click()
     page.get_by_test_id("flow-mixed").click()
     page.locator('.react-flow__node[data-id="n2"]').wait_for()
-    app = page.get_by_test_id("app-name")
-    app.select_option(label=shown)
     assert page.get_by_test_id("node-n1").inner_text().count(shown) == 1
     assert f"for {shown} yet" in page.get_by_test_id("cannot-start").inner_text()
     page.locator('.react-flow__node[data-id="n1"]').click()
@@ -114,20 +112,9 @@ def test_no_screen_shows_a_file_name_and_each_calls_the_app_the_same(tmp_path, b
     page.get_by_test_id("tab-home").click()
     page.get_by_test_id("daily-morning").click()
     page.get_by_test_id("daily-set-morning").click()
-    chore = page.get_by_test_id("chore-morning")
-    chore.filter(has_text="Every day at").wait_for()
-    assert shown in chore.inner_text()
-    assert_no_file_names(page)
-
-
-def test_a_refused_schedule_names_the_app_without_an_extension(tmp_path, browse):
-    one_step_flow(tmp_path, app="zz qx.exe")  # a space: Windows Task Scheduler is never given such a name
-
-    page = browse()
-    page.get_by_test_id("tab-home").click()
-    page.get_by_test_id("daily-morning").click()
-    page.get_by_test_id("daily-set-morning").click()
-    page.get_by_text("the app name may only use").wait_for()
+    flow = page.get_by_test_id("flow-morning")
+    flow.filter(has_text="Every day at").wait_for()
+    assert shown in flow.inner_text()
     assert_no_file_names(page)
 
 
@@ -165,30 +152,33 @@ NOTHING_OVERFLOWS = """(within) => [...document.querySelectorAll(within)]
 
 
 @pytest.mark.parametrize("width", [683, 390])
-def test_the_app_is_chosen_by_keyboard_and_a_long_name_fits_a_narrow_window(tmp_path, browse, width):
+def test_the_node_program_is_chosen_by_keyboard_and_a_long_name_fits_a_narrow_window(tmp_path, browse, width):
     db = one_step_flow(tmp_path)
+    save_step(db, step("open-menu", "Alpha", app="vvrt.exe"))
     save_step(db, step("stamp", "Stamp", app="vvrt.exe"))
     observe(db, FakeDesktop(controls=[], app="zzqx.exe", product_name=LONG))
     observe(db, FakeDesktop(controls=[], app="vvrt.exe", product_name="Unbroken" * 12))
 
     page = browse()
     page.set_viewport_size({"width": width, "height": 800})
-    chooser = page.get_by_test_id("app-name")
-    chooser.locator("option", has_text=LONG).wait_for(state="attached")
-    chooser.focus()
-    before = chooser.input_value()
-    page.keyboard.press("ArrowUp" if before == "zzqx.exe" else "ArrowDown")
-    assert chooser.input_value() not in ("", before)
-    box = chooser.bounding_box()
-    assert box["x"] >= 0 and box["x"] + box["width"] <= width
-
     page.get_by_test_id("open-flows").click()
     page.get_by_test_id("flow-morning").click()
     card = page.get_by_test_id("node-n1")
-    card.wait_for()
+    card.dblclick()
+    chooser = page.get_by_test_id("node-technology")
+    chooser.locator("option", has_text=LONG).wait_for(state="attached")
+    chooser.focus()
+    before = chooser.input_value()
+    page.keyboard.press("ArrowDown")
+    if chooser.input_value() == before:  # it was the last one
+        page.keyboard.press("ArrowUp")
+    assert chooser.input_value() not in ("", before)
+    rect = chooser.bounding_box()
+    assert rect["x"] >= 0 and rect["x"] + rect["width"] <= width
     for app in ("zzqx.exe", "vvrt.exe"):
-        page.get_by_test_id("app-name").select_option(app)
-    assert card.evaluate("(e) => e.scrollWidth <= e.clientWidth")  # the name stays inside its box
+        chooser.select_option(app)
+    page.get_by_test_id("close-detail").click()
+    assert card.evaluate("(e) => e.scrollWidth <= e.clientWidth")  # the name stays inside its node
     fits = "() => document.querySelector('.screen').scrollWidth <= innerWidth"
     assert page.evaluate(fits), ("flow screen", page.evaluate(STICKS_OUT))
     page.get_by_test_id("tab-apps").click()
@@ -197,13 +187,12 @@ def test_the_app_is_chosen_by_keyboard_and_a_long_name_fits_a_narrow_window(tmp_
     page.wait_for_timeout(300)
     assert page.evaluate(fits), ("apps", page.evaluate(STICKS_OUT))
     page.get_by_test_id("tab-home").click()
-    page.get_by_test_id("chore-morning").wait_for()
+    page.get_by_test_id("flow-morning").wait_for()
     page.wait_for_timeout(300)
     assert page.evaluate(fits), ("home", page.evaluate(STICKS_OUT))
-    page.get_by_test_id("open-chore-morning").click()
-    page.locator(".opening").wait_for(state="detached")  # a box chosen while "Opening…" shows is forgotten when it ends
+    page.get_by_test_id("open-flow-morning").click()
+    page.locator(".opening").wait_for(state="detached")  # a node chosen while "Opening…" shows is forgotten when it ends
     assert page.evaluate(NOTHING_OVERFLOWS, ".search-panel .entry")
-    page.get_by_test_id("app-name").select_option("vvrt.exe")
     page.locator('.react-flow__node[data-id="n1"]').press("Space")
     page.get_by_test_id("test-node").click()
     page.get_by_test_id("test-warning").wait_for()
@@ -235,7 +224,7 @@ def test_a_run_from_the_editor_shows_the_name_it_has_just_learned(tmp_path, brow
     card.filter(has_text="Quill Ledger").wait_for()
 
 
-def test_a_box_already_drawn_takes_the_name_when_it_arrives_late(tmp_path, browse):
+def test_a_node_already_drawn_takes_the_name_when_it_arrives_late(tmp_path, browse):
     db = one_step_flow(tmp_path)
     observe(db, FakeDesktop(controls=[], app="zzqx.exe", product_name="Quill Ledger"))
     page = browse()
@@ -246,7 +235,7 @@ def test_a_box_already_drawn_takes_the_name_when_it_arrives_late(tmp_path, brows
     page.get_by_test_id("flow-morning").click()
     card = page.get_by_test_id("node-n1")
     card.filter(has_text="Zzqx").wait_for()
-    page.wait_for_timeout(500)  # nothing else is left that would draw the box again
+    page.wait_for_timeout(500)  # nothing else is left that would draw the node again
 
     for route in held:
         route.continue_()
@@ -260,7 +249,6 @@ def test_an_app_is_found_by_its_product_name(tmp_path, browse):
     observe(db, FakeDesktop(controls=[], app="zzqx.exe", product_name="Quill Ledger"))
 
     page = browse()
-    page.get_by_test_id("app-name").select_option(label="Quill Ledger")  # the app is chosen by that name
     page.get_by_test_id("search").fill("quill")
     page.get_by_test_id("palette-open-menu").wait_for()
     assert page.get_by_test_id("palette-stamp").count() == 0
@@ -268,7 +256,7 @@ def test_an_app_is_found_by_its_product_name(tmp_path, browse):
 
 @pytest.mark.parametrize("seen_by", [
     pytest.param(lambda db, desktop: observe(db, desktop), id="observing"),
-    pytest.param(lambda db, desktop: teach_step(db, desktop, "close-box", Locator("button", "Alpha")), id="teaching"),
+    pytest.param(lambda db, desktop: teach_step(db, desktop, "close-node", Locator("button", "Alpha")), id="teaching"),
 ])
 def test_the_tutor_seeing_an_app_records_its_name(tmp_path, browse, seen_by):
     db = one_step_flow(tmp_path)

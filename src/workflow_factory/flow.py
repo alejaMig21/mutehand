@@ -17,10 +17,11 @@ import re
 import sqlite3
 import threading
 from collections import Counter
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing, nullcontext
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from itertools import pairwise
 from pathlib import Path
@@ -28,7 +29,7 @@ from pathlib import Path
 from workflow_factory.consent import is_permitted
 from workflow_factory.data import RUN, MissingData, check_binding, expressions, references, resolve
 from workflow_factory.dataops import DataError, apply, check_op
-from workflow_factory.desktop import Desktop, DesktopError
+from workflow_factory.desktop import AppKey, Desktop, DesktopError
 from workflow_factory.ladder import locate
 from workflow_factory.queue import (
     Reason,
@@ -109,6 +110,7 @@ class Effect(StrEnum):
 class Node:
     id: str
     step: str = ""  # step and loop nodes: the step to replay
+    technology: str = ""  # step and loop nodes: the program (its process name) the step acts on; "" = the run's own
     kind: str = "step"  # step | if | join | loop | trigger | foreach | wait | stop | data
     inputs: tuple[tuple[str, str], ...] = ()  # (name, type) values the run context must hold
     on: str | None = None  # if: the node whose measured effect is tested
@@ -255,7 +257,7 @@ class Flow:
 
     @property
     def resume_key(self) -> str:
-        """What a checkpoint is matched with: the flow without its start boxes. Giving a flow a daily time, or taking it
+        """What a checkpoint is matched with: the flow without its start nodes. Giving a flow a daily time, or taking it
         away, must not make a stopped flow start over and do again what it already did."""
         starts = {node.id for node in self.nodes if node.kind == "trigger"}
         if not starts:
@@ -443,17 +445,26 @@ def _seconds_between(start: str, end: str) -> float:
     return (datetime.fromisoformat(end) - datetime.fromisoformat(start)).total_seconds()
 
 
+@dataclass(frozen=True)
+class _Site:
+    """One technology of a run: the desktop that drives it and the identity it has right now."""
+
+    tech: str
+    desktop: Desktop
+    key: AppKey
+
+
 class _Run:
     """One call of run_flow: everything a node needs, so helpers stay short."""
 
-    def __init__(self, flow, desktop, user_db, factory_db, state, progress=None):
-        self.flow, self.desktop, self.user_db, self.factory_db, self.state = (
-            flow, desktop, user_db, factory_db, state)
+    def __init__(self, flow, sites, default, clock, user_db, factory_db, state, progress=None):
+        self.flow, self.user_db, self.factory_db, self.state = flow, user_db, factory_db, state
+        self.sites, self.default = sites, default  # technology -> its _Site; what a node without a technology acts on
+        self.desktop = clock  # the clock and the sleeps of the run
         self.progress = progress or (lambda node_id, status: None)  # live per-node status for the editor
-        self.key = desktop.app_key()
         self.effects, self.blocked, self.statuses = {}, {}, {}
         self.lock = threading.RLock()  # parallel nodes share the state and its checkpoint
-        self.baseline = None  # cursor and last-input time right after our own last physical action
+        self.baselines = {}  # technology -> cursor and last-input time right after our own last physical action there
         self.node_status = {}  # node id -> (status, reason): what the run history will show
         self.emergency = False
         self.halted = None  # the id of the stop node that ended the flow
@@ -466,49 +477,55 @@ class _Run:
         with self.lock:
             save_checkpoint(self.user_db, self.flow.key, self.state.dump(), self.flow.resume_key)
 
+    def site_of(self, node: Node) -> _Site | None:
+        """Where the node acts: the desktop and identity of its technology. None for a node that acts on nothing."""
+        return self.sites.get(node.technology or self.default)
+
     def attempt(self, node: Node):
         """One replay of the node's step: (blocked reason or None, effect, step)."""
-        step = find_step(self.user_db, self.factory_db, self.key.process, node.step)
+        site = self.site_of(node)
+        step = site and find_step(self.user_db, self.factory_db, site.tech, node.step)
         if step is None:  # a flow naming a step nobody taught: a doubt, not a crash
             return "step_missing", None, None
         lock = PHYSICAL_INPUT if node.exclusive_input or step.uses_physical_input else nullcontext()
         while True:
             with lock:
-                outcome = self._replay(node, step)
+                outcome = self._replay(node, step, site)
             if outcome is not _USER_ACTIVE:
                 return outcome
             # the person is using the PC: wait for idle with the lock free, then verify again
             self.progress(node.id, "paused")
-            if not self._wait_for_idle():
+            if not self._wait_for_idle(site):
                 return "user_active", None, step
             self.progress(node.id, "running")
 
-    def _user_active(self) -> bool:
+    def _user_active(self, site: _Site) -> bool:
         """Did the person touch mouse or keyboard since our last physical action?"""
-        if self.baseline is None:  # nothing of ours to compare with: only recent input counts
-            return self.desktop.idle_seconds() < USER_IDLE_SECONDS
-        return self.desktop.input_fingerprint() != self.baseline
+        baseline = self.baselines.get(site.tech)
+        if baseline is None:  # nothing of ours to compare with: only recent input counts
+            return site.desktop.idle_seconds() < USER_IDLE_SECONDS
+        return site.desktop.input_fingerprint() != baseline
 
-    def _wait_for_idle(self) -> bool:
+    def _wait_for_idle(self, site: _Site) -> bool:
         waited = 0.0
-        while self.desktop.idle_seconds() < USER_IDLE_SECONDS:
+        while site.desktop.idle_seconds() < USER_IDLE_SECONDS:
             if EMERGENCY_STOP.is_set():
                 raise _EmergencyStop
             if waited >= MAX_USER_WAIT_SECONDS:
                 return False
-            self.desktop.sleep(1.0)
+            site.desktop.sleep(1.0)
             waited += 1.0
-        self.baseline = self.desktop.input_fingerprint()
+        self.baselines[site.tech] = site.desktop.input_fingerprint()
         return True
 
-    def _paste(self, node: Node) -> str | None:
+    def _paste(self, node: Node, site: _Site) -> str | None:
         """Put the text on the clipboard, paste it, and put the person's own clipboard back whatever happens."""
-        desktop = self.desktop
+        desktop = site.desktop
         saved = desktop.clipboard_backup()
         refused = False
         try:
             desktop.clipboard_set(_text_of(node, self.state))
-            if desktop.foreground_app().lower() != self.key.process:  # the window may have changed since the check
+            if desktop.foreground_app().lower() != site.key.process:  # the window may have changed since the check
                 refused = True
             else:
                 desktop.press_key("ctrl+v")
@@ -524,28 +541,28 @@ class _Run:
         if EMERGENCY_STOP.is_set():
             raise _EmergencyStop
 
-    def _type_keys(self, node: Node) -> str | None:
+    def _type_keys(self, node: Node, site: _Site) -> str | None:
         """One real key at a time, looking at the foreground window before every key."""
         for key in _keys_for(_text_of(node, self.state)) or []:
-            if self.desktop.foreground_app().lower() != self.key.process:
+            if site.desktop.foreground_app().lower() != site.key.process:
                 return "wrong_window"
             self._stop_if_asked()  # looked at last, right before the key goes out
-            self.desktop.press_key(key)
+            site.desktop.press_key(key)
         return None
 
-    def _replay(self, node: Node, step):
-        desktop = self.desktop
+    def _replay(self, node: Node, step, site: _Site):
+        desktop = site.desktop
         physical = node.exclusive_input or step.uses_physical_input
         if EMERGENCY_STOP.is_set():
             raise _EmergencyStop
         reason = _input_problem(node, step, self.state)
         if reason is None:
-            reason, targets = _gate(step, self.user_db, self.key, desktop)
+            reason, targets = _gate(step, self.user_db, site.key, desktop)
         if reason:
             return reason, None, step
-        if physical and self._user_active():
+        if physical and self._user_active(site):
             return _USER_ACTIVE
-        if step.action in KEY_ACTIONS and desktop.foreground_app().lower() != self.key.process:
+        if step.action in KEY_ACTIONS and desktop.foreground_app().lower() != site.key.process:
             return "wrong_window", None, step  # keys must never land in another app
         if EMERGENCY_STOP.is_set():
             raise _EmergencyStop
@@ -555,11 +572,11 @@ class _Run:
             with self.lock:
                 self.state.outputs[node.id] = {"value": desktop.read_text(target.control)}
         elif step.action == "paste_text":
-            reason = self._paste(node)
+            reason = self._paste(node, site)
             if reason:
                 return reason, None, step
         elif step.action == "press_keys":
-            reason = self._type_keys(node)
+            reason = self._type_keys(node, site)
             if reason:
                 return reason, None, step
         elif step.action == "type_secret":
@@ -569,7 +586,7 @@ class _Run:
         elif step.action == "drag":
             desktop.drag(target.control, target.point, targets[1].control, targets[1].point)
         elif step.action == "select":
-            reason = select(desktop, self.key.process, target.control, target.point, self._stop_if_asked)
+            reason = select(desktop, site.key.process, target.control, target.point, self._stop_if_asked)
             if reason:
                 return reason, None, step
         elif target.point:
@@ -577,7 +594,7 @@ class _Run:
         else:
             desktop.click(target.control)
         if physical:
-            self.baseline = desktop.input_fingerprint()
+            self.baselines[site.tech] = desktop.input_fingerprint()
         effect = effect_of(before, set(desktop.snapshot()))
         self.effects[node.id] = effect
         if step.effect:  # nothing taught to compare against means nothing to count
@@ -609,14 +626,16 @@ class _Run:
                     self.save()
                 return "continue"
         try:
-            capture = dict(Counter(c.role for c in self.desktop.snapshot()))  # roles and counts only
+            site = self.site_of(node)
+            capture = dict(Counter(c.role for c in (site.desktop if site else self.desktop).snapshot()))  # roles and counts only
         except DesktopError:
             capture = {}  # the desktop is what failed: nothing to summarise
         with self.lock:
             self.blocked[node.id] = reason
             self.node_status[node.id] = ("blocked", reason)
             self.progress(node.id, "blocked")
-            record_doubt(self.user_db, self.flow.key, node.id, node.step, DOUBT_REASON[reason], capture, reason)
+            record_doubt(self.user_db, self.flow.key, node.id, node.step, DOUBT_REASON[reason], capture, reason,
+                         technology=site.tech if site and node.kind in ("step", "loop") else None)
             self.save()
         return "stop"
 
@@ -846,29 +865,54 @@ def _guarded(run: _Run, node: Node, runner) -> None:
             return
 
 
-def rejected_steps(flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path | None) -> tuple:
-    """((node id, step name), ...) of every step node whose step is rejected right now.
+def _step_nodes(flow: Flow):
+    return [node for node in flow.nodes if node.kind in ("step", "loop")]
 
-    The editor refuses to start such a flow. A scheduled run still starts and stops at that node with a doubt, so the
-    tutor hears about it."""
-    key = desktop.app_key()
-    found = []
-    for node in flow.nodes:
-        if node.kind not in ("step", "loop"):
+
+def missing_locators(flow: Flow, user_db: Path, factory_db: Path | None, default: str = "") -> list[tuple[str, str, str]]:
+    """[(node id, step name, technology), ...] of every step node whose step has no locator for its technology.
+
+    A node with no technology acts on `default`; with none either, its technology is "" and it is listed. Reads
+    knowledge only: no desktop is asked."""
+    return [(node.id, node.step, node.technology or default) for node in _step_nodes(flow)
+            if not (node.technology or default)
+            or find_step(user_db, factory_db, node.technology or default, node.step) is None]
+
+
+def rejected_steps(flow: Flow, desktop, user_db: Path, factory_db: Path | None) -> tuple:
+    """((node id, step name, technology), ...) of every step node whose step is rejected right now.
+
+    `desktop` is one Desktop, or a function that gives the Desktop of a technology. The editor refuses to start such a
+    flow. A scheduled run still starts and stops at that node with a doubt, so the tutor hears about it."""
+    provider, default = _provider(desktop)
+    keys, found = {}, []
+    for node in _step_nodes(flow):
+        tech = node.technology or default
+        step = find_step(user_db, factory_db, tech, node.step) if tech else None
+        if step is None:
             continue
-        step = find_step(user_db, factory_db, key.process, node.step)
-        if step is not None and current_status(user_db, step, key.version) == Status.REJECTED:
-            found.append((node.id, node.step))
+        if tech not in keys:
+            keys[tech] = provider(tech).app_key()
+        if current_status(user_db, step, keys[tech].version) == Status.REJECTED:
+            found.append((node.id, node.step, tech))
     return tuple(found)
 
 
+def _provider(desktop) -> tuple[Callable[[str], Desktop], str]:
+    """(technology -> Desktop, the technology of a node that names none). One Desktop serves every technology and is
+    the default one; a function serves each technology with its own and has no default."""
+    if callable(desktop):  # a Desktop is an object with methods, never itself called
+        return desktop, ""
+    return (lambda tech: desktop), desktop.app_key().process
+
+
 def _named(node: Node) -> dict:
-    """What the history keeps to say which box this was: node ids are reused when a flow is rebuilt."""
+    """What the history keeps to say which node this was: node ids are reused when a flow is rebuilt."""
     return {"step": node.step or None, "kind": node.kind, "op": node.op}
 
 
 def run_flow(
-    flow: Flow, desktop: Desktop, user_db: Path, factory_db: Path | None = None,
+    flow: Flow, desktop: Desktop | Callable[[str], Desktop], user_db: Path, factory_db: Path | None = None,
     context: dict | None = None, progress=None, fired: str = "manual",
 ) -> RunResult:
     for node in flow.nodes:
@@ -881,19 +925,45 @@ def run_flow(
     if not acquire_run_lock(user_db, flow.key):  # two runs of one flow would race on its checkpoint
         return RunResult({}, {}, {}, busy=True)
     try:
-        return _run_locked(flow, desktop, user_db, factory_db, context, progress, fired)
+        provider, default = _provider(desktop)
+        refused = missing_locators(flow, user_db, factory_db, default)
+        if refused:  # before any desktop is asked for anything
+            return _refuse(flow, refused, user_db)
+        return _run_locked(flow, provider, default, user_db, factory_db, context, progress, fired)
     finally:
         release_run_lock(user_db, flow.key)
 
 
-def _run_locked(flow, desktop, user_db, factory_db, context, progress, fired="manual") -> RunResult:
-    key = desktop.app_key()
-    revalidate_changed_versions(user_db, key.process, key.version)
-    record_app_name(user_db, key)
+def _refuse(flow: Flow, refused: list[tuple[str, str, str]], user_db: Path) -> RunResult:
+    """Nothing runs: every step node without a locator for its technology leaves a doubt that names node, step and
+    technology, and the run history says so."""
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    blocked = dict.fromkeys((node_id for node_id, _, _ in refused), "step_missing")
+    for node_id, step, tech in refused:
+        record_doubt(user_db, flow.key, node_id, step, DOUBT_REASON["step_missing"], {}, "step_missing", technology=tech)
+    first = next(node.id for node in flow.nodes if node.id in blocked)  # flow order
+    result = RunResult({}, blocked, {}, stopped=first)
+    run_id = record_run(user_db, flow.key, now, now, result.status, first, [
+        {"node_id": node.id, "status": "blocked", "reason": "step_missing", **_named(node)}
+        for node in flow.nodes if node.id in blocked])
+    return replace(result, run_id=run_id)
+
+
+def _run_locked(flow, provider, default, user_db, factory_db, context, progress, fired="manual") -> RunResult:
+    sites = {}
+    for tech in dict.fromkeys([*(n.technology or default for n in _step_nodes(flow)), default]):
+        if tech:  # one desktop per technology, asked once: its version decides what is still trusted
+            desktop = provider(tech)
+            key = desktop.app_key()
+            revalidate_changed_versions(user_db, tech, key.version)
+            record_app_name(user_db, key)
+            sites[tech] = _Site(tech, desktop, key)
+    clock = (sites.get(default) or next(iter(sites.values()), None) or _Site("", provider(""), None)).desktop
+    desktop = clock
     saved = load_checkpoint(user_db, flow.key, flow.resume_key)
     state = _State.load(saved) if saved else _State()
     state.context.update(context or {})
-    run = _Run(flow, desktop, user_db, factory_db, state, progress)
+    run = _Run(flow, sites, default, clock, user_db, factory_db, state, progress)
     for node in flow.nodes:  # a flow that goes on from where it stopped shows what it had done as done
         if saved and node.id in state.done:
             run.progress(node.id, "done")

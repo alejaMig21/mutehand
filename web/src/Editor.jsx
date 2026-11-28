@@ -2,18 +2,18 @@ import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState 
 import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Panel, useEdgesState, useNodesState, useReactFlow } from '@xyflow/react'
 import { TriedResults } from './Attention.jsx'
 import { api, encode, loadAppNames, UNREACHABLE } from './api.js'
-import { boxNumbers, chainLoose, fromFlowJson, joinBoxes, looseNodes, nextNodeId, toFlowJson, unfinished, withBranch } from './flowjson.js'
+import { nodeNumbers, chainLoose, fromFlowJson, joinNodes, looseNodes, nextNodeId, toFlowJson, unfinished, withBranch } from './flowjson.js'
 import { changeDaily, DailyForm } from './Daily.jsx'
 import { Icon } from './icons.jsx'
 import { refOptions } from './bindings.js'
-import { appKey, appLabel, SYSTEM_NODES, taughtApp, titleOf } from './catalog.js'
+import { appKey, SYSTEM_NODES, technologiesOf, titleOf } from './catalog.js'
 import NodeCard from './NodeCard.jsx'
 import NodeDetail from './NodeDetail.jsx'
 import ExplanationStrip from './ExplanationStrip.jsx'
 import RunLog from './RunLog.jsx'
 import SearchPanel, { DRAG_TYPE } from './SearchPanel.jsx'
 import { safetySummary, summaryMarks, whyNotRunnable } from './safety.js'
-import { boxState, flowTitle, freshTitle, PAUSED_WORDS, reasonWords, runWords } from './words.js'
+import { nodeState, flowTitle, freshTitle, PAUSED_WORDS, reasonWords, runWords } from './words.js'
 
 const NODE_TYPES = { card: NodeCard }
 const EDGE_LOOK = { labelBgPadding: [10, 4], labelBgBorderRadius: 999 } // yes and no on a pill
@@ -47,8 +47,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const [flows, setFlows] = useState([])
   const [flowId, setFlowId] = useState(null) // null: a new flow, which gets its identifier when it is first saved
   const [title, setTitle] = useState(FIRST_TITLE)
-  const [saved, setSaved] = useState({ json: EMPTY_FLOW, title: FIRST_TITLE, app: '' })
-  const [appName, setAppName] = useState('')
+  const [saved, setSaved] = useState({ json: EMPTY_FLOW, title: FIRST_TITLE })
   const [context, setContext] = useState('{}')
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -65,7 +64,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const [opening, setOpening] = useState(false)
   const [tested, setTested] = useState(0)
   const [said, say] = useState('') // for people who cannot see the canvas change
-  const [daily, setDaily] = useState(null) // {at, node_at} as the server says: the Windows task, and the box
+  const [daily, setDaily] = useState(null) // {at, node_at} as the server says: the Windows task, and the node
   const dailyNow = useRef(null) // what `daily` holds, for a save that finishes later
   const [settingDaily, setSettingDaily] = useState(false)
   const [focusStart, setFocusStart] = useState(0)
@@ -74,7 +73,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const [conflict, setConflict] = useState('') // the flow was changed somewhere else: the person chooses
   const [retry, setRetry] = useState(0)
   const [undoable, setUndoable] = useState(0) // how many changes can be taken back
-  const [removed, setRemoved] = useState('') // the box just removed, for the notice that offers Undo
+  const [removed, setRemoved] = useState('') // the node just removed, for the notice that offers Undo
   const busy = useRef({ starting: false, ticket: 0, named: false })
   const stored = useRef({ id: null, revision: null }) // the flow on screen as the server last had it: saves carry it forward
   const queue = useRef(Promise.resolve()) // one save at a time, each on top of the last
@@ -88,23 +87,16 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     .map((draft) => ({ ...draft, node: titleOf(n.data.node) }))), [nodes])
   const isStored = flowId !== null
   const template = flows.some((f) => f.id === flowId && f.origin === 'factory') // read-only: a copy is what is edited
-  const apps = useMemo(() => [...new Set(steps.map((s) => s.app))], [steps])
-  const runsOn = taughtApp(appName, apps)
-  // choosing an app on a new flow is not work to lose; on a stored one it is a change to keep
   const dirty = JSON.stringify(body) !== saved.json || title !== saved.title || invalid.length > 0
-    || (isStored && runsOn !== taughtApp(saved.app, apps)) // both as taught: the steps may arrive after the flow
-  // changes the server has not got: a chore with no box yet is not stored, so its name alone is nothing to lose
+  // changes the server has not got: a flow with no node yet is not stored, so its name alone is nothing to lose
   const unkept = dirty && (isStored || nodes.length > 0)
-  // what keeps the flow from being stored, in the person's words (the box says it too)
-  const held = invalid.length ? `Fix “${invalid[0].label}” in ${invalid[0].node}: ${invalid[0].error}.` : unfinished(body.nodes, boxNumbers(nodes, edges))
+  // what keeps the flow from being stored, in the person's words (the node says it too)
+  const held = invalid.length ? `Fix “${invalid[0].label}” in ${invalid[0].node}: ${invalid[0].error}.` : unfinished(body.nodes, nodeNumbers(nodes, edges))
 
   const refresh = useCallback(() => {
     const fail = (e) => setError(e.message)
     loadAppNames() // a run just seen may have told the name of its app
-    api('/api/steps').then((found) => {
-      setSteps(found)
-      setAppName((current) => current || found[0]?.app || '')
-    }).catch(fail)
+    api('/api/steps').then(setSteps).catch(fail)
     api('/api/recipes').then(setRecipes).catch(fail)
     api('/api/flows').then((found) => {
       setFlows(found)
@@ -142,7 +134,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     setProblem('')
     const timer = setTimeout(() => save(), 400)
     return () => clearTimeout(timer)
-  }, [unkept, held, conflict, opening, template, body, title, runsOn, retry]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [unkept, held, conflict, opening, template, body, title, retry]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { // popovers close with Escape or a click elsewhere
     if (!menu) return undefined
@@ -217,7 +209,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     if (edges.some((e) => e.source === connection.source && e.target === connection.target)) return
     const wire = withBranch(nodes, edges, connection)
     if (wire) { record(); setEdges([...edges, wire]) }
-    else setError('Those two cannot be joined: a decision has only two paths, yes and no, and a repeated box takes no lines of its own.')
+    else setError('Those two cannot be joined: a decision has only two paths, yes and no, and a repeated node takes no lines of its own.')
   }, [nodes, edges, setEdges]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const changeNodes = useCallback((changes) => { // selecting with the keyboard is selecting too
@@ -240,11 +232,11 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     if (document.querySelector('.canvas')?.offsetWidth) fitView({ ...fit(), duration: 200 })
   }, 60)
 
-  // New boxes join after the chosen box, or after the last one. With a box chosen the new one takes its place as the
-  // chosen one, so the next goes after it: the order is the order of the presses. A dropped box stays where it fell.
+  // New nodes join after the chosen node, or after the last one. With a node chosen the new one takes its place as the
+  // chosen one, so the next goes after it: the order is the order of the presses. A dropped node stays where it fell.
   const join = (added, dropped) => {
     record()
-    const joined = joinBoxes(nodes, edges, added, { after: selectedId, at: dropped })
+    const joined = joinNodes(nodes, edges, added, { after: selectedId, at: dropped })
     const chosen = nodes.some((n) => n.id === selectedId) ? added[added.length - 1].id : null
     setNodes(joined.nodes.map((n) => ({ ...n, selected: n.id === chosen })))
     setEdges(joined.edges)
@@ -259,8 +251,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   }
 
   const addStep = (step, dropped) => {
-    if (nodes.length === 0) setAppName(step.app) // a flow runs on one app: the first step says which
-    addNode({ step: step.name }, dropped)
+    addNode({ step: step.name, technology: step.app }, dropped)
   }
 
   function drop(event) {
@@ -270,19 +261,23 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     const entry = JSON.parse(raw)
     const at = screenToFlowPosition({ x: event.clientX, y: event.clientY })
     const system = SYSTEM_NODES.find((n) => n.key === entry.system)
-    const step = steps.find((s) => s.name === entry.step && s.app === entry.app)
+    const step = steps.find((s) => s.name === entry.step && appKey(s.app) === appKey(entry.app))
     if (system) addNode(structuredClone(system.node), at)
     else if (step) addStep(step, at)
   }
 
-  // Drop a recipe: one connected node per hole, each on the step that fills the hole for the app to run on.
-  // A hole nobody filled for this app gets the name its step will have, and the node says it is not filled.
+  // Drop a recipe: one connected node per hole, each on the step that fills the hole for one program: the one the flow
+  // acts on last if the recipe knows it, else the first the recipe was applied to.
+  // A hole nobody filled for this program gets the name its step will have, and the node says it is not filled.
   const addRecipe = (recipe) => {
-    const bound = Object.entries(recipe.apps).find(([app]) => appKey(app) === appKey(appName))?.[1] ?? {}
+    const known = Object.keys(recipe.apps)
+    const last = nodes.map((n) => n.data.node.technology).filter(Boolean).at(-1)
+    const runsOn = known.find((app) => last && appKey(app) === appKey(last)) ?? known[0] ?? ''
+    const bound = recipe.apps[runsOn] ?? {}
     let list = [...nodes]
     const added = recipe.holes.map((hole) => {
       const id = nextNodeId(list)
-      const node = { id, step: bound[hole.hole] ?? `${recipe.name}-${hole.hole}`, inputs: [], exclusive_input: false }
+      const node = { id, step: bound[hole.hole] ?? `${recipe.name}-${hole.hole}`, technology: runsOn, inputs: [], exclusive_input: false }
       const card = { id, type: 'card', data: { node, hole: { recipe: recipe.name, hole: hole.hole } } }
       list = [...list, card]
       return card
@@ -336,9 +331,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       setFlowId(id)
       keep(id, read.revision)
       setTitle(read.title)
-      if (read.app) setAppName(read.app)
-      setSaved({ json: JSON.stringify(toFlowJson(loaded.nodes, loaded.edges)), title: read.title,
-        app: read.app || runsOn })
+      setSaved({ json: JSON.stringify(toFlowJson(loaded.nodes, loaded.edges)), title: read.title })
       setSelectedId(null)
       setNodeData({})
       if (id !== flowId) setContext('{}') // starting values belong to one flow
@@ -377,7 +370,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     setDaily(null)
     setSettingDaily(false)
     setTitle(fresh)
-    setSaved({ json: EMPTY_FLOW, title: fresh, app: '' })
+    setSaved({ json: EMPTY_FLOW, title: fresh })
     setContext('{}')
     setSelectedId(null)
     setNodeData({})
@@ -434,7 +427,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       setError(`${held} Nothing was kept since.`)
       return Promise.resolve(null)
     }
-    const snap = { nodes, edges, title, app: runsOn, ticket: busy.current.ticket, was: { ...stored.current } }
+    const snap = { nodes, edges, title, ticket: busy.current.ticket, was: { ...stored.current } }
     const done = queue.current.then(() => store(snap, force))
     queue.current = done
     return done
@@ -444,7 +437,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     const here = () => snap.ticket === busy.current.ticket // false: another flow is on the screen by now
     const was = here() ? stored.current : snap.was
     const sent = toFlowJson(snap.nodes, snap.edges)
-    const flow = { ...sent, title: snap.title, app: snap.app }
+    const flow = { ...sent, title: snap.title }
     try {
       let kept
       try {
@@ -458,13 +451,13 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       }
       refresh()
       if (!here()) return kept.id
-      const boxAt = sent.nodes.find((n) => n.kind === 'trigger' && n.fields?.mode?.value === 'daily')?.fields.at?.value ?? null
-      if (boxAt !== (dailyNow.current?.node_at ?? null)) { // the save moved the Windows task with the box: say what it is now
+      const nodeAt = sent.nodes.find((n) => n.kind === 'trigger' && n.fields?.mode?.value === 'daily')?.fields.at?.value ?? null
+      if (nodeAt !== (dailyNow.current?.node_at ?? null)) { // the save moved the Windows task with the node: say what it is now
         api(`${flowUrl(kept.id)}/daily`).then((time) => { if (here()) setDaily(time) }).catch(() => {})
       }
       stored.current = { id: kept.id, revision: kept.revision }
       setFlowId(kept.id)
-      setSaved({ json: JSON.stringify(sent), title: kept.title, app: snap.app })
+      setSaved({ json: JSON.stringify(sent), title: kept.title })
       setTitle((current) => (current === snap.title ? kept.title : current))
       setProblem('')
       setConflict('')
@@ -483,16 +476,16 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const keepMine = () => { setConflict(''); save(true) }
   const showTheirs = () => { setConflict(''); load(flowId) }
 
-  // The daily time lives on the stored flow and in Windows: save first, change both, and show the first box as it is now.
+  // The daily time lives on the stored flow and in Windows: save first, change both, and show the first node as it is now.
   async function submitDaily(at) {
     const id = await ensureStored()
-    if (!id) throw new Error('The chore could not be saved first, so its daily time was not changed.')
+    if (!id) throw new Error('The flow could not be saved first, so its daily time was not changed.')
     await changeDaily(id, at)
     await show(id)
     refresh()
-    setFocusStart((n) => n + 1) // the form is gone and the first box is new: the focus goes to its button once it is drawn
+    setFocusStart((n) => n + 1) // the form is gone and the first node is new: the focus goes to its button once it is drawn
   }
-  useEffect(() => { // the canvas draws its boxes a moment after it has them: wait for the button
+  useEffect(() => { // the canvas draws its nodes a moment after it has them: wait for the button
     if (!focusStart) return undefined
     const want = daily?.at ? 'daily-change' : 'daily-add'
     let tries = 40
@@ -515,7 +508,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     const current = await api(flowUrl(flowId))
     if (current.revision === stored.current.revision) return flowId
     await show(flowId)
-    setError('This chore was changed somewhere else. It is shown as it is now: check it and try again.')
+    setError('This flow was changed somewhere else. It is shown as it is now: check it and try again.')
     return null
   }
 
@@ -526,11 +519,11 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     setError('')
     try {
       let values
-      try { values = JSON.parse(context || '{}') } catch { throw new Error('Run data is not valid JSON.') }
+      try { values = JSON.parse(context || '{}') } catch { throw new Error('The starting values are not written correctly. Leave them as {} if the flow needs none.') }
       const id = await ensureStored()
       if (!id) return
       forget(id)
-      const { run_id } = await api(`${flowUrl(id)}/run`, { method: 'POST', body: { app: runsOn, context: values } })
+      const { run_id } = await api(`${flowUrl(id)}/run`, { method: 'POST', body: { context: values } })
       follow(id, run_id)
     } catch (e) {
       setError(e.message)
@@ -562,7 +555,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   useEffect(() => { if (active && shownRun) refit() }, [active, shownRun?.runId, shownRun?.status]) // eslint-disable-line react-hooks/exhaustive-deps
   const flowDoubts = useMemo(() => doubts.filter((d) => isStored && d.flow_id === flowId), [doubts, flowId, isStored])
   const stoppedHere = isStored ? needs.find((item) => item.kind === 'stopped' && item.flow === flowId) : undefined
-  // a chore that stopped opens with its stopped box chosen, so that the strip says why and offers Try again; once for each stop
+  // a flow that stopped opens with its stopped node chosen, so that the strip says why and offers Try again; once for each stop
   useEffect(() => {
     if (!stoppedHere || opening || busy.current.chosen === `${view}:${stoppedHere.doubt}`) return
     if (!nodes.some((n) => n.id === stoppedHere.node)) return
@@ -573,7 +566,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   // what the stop adds (a notice's button, the reason under the canvas) takes room: the whole flow comes back into sight
   useEffect(() => { if (active && stoppedHere) refit() }, [active, stoppedHere?.doubt]) // eslint-disable-line react-hooks/exhaustive-deps
   const tryAgain = (item) => tried.tryAgain(item, async () => {
-    if (!(await ensureStored())) throw new Error('The chore on screen could not be kept first, so it was not tried again.')
+    if (!(await ensureStored())) throw new Error('The flow on screen could not be kept first, so it was not tried again.')
   })
 
   // What is known about each step, for the app the flow runs on: how far it is trusted, where it was adapted from, or
@@ -581,9 +574,9 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const viewNodes = useMemo(() => nodes.map((n) => {
     const node = n.data.node
     if (node.kind && node.kind !== 'step') return n
-    const step = steps.find((s) => s.name === node.step && appKey(s.app) === appKey(appName))
+    const step = steps.find((s) => s.name === node.step && appKey(s.app) === appKey(node.technology))
     return { ...n, data: { ...n.data, meta: step ? { ...metaOf(step), hole: n.data.hole } : { missing: true, hole: n.data.hole } } }
-  }), [nodes, steps, appName])
+  }), [nodes, steps])
 
   const selected = viewNodes.find((n) => n.id === selectedId)
   const selectedNode = selected?.data.node
@@ -594,7 +587,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
   const runKeys = useMemo(() => {
     try { return Object.keys(JSON.parse(context || '{}')) } catch { return [] }
   }, [context])
-  const choose = (id) => { // the box on the canvas and the one the strip speaks about are one
+  const choose = (id) => { // the node on the canvas and the one the strip speaks about are one
     setSelectedId(id)
     setNodes((current) => current.map((n) => ({ ...n, selected: n.id === id })))
   }
@@ -605,10 +598,10 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     setTimeout(() => document.querySelector(`.react-flow__node[data-id="${id}"]`)?.focus(), 0)
   }
   const toggleValues = (on) => { setShowValues(on); loadData(on) }
-  const numbers = useMemo(() => boxNumbers(nodes, edges), [nodes, edges])
+  const numbers = useMemo(() => nodeNumbers(nodes, edges), [nodes, edges])
   const shownNodes = useMemo(
     () => viewNodes.map((n) => {
-      const state = boxState(shownRun, n.id) ?? (n.id === stoppedHere?.node ? 'blocked' : undefined) // a stop from earlier is red too
+      const state = nodeState(shownRun, n.id) ?? (n.id === stoppedHere?.node ? 'blocked' : undefined) // a stop from earlier is red too
       return {
         ...n, className: `status-${state ?? 'pending'}`,
         data: { ...n.data, number: numbers[n.id], runStatus: state,
@@ -618,31 +611,31 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
     [viewNodes, numbers, shownRun, daily, stoppedHere],
   )
   const safety = useMemo(() => safetySummary(viewNodes), [viewNodes])
-  const blocked = whyNotRunnable(safety, appName ? appLabel(appName) : undefined)
+  const blocked = whyNotRunnable(safety)
   const paused = running && Object.values(shownRun.nodes).includes('paused')
   const loose = looseNodes(nodes, edges)
-  // the lines the run went down: out of a box that got through, into a box it reached
-  const went = (e) => ['done', 'continued'].includes(boxState(shownRun, e.source))
-    && !['unreached', undefined].includes(boxState(shownRun, e.target))
+  // the lines the run went down: out of a node that got through, into a node it reached
+  const went = (e) => ['done', 'continued'].includes(nodeState(shownRun, e.source))
+    && !['unreached', undefined].includes(nodeState(shownRun, e.target))
   const shownEdges = edges.map((e) => ({ ...e, ...EDGE_LOOK, className: went(e) ? 'on' : '',
     ariaLabel: `Wire from ${nameOf(e.source)} to ${nameOf(e.target)}` }))
   const outcome = shownRun && !running && {
-    waiting: 'This chore did not run: it stopped earlier and is waiting. Try again, or ask for help.',
+    waiting: 'This flow did not run: it stopped earlier and is waiting. Try again, or ask for help.',
     stopped: `Stopped at “${nameOf(shownRun.stopped)}”. ${flowDoubts.filter((d) => d.node_id === shownRun.stopped)
       .map((d) => reasonWords(d.detail ?? d.reason))[0] ?? ''}`,
     emergency: 'You stopped this run. Run it again to continue where it stopped.',
     error: `The run failed (${shownRun.error ?? 'unknown error'}).`,
-    busy: 'This chore is already running somewhere else.',
+    busy: 'This flow is already running somewhere else.',
   }[shownRun.status]
 
   return (
     <div className="editor">
       <header className="topbar">
         <button className="ghost" data-testid="back-home" onClick={() => onBack(flowId)}><Icon name="back" size={16} /> Home</button>
-        <input className="flow-name" aria-label="Chore name" data-testid="flow-title" value={title} maxLength={100}
+        <input className="flow-name" aria-label="Flow name" data-testid="flow-title" value={title} maxLength={100}
           onChange={(e) => setTitle(e.target.value)} />
         <span className={`pill pill-${status}`} data-testid="run-status" role="status">{statusWords}</span>
-        <ul className="summary" aria-label="Safety of this chore" data-testid="safety-summary">
+        <ul className="summary" aria-label="Safety of this flow" data-testid="safety-summary">
           {summaryMarks(safety).map(([glyph, words, tone]) => (
             <li key={words} className={`tone-${tone}`}><Icon name={glyph} size={15} /> {words}</li>
           ))}
@@ -650,11 +643,11 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
 
         <div className="menu-anchor">
           <button className="ghost" data-testid="open-flows" aria-expanded={menu === 'flows'} onClick={() => setMenu(menu === 'flows' ? null : 'flows')}>
-            <Icon name="folder" /> Chores
+            <Icon name="folder" /> Flows
           </button>
           {menu === 'flows' && (
-            <div className="menu" aria-label="Chores">
-              <button className="menu-item" data-testid="new-flow" onClick={newFlow}><Icon name="plus" /> New chore</button>
+            <div className="menu" aria-label="Flows">
+              <button className="menu-item" data-testid="new-flow" onClick={newFlow}><Icon name="plus" /> New flow</button>
               {flows.map((flow) => (
                 <div className="menu-row" key={flow.id}>
                   <button className="menu-item" data-testid={`flow-${flow.id}`} onClick={() => openFlow(flow.id)}>
@@ -672,9 +665,9 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
           )}
         </div>
 
-        {!nodes.some(isDaily) && ( // a chore with no start box starts when Run is pressed: this gives it a time
+        {!nodes.some(isDaily) && ( // a flow with no start node starts when Run is pressed: this gives it a time
           <button className="ghost daily-button" data-testid="daily-add" aria-expanded={settingDaily}
-            title={daily?.at ? 'Windows runs this chore every day; it has no start box yet' : 'This chore starts when you press Run now'}
+            title={daily?.at ? 'Windows runs this flow every day; it has no start node yet' : 'This flow starts when you press Run now'}
             onClick={() => setSettingDaily((open) => !open)}>
             <Icon name="clock" size={16} /> {daily?.at ? `Every day at ${daily.at}` : 'Run every day'}
           </button>
@@ -684,12 +677,12 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
 
         <div className="menu-anchor">
           <button className="ghost" data-testid="run-data" aria-expanded={menu === 'data'} onClick={() => setMenu(menu === 'data' ? null : 'data')}>
-            Run data
+            Starting values
           </button>
           {menu === 'data' && (
             <div className="menu wide">
-              <label htmlFor="run-context">Starting values for this run, optional. Only boxes that read “Run data” use them.</label>
-              <small data-testid="context-hint">{'{}'} means nothing: leave it so if the chore needs no starting values.</small>
+              <label htmlFor="run-context">Starting values for this run, optional. Only nodes that read “Starting values” use them.</label>
+              <small data-testid="context-hint">{'{}'} means nothing: leave it so if the flow needs no starting values.</small>
               <textarea id="run-context" data-testid="context" value={context} rows={4} onChange={(e) => setContext(e.target.value)} />
             </div>
           )}
@@ -700,9 +693,9 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
             <Icon name="stop" size={16} /> Stop
           </button>
         ) : (
-          <button className="primary" data-testid="run" onClick={run} disabled={starting || nodes.length === 0 || Boolean(blocked)}
-            title={nodes.length === 0 ? 'Add a box first' : blocked}>
-            <Icon name="play" size={16} /> {starting ? 'Starting…' : 'Run now'}
+          <button className={nodes.length === 0 ? 'cannot' : 'primary'} data-testid="run" onClick={run} disabled={starting || nodes.length === 0 || Boolean(blocked)}
+            title={nodes.length === 0 ? 'Add a node first' : blocked}>
+            <Icon name="play" size={16} /> {starting ? 'Starting…' : nodes.length === 0 ? 'Nothing to run yet' : 'Run now'}
           </button>
         )}
       </header>
@@ -713,7 +706,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
       )}
       <div className="workspace">
       <div className="stage">
-      <div className="canvas" role="region" aria-label="Boxes of this chore" onDrop={drop} onDragOver={(e) => e.preventDefault()}
+      <div className="canvas" role="region" aria-label="Nodes of this flow" onDrop={drop} onDragOver={(e) => e.preventDefault()}
         onKeyDownCapture={(e) => {
           if (e.key !== 'Enter' || !e.target.classList.contains('react-flow__node')) return
           e.preventDefault()
@@ -755,7 +748,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
           <div className={`notice notice-${shownRun.status}`} data-testid="run-outcome" role="status">
             <Icon name="alert" size={16} /> <span>{outcome}</span>
             {['waiting', 'stopped'].includes(shownRun.status) && stoppedHere && (
-              <button className="small" data-testid="show-stopped" onClick={() => choose(stoppedHere.node)}>Show the stopped box</button>
+              <button className="small" data-testid="show-stopped" onClick={() => choose(stoppedHere.node)}>Show the stopped node</button>
             )}
           </div>
         )}
@@ -769,7 +762,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
         ))}
         {loose.length > 0 && (
           <div className="notice" data-testid="unwired" role="status">
-            <span>{loose.length === 1 ? '1 box is' : `${loose.length} boxes are`} not connected: what is not connected runs at the same time, in no set order.</span>
+            <span>{loose.length === 1 ? '1 node is' : `${loose.length} nodes are`} not connected: what is not connected runs at the same time, in no set order.</span>
             <button className="small" onClick={() => { record(); setEdges(chainLoose(nodes, edges)) }}>Connect them in order</button>
           </div>
         )}
@@ -819,14 +812,14 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
 
         {shownRun && !shownRun.logClosed && (
           <RunLog log={shownRun.log} nodes={viewNodes} running={running}
-            steps={viewNodes.map((n) => ({ id: n.id, number: numbers[n.id], state: boxState(shownRun, n.id) ?? 'unreached' }))
+            steps={viewNodes.map((n) => ({ id: n.id, number: numbers[n.id], state: nodeState(shownRun, n.id) ?? 'unreached' }))
               .sort((a, b) => (a.number ?? 1e9) - (b.number ?? 1e9))}
             onClose={() => { patch(flowId, { logClosed: true }); focusSoon('run') }} />
         )}
 
         {nodes.length === 0 && (
           <div className="empty-canvas">
-            <p>Add your first box with “Add a box”.</p>
+            <p>Add your first node with “Add a node”.</p>
           </div>
         )}
 
@@ -835,6 +828,7 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
             key={selected.id}
             node={selectedNode}
             meta={selected.data.meta}
+            technologies={technologiesOf(steps, selectedNode.step)}
             drafts={selected.data.drafts}
             onDraft={draftSelected}
             refs={refOptions(viewNodes, selected.id, runKeys, (n) => titleOf(n.data.node))}
@@ -850,16 +844,16 @@ function EditorScreen({ ref, active, onOpen, onBack, onUnsaved, following, tried
           <ExplanationStrip node={selected} meta={selected?.data.meta} nodes={viewNodes} edges={edges}
             stopped={stoppedHere && selected?.id === stoppedHere.node ? stoppedHere : null} onTry={tryAgain} onChanged={refresh}
             trying={running || Boolean(tried.tries[flowId] && !tried.tries[flowId].result)}
-            appName={runsOn} context={context} onConnect={onConnect} onSettings={() => openDetail(selected.id)} onRemove={deleteSelected}
+            appName={selectedNode?.technology} context={context} onConnect={onConnect} onSettings={() => openDetail(selected.id)} onRemove={deleteSelected}
             onDisconnect={(edge) => { record(); setEdges((current) => current.filter((e) => e.id !== edge.id)) }}
             ensureSaved={async () => {
               const id = await ensureStored()
-              if (!id) throw new Error('the chore was not saved, so nothing was tested')
+              if (!id) throw new Error('the flow was not saved, so nothing was tested')
               return id
             }}
             onTested={() => setTested((n) => n + 1)} />
       </div>
-        <SearchPanel steps={steps} recipes={recipes} apps={apps} app={runsOn} onApp={setAppName} onAddSystem={addSystem}
+        <SearchPanel steps={steps} recipes={recipes} onAddSystem={addSystem}
           onAddStep={addStep} onAddRecipe={addRecipe} />
         {opening && <div className="opening" role="status">Opening…</div>}
       </div>

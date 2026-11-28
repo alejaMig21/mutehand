@@ -1,6 +1,6 @@
-"""What the Apps screen says: one row per app, a search across all of them, and what one app holds (its actions, problems
+"""What the Apps screen says: one row per app, a search across all of them, and what one app holds (its steps, problems
 first, and the permissions it was given with what would stop without each). Names, counts and codes only: no screen content,
-and the actions of a private app are neither matched by a search nor offered as search results, and in `app_detail` its action
+and the steps of a private app are neither matched by a search nor offered as search results, and in `app_detail` its step
 and control names are handles (see `tutor.handle`)."""
 
 import re
@@ -36,7 +36,7 @@ def _matches(words: list[str], *texts: str, every: bool = True) -> bool:
 
 
 def _known(user_db: Path, factory_db: Path | None) -> tuple[dict[str, str], list, list[dict]]:
-    """The spelling of every app that has an action or a permission, the light steps and each step's report."""
+    """The spelling of every app that has a step or a permission, the light steps and each step's report."""
     steps = list_steps(user_db, factory_db, light=True)
     spelling: dict[str, str] = {}
     for app in [*(step.app for step in steps), *(consent.app for consent in consents(user_db))]:
@@ -46,20 +46,20 @@ def _known(user_db: Path, factory_db: Path | None) -> tuple[dict[str, str], list
 
 def app_rows(user_db: Path, factory_db: Path | None, query: str | None = None) -> list[dict]:
     """The apps, those with something for the person first, then by name. With a query, only the apps it matches: by their
-    name, or by an action (`found` names them; never for a private app, whose action names stay out of every search)."""
+    name, or by a step (`found` names them; never for a private app, whose step names stay out of every search)."""
     spelling, steps, reports = _known(user_db, factory_db)
     names, private, granted = app_names(user_db), private_apps(user_db), consents(user_db)
     words = _words(query or "")
 
     def search(words: list[str], every: bool) -> list[dict]:
-        rows = {key: {"app": app, "private": is_private(user_db, app, private), "actions": 0, "problems": 0, "found": [],
+        rows = {key: {"app": app, "private": is_private(user_db, app, private), "steps": 0, "problems": 0, "found": [],
                       "permissions": sum(plain_app(c.app) == key for c in granted)} for key, app in spelling.items()}
         for step, report in zip(steps, reports, strict=True):
             row = rows[plain_app(step.app)]
-            row["actions"] += 1
+            row["steps"] += 1
             row["problems"] += report["state"] in PROBLEMS
             label = _label(step.app, names)
-            # words that all name the app list the app itself, not each of its actions
+            # words that all name the app list the app itself, not each of its steps
             if (words and not row["private"] and not _matches(words, step.app, label, every=every)
                     and _matches(words, step.name, step.app, label, every=every)):
                 row["found"].append(step.name)
@@ -79,8 +79,8 @@ def app_rows(user_db: Path, factory_db: Path | None, query: str | None = None) -
 
 
 def app_detail(user_db: Path, factory_db: Path | None, app: str) -> dict | None:
-    """One app: its actions with the ones that have a problem first (and why a rejected one is), and each permission with the
-    actions and chores that stop working if it is taken back. None when nothing is known under that name."""
+    """One app: its steps with the ones that have a problem first (and why a rejected one is), and each permission with the
+    steps and flows that stop working if it is taken back. None when nothing is known under that name."""
     spelling, steps, reports = _known(user_db, factory_db)
     key = plain_app(app)
     if key not in spelling:
@@ -88,13 +88,14 @@ def app_detail(user_db: Path, factory_db: Path | None, app: str) -> dict | None:
     mine = [(step, report) for step, report in zip(steps, reports, strict=True) if plain_app(step.app) == key]
     hidden = is_private(user_db, app)
     shown = (lambda *names: handle(*names)) if hidden else (lambda *names: names[-1])  # what the browser gets for a name
-    actions = [{"app": step.app, "name": shown(step.app, step.name), "state": report["state"],
+    learned = [{"app": step.app, "name": shown(step.app, step.name), "state": report["state"],
                 "why": _why(report["why"], hidden) if report["state"] == str(Status.REJECTED) else None}
                for step, report in mine]
-    actions.sort(key=lambda action: (action["state"] not in PROBLEMS, action["name"]))
+    learned.sort(key=lambda step: (step["state"] not in PROBLEMS, step["name"]))
     by_name = {step.name: step for step, _ in mine}
-    chores = [(entry, {node.step for node in load_flow(user_db, factory_db, entry["id"]).nodes if node.kind in ("step", "loop")})
-              for entry in flow_summaries(user_db, factory_db) if plain_app(entry["app"] or "") == key]
+    flows = [(entry, {node.step for node in load_flow(user_db, factory_db, entry["id"]).nodes
+                       if node.kind in ("step", "loop") and plain_app(node.technology) == key})
+             for entry in flow_summaries(user_db, factory_db)]
     permissions = []
     for granted in consents(user_db):
         if plain_app(granted.app) != key:
@@ -102,15 +103,15 @@ def app_detail(user_db: Path, factory_db: Path | None, app: str) -> dict | None:
         needing = {name: step for name, step in by_name.items() if needs_consent(user_db, step) and covers([_as(granted, step)], step)}
         permissions.append({**asdict(granted), "control": granted.control if granted.control == "*" else shown("control", granted.control),
                             "stops": {
-            "actions": sorted(shown(step.app, name) for name, step in needing.items()),
-            "flows": sorted(({"id": entry["id"], "title": entry["title"]} for entry, used in chores if used & needing.keys()),
+            "steps": sorted(shown(step.app, name) for name, step in needing.items()),
+            "flows": sorted(({"id": entry["id"], "title": entry["title"]} for entry, used in flows if used & needing.keys()),
                             key=lambda flow: flow["id"])}})
     permissions.sort(key=lambda permission: (permission["control"], permission["action"]))
-    return {"app": spelling[key], "private": hidden, "actions": actions, "permissions": permissions}
+    return {"app": spelling[key], "private": hidden, "steps": learned, "permissions": permissions}
 
 
 def _why(why: dict | None, hidden: bool) -> dict:
-    """Why an action is rejected. What a failed check expected and saw is screen content: a private app keeps only the kind."""
+    """Why a step is rejected. What a failed check expected and saw is screen content: a private app keeps only the kind."""
     why = why or {"kind": "person"}
     return {"kind": why.get("kind")} if hidden else why
 

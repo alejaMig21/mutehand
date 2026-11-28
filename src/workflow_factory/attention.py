@@ -1,16 +1,17 @@
 """What needs the person: one list that Home and the flow screen both read, so they never disagree.
 
-Kinds: a stopped flow, actions to learn again after an app update, a rejected action a flow needs, and a required setup
-piece that is missing. Each item holds only roles, names the person gave and codes: no screen content, and no name of an
-action in a private app: where a button needs one to send back, it gets a handle (see `tutor.handle`)."""
+Kinds: a stopped flow, steps to learn again after an app update, a rejected step a flow needs, and a required setup
+piece that is missing. Each item holds only roles, names the person gave and codes: no screen content, and no name of a
+step in a private app: where a button needs one to send back, it gets a handle (see `tutor.handle`)."""
 
 from pathlib import Path
 
 from workflow_factory.checks import run_checks
-from workflow_factory.flows import flow_overview, flow_summaries, load_flow, taught_app
+from workflow_factory.flows import flow_overview, flow_summaries, load_flow
 from workflow_factory.queue import last_runs, list_doubts
 from workflow_factory.steps import Status, list_steps, step_reports
 from workflow_factory.tutor import handle, is_private, private_apps
+from workflow_factory.upgrade import list_notices
 
 
 def rejected_by_person(report: dict) -> bool:
@@ -20,11 +21,12 @@ def rejected_by_person(report: dict) -> bool:
 
 
 def attention_items(user_db: Path, factory_db: Path | None, data_dir: Path | None = None) -> list[dict]:
-    """Everything that needs the person: stopped flows (oldest first), then actions to learn again, rejected actions and
+    """Everything that needs the person: stopped flows (oldest first), then steps to learn again, rejected steps and
     missing setup. `data_dir` is where the setup check looks; without it no setup item is listed."""
     steps = list_steps(user_db, factory_db)
     stopped = _stopped(user_db, factory_db, steps)
-    return [*stopped, *_blocking(user_db, factory_db, steps, {item["flow"] for item in stopped}), *_setup(data_dir)]
+    notices = [{"kind": "notice", **notice} for notice in list_notices(user_db)]
+    return [*notices, *stopped, *_blocking(user_db, factory_db, steps, {item["flow"] for item in stopped}), *_setup(data_dir)]
 
 
 def _stopped(user_db: Path, factory_db: Path | None, steps: list) -> list[dict]:
@@ -33,7 +35,7 @@ def _stopped(user_db: Path, factory_db: Path | None, steps: list) -> list[dict]:
     not lift those."""
     by_flow: dict[str, list] = {}
     for doubt in list_doubts(user_db, "open"):
-        by_flow.setdefault(doubt.flow_id, []).append(doubt)  # a test of one box is kept under "<flow>#test:<box>": no match
+        by_flow.setdefault(doubt.flow_id, []).append(doubt)  # a test of one node is kept under "<flow>#test:<node>": no match
     flows = {entry["id"]: entry for entry in flow_summaries(user_db, factory_db)}  # a deleted flow is not here
     waiting = [flow_id for flow_id in by_flow if flow_id in flows]
     if not waiting:
@@ -42,17 +44,17 @@ def _stopped(user_db: Path, factory_db: Path | None, steps: list) -> list[dict]:
     private, runs, items = private_apps(user_db), last_runs(user_db), []
     for flow_id in waiting:
         flow, entry = load_flow(user_db, factory_db, flow_id), flows[flow_id]
-        app = taught_app(entry["app"], steps)
         order = {node.id: n for n, node in enumerate(flow.nodes)}
-        doubt = min(by_flow[flow_id], key=lambda d: (order.get(d.node_id, len(order)), d.id))  # the first box in flow order
+        doubt = min(by_flow[flow_id], key=lambda d: (order.get(d.node_id, len(order)), d.id))  # the first node in flow order
+        used = dict.fromkeys((node.technology, node.step) for node in flow.nodes if node.kind in ("step", "loop"))
+        app = doubt.technology or next((tech for tech, _ in used), "")  # the program the stopped node acts on
         hidden = is_private(user_db, app, private) if app else False
-        used = dict.fromkeys(node.step for node in flow.nodes if node.kind in ("step", "loop"))
-        person = [{"app": app, "step": handle(app, name) if hidden else name} for name in used
-                  if (report := reports.get((app, name))) and rejected_by_person(report)]
+        person = [{"app": tech, "step": handle(tech, name) if is_private(user_db, tech, private) else name}
+                  for tech, name in used if (report := reports.get((tech, name))) and rejected_by_person(report)]
         last = runs.get(flow_id)
         items.append({
             "kind": "stopped", "flow": flow_id, "title": entry["title"], "app": app, "private": hidden,
-            "node": doubt.node_id, "box": None if hidden else (doubt.step or None), "reason": doubt.detail or str(doubt.reason),
+            "node": doubt.node_id, "step": None if hidden else (doubt.step or None), "reason": doubt.detail or str(doubt.reason),
             "doubt": doubt.id, "note": doubt.note, "at": last["at"] if last else None,
             "rejected_by_person": person,  # to call "Allow again" with: a handle, not the name, for a private app
         })
@@ -67,8 +69,8 @@ def _setup(data_dir: Path | None) -> list[dict]:
 
 
 def _blocking(user_db: Path, factory_db: Path | None, steps: list, stopped: set[str]) -> list[dict]:
-    """What keeps a flow from running and only the person can change: by app, the actions to learn again with the flows
-    they block, and each rejected action with why and the flows it blocks. An action no flow needs raises nothing. A
+    """What keeps a flow from running and only the person can change: by app, the steps to learn again with the flows
+    they block, and each rejected step with why and the flows it blocks. A step no flow needs raises nothing. A
     stopped flow has its own card, which already offers what a rejection needs."""
     private = private_apps(user_db)
     reports = {(step.app, step.name): r for step, r in zip(steps, step_reports(user_db, steps), strict=True)}
@@ -78,19 +80,21 @@ def _blocking(user_db: Path, factory_db: Path | None, steps: list, stopped: set[
         blocked = flow["blocked"]
         if not blocked or blocked["why"] not in ("to_revalidate", "rejected"):
             continue
-        app, mine = flow["app"], {"id": flow["id"], "title": flow["title"]}
-        hidden = is_private(user_db, app, private)
-        if blocked["why"] == "to_revalidate":
-            item = relearn.setdefault(app, {"kind": "relearn", "app": app, "private": hidden, "actions": [], "flows": []})
-            item["actions"] += [name for name in blocked["steps"] if not hidden and name not in item["actions"]]
-            item["flows"].append(mine)
-        elif flow["id"] not in stopped:
-            for name in blocked["steps"]:
-                why = (reports.get((app, name)) or {}).get("why") or {"kind": "person"}  # nobody recorded it: the person's
-                item = rejected.setdefault((app, name), {
-                    "kind": "rejected", "app": app, "private": hidden, "step": handle(app, name) if hidden else name,
-                    "why": {"kind": why.get("kind")} if hidden else why, "flows": []})
-                item["flows"].append(mine)
+        mine = {"id": flow["id"], "title": flow["title"]}
+        for app, names in blocked["by_technology"].items():
+            hidden = is_private(user_db, app, private)
+            if blocked["why"] == "to_revalidate":
+                item = relearn.setdefault(app, {"kind": "relearn", "app": app, "private": hidden, "steps": [], "flows": []})
+                item["steps"] += [name for name in names if not hidden and name not in item["steps"]]
+                if mine not in item["flows"]:
+                    item["flows"].append(mine)
+            elif flow["id"] not in stopped:
+                for name in names:
+                    why = (reports.get((app, name)) or {}).get("why") or {"kind": "person"}  # nobody recorded it: the person's
+                    item = rejected.setdefault((app, name), {
+                        "kind": "rejected", "app": app, "private": hidden, "step": handle(app, name) if hidden else name,
+                        "why": {"kind": why.get("kind")} if hidden else why, "flows": []})
+                    item["flows"].append(mine)
     for item in relearn.values():
-        item["actions"].sort()
+        item["steps"].sort()
     return [*sorted(relearn.values(), key=lambda i: i["app"]), *(rejected[key] for key in sorted(rejected))]

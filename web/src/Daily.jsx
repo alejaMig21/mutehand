@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, encode } from './api.js'
 
-// Set, or with null stop, the daily time of a stored chore. The server keeps the Windows task and the first box in step.
+// Set, or with null stop, the daily time of a stored flow. The server keeps the Windows task and the first node in step.
 export const changeDaily = (flowId, at) => api(`/api/flows/${encode(flowId)}/daily`,
   at ? { method: 'PUT', body: { at } } : { method: 'DELETE' })
 
-// The form that sets, changes and stops a daily time, the same on Home and on the first box. `submit(at)` makes the change
+// The form that sets, changes and stops a daily time, the same on Home and on the first node. `submit(at)` makes the change
 // (at is null to stop) and throws the reason in words when it cannot; `onDone` closes the form, with whether it changed (and the time it was set to, null when stopped)
 // anything. `initial` is the time to offer when there is none yet. `suffix` makes the test ids of one row's form unique.
 export function DailyForm({ at, initial, suffix = '', submit, onDone }) {

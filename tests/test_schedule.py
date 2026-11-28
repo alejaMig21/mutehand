@@ -28,31 +28,28 @@ class Recorder:
         return subprocess.CompletedProcess(args, self.returncode, stdout="", stderr="")
 
 
-def test_the_task_runs_the_workday_module_with_the_flow_and_the_app_and_fires_the_daily_triggers():
-    command = workday_command("morning", "mspaint.exe")
+def test_the_task_runs_the_workday_module_with_the_flow_and_fires_the_daily_triggers():
+    command = workday_command("morning")
 
-    assert re.fullmatch(r'"[^"]+" -m workflow_factory\.workday --flow morning --app mspaint\.exe --fired daily', command)
+    assert re.fullmatch(r'"[^"]+" -m workflow_factory\.workday --flow morning --fired daily', command)
 
 
 def test_paths_with_spaces_are_quoted_in_the_command():
-    command = workday_command("morning", "mspaint.exe", extra=["--report-dir", r"C:\My Reports\daily"])
+    command = workday_command("morning", extra=["--report-dir", r"C:\My Reports\daily"])
 
     assert command.endswith(r'--report-dir "C:\My Reports\daily"')
 
 
-@pytest.mark.parametrize("flow, app", [
-    ("morning & calc", "mspaint.exe"), ("morning", "paint.exe | whoami"), ("../x", "mspaint.exe"),
-    ('a" --flow other', "mspaint.exe"), ("", "mspaint.exe"),
-])
-def test_a_flow_or_app_name_that_could_inject_into_the_command_is_refused(flow, app):
+@pytest.mark.parametrize("flow", ["morning & calc", "../x", 'a" --flow other', ""])
+def test_a_flow_name_that_could_inject_into_the_command_is_refused(flow):
     with pytest.raises(ValueError):
-        workday_command(flow, app)
+        workday_command(flow)
 
 
 def test_creating_a_daily_task_builds_one_schtasks_call_without_a_shell():
     runner = Recorder()
 
-    create_schedule("Workflow factory - morning", "morning", "mspaint.exe", daily_at="09:30", runner=runner)
+    create_schedule("Workflow factory - morning", "morning", daily_at="09:30", runner=runner)
 
     (call,) = runner.calls
     assert call[:2] == ["schtasks", "/Create"]
@@ -64,20 +61,20 @@ def test_creating_a_daily_task_builds_one_schtasks_call_without_a_shell():
 @pytest.mark.parametrize("when", ["9:30", "25:00", "09:60", "morning", "09:30; calc"])
 def test_a_time_that_is_not_a_clock_time_is_refused(when):
     with pytest.raises(ValueError, match="HH:MM"):
-        create_schedule("morning-workday", "morning", "mspaint.exe", daily_at=when, runner=Recorder())
+        create_schedule("morning-workday", "morning", daily_at=when, runner=Recorder())
 
 
 @pytest.mark.parametrize("name", ["", "bad/name", "a" * 121, 'x"y'])
 def test_a_task_name_with_odd_characters_is_refused(name):
     with pytest.raises(ValueError, match="schedule name"):
-        create_schedule(name, "morning", "mspaint.exe", daily_at="09:00", runner=Recorder())
+        create_schedule(name, "morning", daily_at="09:00", runner=Recorder())
 
 
 def test_a_command_longer_than_windows_allows_is_refused_with_the_limit_in_the_message():
     runner = Recorder()
 
     with pytest.raises(ValueError, match="261"):
-        create_schedule("morning-workday", "morning", "mspaint.exe", daily_at="09:00", extra=["--report-dir", "C:\\" + "x" * 300],
+        create_schedule("morning-workday", "morning", daily_at="09:00", extra=["--report-dir", "C:\\" + "x" * 300],
                     runner=runner)
 
     assert runner.calls == []  # nothing was sent to schtasks
@@ -85,7 +82,7 @@ def test_a_command_longer_than_windows_allows_is_refused_with_the_limit_in_the_m
 
 def test_a_failing_schtasks_call_is_an_error_not_silence():
     with pytest.raises(RuntimeError, match="schtasks"):
-        create_schedule("morning-workday", "morning", "mspaint.exe", daily_at="09:00", runner=Recorder(returncode=1))
+        create_schedule("morning-workday", "morning", daily_at="09:00", runner=Recorder(returncode=1))
 
 
 def test_deleting_a_task_is_one_schtasks_call():
@@ -111,7 +108,7 @@ def test_windows_task_scheduler_really_launches_a_workday_without_any_ui():
     short.mkdir(parents=True)
     extra = ["--data-dir", str(short), "--no-hotkey"]
     try:
-        create_schedule(name, "no-such-flow", "mspaint.exe", daily_at="03:00", extra=extra)
+        create_schedule(name, "no-such-flow", daily_at="03:00", extra=extra)
         subprocess.run(["schtasks", "/Run", "/TN", name], check=True, capture_output=True, timeout=30)
         query = ["powershell", "-NoProfile", "-Command",
                  f"$i = Get-ScheduledTaskInfo -TaskName '{name}'; $s = (Get-ScheduledTask -TaskName '{name}').State; "
@@ -136,7 +133,7 @@ def test_windows_task_scheduler_really_launches_a_workday_without_any_ui():
 def test_every_schedule_this_tool_makes_carries_its_prefix_so_it_can_be_listed_and_removed_safely():
     runner = Recorder()
 
-    create_schedule("morning", "morning", "mspaint.exe", daily_at="09:00", runner=runner)
+    create_schedule("morning", "morning", daily_at="09:00", runner=runner)
     delete_schedule("morning", runner=runner)
     delete_schedule(SCHEDULE_PREFIX + "morning", runner=runner)  # already prefixed: not doubled
 
@@ -156,15 +153,15 @@ def test_listing_shows_only_the_schedules_made_by_this_tool():
     assert list_schedules(runner=runner) == ["Workflow factory - morning", "Workflow factory - evening"]
 
 
-def test_a_schedule_is_described_by_its_flow_app_and_daily_time_not_just_its_name():
+def test_a_schedule_is_described_by_its_flow_and_daily_time_not_just_its_name():
     from fake_scheduler import FakeScheduler
 
     from workflow_factory.schedule import describe_schedules
 
     scheduler = FakeScheduler()
-    create_schedule("morning", "morning", "mspaint.exe", daily_at="09:30", runner=scheduler)
+    create_schedule("morning", "morning", daily_at="09:30", runner=scheduler)
 
-    assert describe_schedules(runner=scheduler) == [{"name": "morning", "flow": "morning", "app": "mspaint.exe", "at": "09:30"}]
+    assert describe_schedules(runner=scheduler) == [{"name": "morning", "flow": "morning", "at": "09:30"}]
 
 
 def test_a_schedule_whose_details_cannot_be_read_is_still_listed_by_name():
@@ -175,7 +172,7 @@ def test_a_schedule_whose_details_cannot_be_read_is_still_listed_by_name():
             return subprocess.CompletedProcess(args, 1, stdout="", stderr="no")
         return subprocess.CompletedProcess(args, 0, stdout='"\\Workflow factory - odd","N/A","Ready"\n', stderr="")
 
-    assert describe_schedules(runner=runner) == [{"name": "odd", "flow": None, "app": None, "at": None}]
+    assert describe_schedules(runner=runner) == [{"name": "odd", "flow": None, "at": None}]
 
 
 def test_the_command_line_can_list_schedules_too(capsys):
@@ -185,15 +182,15 @@ def test_the_command_line_can_list_schedules_too(capsys):
 
 
 @pytest.mark.live
-def test_the_real_task_scheduler_gives_back_the_flow_app_and_time_of_a_schedule_this_tool_made():
+def test_the_real_task_scheduler_gives_back_the_flow_and_time_of_a_schedule_this_tool_made():
     from workflow_factory.schedule import describe_schedules
 
     name = f"{SCHEDULE_PREFIX}dwf-live-describe-{uuid.uuid4().hex[:8]}"
     try:
-        create_schedule(name, "describe-me", "mspaint.exe", daily_at="03:07")
+        create_schedule(name, "describe-me", daily_at="03:07")
         found = [s for s in describe_schedules() if SCHEDULE_PREFIX + s["name"] == name]
     finally:
         delete_schedule(name)
 
-    assert found == [{"name": name.removeprefix(SCHEDULE_PREFIX), "flow": "describe-me", "app": "mspaint.exe", "at": "03:07"}]
+    assert found == [{"name": name.removeprefix(SCHEDULE_PREFIX), "flow": "describe-me", "at": "03:07"}]
     assert not [s for s in describe_schedules() if SCHEDULE_PREFIX + s["name"] == name]  # and it is gone

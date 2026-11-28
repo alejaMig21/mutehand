@@ -11,7 +11,7 @@ import { useLoad } from './useLoad.js'
 import { ranResult } from './stopped.js'
 import { blockedWords, flowTitle, lastRunWords, PAUSED_WORDS, runNoteWords, timeWords } from './words.js'
 
-// The first screen: the person's flows ("chores" on screen), how each went, and Run now. `onOpen` shows a flow on the
+// The first screen: the person's flows ("flows" on screen), how each went, and Run now. `onOpen` shows a flow on the
 // flow screen, `onNew` an empty one; `left` holds the flow the person has just come back from, if any.
 export default function Home({ following, tried, left, onOpen, onNew }) {
   const { offline, attach, settled } = following
@@ -28,7 +28,7 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
   // the button that led back is gone with the flow screen: the focus goes to the flow's row
   useEffect(() => {
     if (load.loading || left.current === null) return
-    const target = flows.some((flow) => flow.id === left.current) ? `open-chore-${left.current}` : 'new-chore'
+    const target = flows.some((flow) => flow.id === left.current) ? `open-flow-${left.current}` : 'new-flow'
     left.current = null
     document.querySelector(`[data-testid="${target}"]`)?.focus()
   }, [load.loading]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -45,14 +45,14 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
     <div className="home">
       <Attention items={needs.data} tries={tried.tries} hide={tried.hide} tryAgain={tried.tryAgain} onChanged={() => { reload(); reloadNeeds() }}
         running={(id) => following.runs[id]?.status === 'running'} />
-      <Screen title={none && bare ? FIRST_DAY_TITLE : 'Your chores'} load={load} isEmpty={false}
+      <Screen title={none && bare ? FIRST_DAY_TITLE : 'Your flows'} load={load} isEmpty={false}
         help={none && bare ? 'When you press a button, or by itself every morning.' : undefined}
         above={offline && <p role="status">{UNREACHABLE} Trying again…</p>}
-        tools={!none && <button data-testid="new-chore" onClick={onNew}><Icon name="plus" size={20} /> New chore</button>}>
-        {none && !undo.notice ? <FirstDay onNew={onNew} onFirstDay={setBare} /> : (
-          <ul className="chores">{withNotice(
+        tools={!none && <button data-testid="new-flow" onClick={onNew}><Icon name="plus" size={20} /> New flow</button>}>
+        {none && undo.items.length === 0 ? <FirstDay onNew={onNew} onFirstDay={setBare} /> : (
+          <ul className="flows">{withNotices(
             flows.map((flow, place) => (
-              <Chore key={flow.id} flow={flow} title={flowTitle(flow.id, flows)} following={following} reload={reload} place={place}
+              <Flow key={flow.id} flow={flow} title={flowTitle(flow.id, flows)} following={following} reload={reload} place={place}
                 stopped={stopped.find((item) => item.flow === flow.id)} tryAgain={tried.tryAgain} clearTried={tried.clearDone}
                 onDeleted={undo.onDeleted} onOpen={() => onOpen(flow.id)} />
             )), undo)}
@@ -63,11 +63,16 @@ export default function Home({ following, tried, left, onOpen, onNew }) {
   )
 }
 
-// The undo notice stands where the deleted chore was, under one key so it is the same element while the list changes around it.
-const withNotice = (rows, { notice, at }) => (notice ? rows.toSpliced(Math.min(at, rows.length), 0, <li key="undo-notice">{notice}</li>) : rows)
+// Each undo notice stands where its flow was, under its own key so it is the same element while the list changes around it.
+const withNotices = (rows, { notices, items }) => {
+  const out = [...rows]
+  notices.forEach((notice, n) => out.splice(Math.min(items[n].at, out.length), 0, <li key={`undo-${items[n].id}`}>{notice}</li>))
+  return out
+}
 
-function Chore({ flow, title, following: { runs, follow, attach, forget }, reload, stopped, tryAgain, clearTried, place, onOpen, onDeleted }) {
-  const { id, app } = flow
+function Flow({ flow, title, following: { runs, follow, attach, forget }, reload, stopped, tryAgain, clearTried, place, onOpen, onDeleted }) {
+  const { id } = flow
+  const technologies = flow.technologies ?? [] // the programs its step nodes act on: no flow has one program of its own
   const run = runs[id]
   const running = run?.status === 'running'
   const [starting, setStarting] = useState(false)
@@ -78,19 +83,19 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
   const whyLine = useRef(null)
   useEffect(() => { if (running) setProblem('') }, [running]) // it runs after all: what went wrong asking no longer matters
 
-  const appName = app ? appLabel(app) : 'No app chosen'
-  const chip = chipFor(app || title)
+  const appName = technologies.map(appLabel).join(', ')
+  const chip = chipFor(technologies[0] || title)
   const paused = running && Object.values(run.nodes).includes('paused')
   const ran = !running && !starting && !problem && ranResult(run) // a run that ended here replaces the older line at once
   const last = ran ? { ...ran, icon: 'check' } : lastRunWords(flow.last_run)
   const line = starting ? { words: 'Running now', tone: 'info', icon: 'spinner' } : !running ? last : paused
     ? { words: PAUSED_WORDS, tone: 'warn', icon: 'pause' }
     : { words: 'Running now', tone: 'info', icon: 'spinner' }
-  const wrong = !running && (problem || runNoteWords(run, appName))
-  // a chore that stopped is tried again, not run: what it is waiting for is the person's Try again
+  const wrong = !running && (problem || runNoteWords(run, appName || 'the app'))
+  // a flow that stopped is tried again, not run: what it is waiting for is the person's Try again
   const again = Boolean(stopped) && !stopped.rejected_by_person.length
-  const why = !running && blockedWords(again && flow.blocked?.why === 'question' ? null : flow.blocked, app && appName)
-  const label = running ? 'Stop' : starting ? 'Running…' : why ? 'Cannot run yet' : again ? 'Try again' : 'Run now'
+  const why = !running && blockedWords(again && flow.blocked?.why === 'question' ? null : flow.blocked, Object.keys(flow.blocked?.by_technology ?? {}).filter(Boolean).map(appLabel).join(', '))
+  const label = running ? 'Stop' : starting ? 'Running…' : why ? 'Not ready yet' : again ? 'Try again' : 'Run now'
   const unavailable = starting || (running && !run.armed) || Boolean(why)
 
   async function press() {
@@ -106,7 +111,7 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
       setStarting(true) // drawn before a second press arrives, so the server is asked once
       forget(id)
       clearTried()
-      const { run_id } = await api(`/api/flows/${encode(id)}/run`, { method: 'POST', body: { app, context: {} } })
+      const { run_id } = await api(`/api/flows/${encode(id)}/run`, { method: 'POST', body: { context: {} } })
       follow(id, run_id)
     } catch (e) {
       if (running && e.status === 409) return // it had just ended
@@ -127,27 +132,27 @@ function Chore({ flow, title, following: { runs, follow, attach, forget }, reloa
   }
 
   return (
-    <li className="chore" data-testid={`chore-${id}`}>
+    <li className="flow" data-testid={`flow-${id}`}>
       <span className="chip" style={{ background: chip.colour }} aria-hidden="true">{chip.letter}</span>
-      <div className="chore-words">
+      <div className="flow-words">
         {/* the button covers the whole row, under the row's other controls */}
-        <h2><button className="chore-open" data-testid={`open-chore-${id}`} onClick={onOpen}>{title}</button></h2>
-        <p className="muted">{appName}</p>
-        <p className={`chore-line tone-${line.tone}`} role="status" data-testid={ran ? `chore-result-${id}` : undefined}><Icon name={line.icon} size={18} /> {line.words}{again && !running && '. See above.'}</p>
-        {why && <p className="chore-line tone-warn" id={`why-${id}`} data-testid={`chore-why-${id}`} tabIndex={-1} ref={whyLine}><Icon name="alert" size={18} /> {why}</p>}
-        {wrong && <p className="chore-line tone-bad" role="alert"><Icon name="alert" size={18} /> {wrong}</p>}
+        <h2><button className="flow-open" data-testid={`open-flow-${id}`} onClick={onOpen}>{title}</button></h2>
+        {appName && <p className="muted">{appName}</p>}
+        <p className={`flow-line tone-${line.tone}`} role="status" data-testid={ran ? `flow-result-${id}` : undefined}><Icon name={line.icon} size={18} /> {line.words}{again && !running && '. See above.'}</p>
+        {why && <p className="flow-line tone-warn" id={`why-${id}`} data-testid={`flow-why-${id}`} tabIndex={-1} ref={whyLine}><Icon name="alert" size={18} /> {why}</p>}
+        {wrong && <p className="flow-line tone-bad" role="alert"><Icon name="alert" size={18} /> {wrong}</p>}
       </div>
       {/* one button that changes its words, so the keyboard focus stays on it; aria-disabled keeps it focusable */}
-      <button className={`chore-run ${running ? 'danger' : why ? 'cannot' : 'primary'}${starting ? ' busy' : ''}`} data-testid={`run-now-${id}`} onClick={press}
+      <button className={`flow-run ${running ? 'danger' : why ? 'cannot' : 'primary'}${starting ? ' busy' : ''}`} data-testid={`run-now-${id}`} onClick={press}
         aria-disabled={unavailable || undefined} aria-describedby={why ? `why-${id}` : undefined} aria-label={`${label}: ${title}`}>
         <Icon name={running ? 'stop' : starting ? 'spinner' : again && !why ? 'retry' : 'play'} size={20} /> {label}
       </button>
-      <button ref={dailyButton} className="chore-daily" data-testid={`daily-${id}`} onClick={() => setSetting(!setting)}
+      <button ref={dailyButton} className="flow-daily" data-testid={`daily-${id}`} onClick={() => setSetting(!setting)}
         aria-expanded={setting} aria-label={`${daily ? `Every day at ${timeWords(daily)}. Change or stop` : 'Run every day'}: ${title}`}>
         <Icon name="clock" size={20} />
         {daily ? <span>Every day at <b>{timeWords(daily)}</b><small>Change or stop</small></span> : 'Run every day'}
       </button>
-      {saved && !setting && <p className="chore-line tone-ok daily-saved" role="status" data-testid={`daily-saved-${id}`}><Icon name="checkcircle" size={18} /> {saved}</p>}
+      {saved && !setting && <p className="flow-line tone-ok flow-note" role="status" data-testid={`daily-saved-${id}`}><Icon name="checkcircle" size={18} /> {saved}</p>}
       <More flow={flow} title={title} reload={reload} onDeleted={onDeleted} place={place} />
       {setting && <DailyForm at={daily} suffix={`-${id}`} submit={(at) => changeDaily(id, at)} onDone={closeDaily} />}
     </li>

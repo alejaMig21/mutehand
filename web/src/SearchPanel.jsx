@@ -1,18 +1,18 @@
-import { useState } from 'react'
-import AppSelect from './AppSelect.jsx'
-import { appKey, appLabel, chipFor, DECISIONS, searchCatalog } from './catalog.js'
+import { useEffect, useRef, useState } from 'react'
+import { appLabel } from './catalog.js'
 import ChatMessage from './ChatMessage.jsx'
 import { Icon } from './icons.jsx'
+import { chooseTechnology, panelSections } from './search.js'
 
 export const DRAG_TYPE = 'application/x-workflow-entry'
 // an entry can be pressed, or dragged to the place on the canvas where it should go
 const draggable = (entry) => ({ draggable: true, onDragStart: (e) => e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(entry)) })
 
-function Entry({ title, hint, children, ...props }) {
+function Entry({ title, hint, hintTitle, children, ...props }) {
   return (
     <li>
       <button type="button" className="entry" {...props}>
-        <span className="entry-text"><b>{title}</b>{hint && <small>{hint}</small>}</span>
+        <span className="entry-text"><b>{title}</b>{hint && <small title={hintTitle}>{hint}</small>}</span>
         {children}
         <Icon name="plus" />
       </button>
@@ -20,77 +20,128 @@ function Entry({ title, hint, children, ...props }) {
   )
 }
 
-// The column on the right of the canvas: the app, its actions, then decisions, recipes and the other boxes.
-// It only adds what exists. Nothing in it starts a lesson: lessons happen in an agent chat.
-export default function SearchPanel({ steps, recipes, apps, app, onApp, onAddSystem, onAddStep, onAddRecipe }) {
+// A card names at most three programs and counts the rest; the whole list is its tooltip.
+const SHOWN = 3
+const programs = (apps) => {
+  const names = apps.map(appLabel)
+  return { text: names.length > SHOWN ? `${names.slice(0, SHOWN).join(', ')} +${names.length - SHOWN} more` : names.join(', '), all: names.join(', ') }
+}
+
+// Asks which program a step node is for. The first choice has the focus; Escape, or a press anywhere else, leaves without adding anything.
+// The programs scroll inside it, so Cancel stays in view however many there are.
+function Chooser({ name, apps, onChoose, onCancel }) {
+  const frame = useRef(null)
+  const first = useRef(null)
+  const leave = useRef(onCancel)
+  leave.current = onCancel
+  useEffect(() => {
+    first.current?.focus()
+    frame.current?.scrollIntoView({ block: 'nearest' })
+    const away = (e) => { if (e.type === 'keydown' ? e.key === 'Escape' : !frame.current?.contains(e.target)) leave.current() }
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', away)
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', away) }
+  }, [])
+  return (
+    <li>
+      <div role="group" aria-label={`Which program for ${name}?`} className="chooser" data-testid="technology-chooser" ref={frame}>
+        <p>Which program for “{name}”?</p>
+        <div className="chooser-apps">
+          {apps.map((app, i) => (
+            <button key={app} type="button" ref={i === 0 ? first : undefined} data-testid={`technology-${app}`} onClick={() => onChoose(app)}>
+              {appLabel(app)}
+            </button>
+          ))}
+        </div>
+        <button type="button" onClick={onCancel}>Cancel</button>
+      </div>
+    </li>
+  )
+}
+
+// The column on the right of the canvas: one search field, then sections by node type. It only adds what exists. Nothing in
+// it starts a lesson: lessons happen in an agent chat.
+export default function SearchPanel({ steps, recipes, onAddSystem, onAddStep, onAddRecipe }) {
   const [query, setQuery] = useState('')
+  const [toggled, setToggled] = useState({}) // sections the person opened or closed since the query last changed
+  const [choosing, setChoosing] = useState(null) // the step that waits for a program: {name, apps}
   const [teaching, setTeaching] = useState(false)
-  // only what the person typed and the app's name: nothing read from the app's screen
-  const message = app ? `I want to teach you a new action in ${appLabel(app)}: ${query.trim() || '[what you want done]'}`
-    : `I want to teach you a chore: ${query.trim() || '[what you want done, and in which program]'}`
-  const own = steps.filter((step) => appKey(step.app) === appKey(app))
-  const found = searchCatalog(query, own, undefined, recipes)
-  const decisions = DECISIONS.map((key) => found.system.find((n) => n.key === key)).filter(Boolean)
-  const others = found.system.filter((n) => !DECISIONS.includes(n.key))
-  const chip = app && chipFor(app)
-  const system = (n, hint) => (
-    <Entry key={n.key} title={n.title} hint={hint} data-testid={`system-${n.key}`} onClick={() => onAddSystem(n)}
+  const field = useRef(null)
+  // only what the person typed: nothing read from a program's screen
+  const message = `I want to teach you a flow: ${query.trim() || '[what you want done, and in which program]'}`
+  const { sections, recipes: found } = panelSections(query, steps, recipes)
+
+  const type = (text) => { setQuery(text); setToggled({}); setChoosing(null) }
+  const add = (name, app) => { setChoosing(null); onAddStep({ name, app }) }
+  const press = ({ name, technologies, visible }) => {
+    const pick = chooseTechnology(query, technologies, visible)
+    if ('ask' in pick) setChoosing({ name, apps: pick.ask })
+    else add(name, pick.app)
+  }
+  const cancel = () => { setChoosing(null); field.current?.focus() }
+  const system = (n) => (
+    <Entry key={n.key} title={n.title} hint={n.hint} data-testid={`system-${n.key}`} onClick={() => onAddSystem(n)}
       {...draggable({ system: n.key })} />
   )
 
-  return (
-    <aside className="search-panel" aria-label="Add a box" data-testid="search-panel">
-      <h2>Add a box</h2>
-      <div className="panel-app">
-        {chip && <span className="chip" style={{ background: chip.colour }} aria-hidden="true">{chip.letter}</span>}
-        <AppSelect aria-label="App to run on" data-testid="app-name" apps={apps} value={app} onChange={onApp} />
-      </div>
-      <label htmlFor="find-action" className="muted">Find an action</label>
-      <input id="find-action" type="search" data-testid="search" placeholder="for example: save" value={query}
-        onChange={(e) => setQuery(e.target.value)} />
-
-      <ul aria-label="Actions">
-        {found.apps.map((step) => (
-          <Entry key={`${step.app}/${step.name}`} title={step.name} data-testid={`palette-${step.name}`}
-            onClick={() => onAddStep(step)} {...draggable({ app: step.app, step: step.name })}>
-            {step.state === 'rejected' && <span className="tag tone-bad"><Icon name="xcircle" size={13} /> Rejected</span>}
-            {step.sensitive && (step.consent === 'given'
-              ? <span className="tag tone-muted"><Icon name="lock" size={13} /> Consent given</span>
-              : <span className="tag tone-warn"><Icon name="lock" size={13} /> Needs consent</span>)}
-          </Entry>
-        ))}
+  const items = (section) => {
+    if (section.key === 'components') return !query.trim() && <p className="empty">No components yet.</p>
+    if (section.key !== 'steps') return <ul>{section.items.map(system)}</ul>
+    if (!section.items.length) return <p className="empty">Nothing learned yet.</p>
+    return (
+      <ul>
+        {section.items.map((item) => {
+          const row = item.step
+          const pick = chooseTechnology(query, item.technologies, item.visible)
+          return [
+            <Entry key={item.name} title={item.name} hint={programs(item.technologies).text} hintTitle={programs(item.technologies).all} data-testid={`palette-${item.name}`}
+              onClick={() => press(item)} {...('app' in pick ? draggable({ app: pick.app, step: item.name }) : {})}>
+              {row.state === 'rejected' && <span className="tag tone-bad"><Icon name="xcircle" size={13} /> Blocked</span>}
+              {row.sensitive && (row.consent === 'given'
+                ? <span className="tag tone-muted"><Icon name="lock" size={13} /> Consent given</span>
+                : <span className="tag tone-warn"><Icon name="lock" size={13} /> Needs consent</span>)}
+            </Entry>,
+            choosing?.name === item.name && (
+              <Chooser key={`${item.name}-choose`} name={item.name} apps={choosing.apps} onChoose={(app) => add(item.name, app)} onCancel={cancel} />
+            ),
+          ]
+        })}
       </ul>
-      {own.length === 0 && <p className="empty">{app ? `Nothing learned for ${appLabel(app)} yet.` : 'Nothing learned yet.'}</p>}
-      {query && !found.apps.length && !found.system.length && !found.recipes.length
-        && <p className="empty" role="status">Nothing matches “{query}”.</p>}
+    )
+  }
 
-      {decisions.length > 0 && (
-        <section aria-labelledby="decisions-heading">
-          <h3 id="decisions-heading">Decisions and repeats</h3>
-          <ul>{decisions.map((n) => system(n))}</ul>
-        </section>
-      )}
-      <button type="button" className="teach" aria-expanded={teaching} onClick={() => setTeaching(!teaching)}>
-        <Icon name="chat" /> It is not here: teach it
-      </button>
-      {teaching && <ChatMessage message={message} />}
-      {found.recipes.length > 0 && (
+  return (
+    <aside className="search-panel" aria-label="Add a node" data-testid="search-panel">
+      <h2>Add a node</h2>
+      <label htmlFor="find-step" className="muted">Find a node</label>
+      <input id="find-step" ref={field} type="search" data-testid="search" placeholder="for example: save, or excel" value={query}
+        onChange={(e) => type(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Escape' && query) { e.preventDefault(); type('') } }} />
+
+      {sections.map((section) => (
+        <details key={section.key} className="section" data-testid={`section-${section.key}`} open={toggled[section.key] ?? section.open}
+          onToggle={(e) => { const now = e.currentTarget.open; if (now !== (toggled[section.key] ?? section.open)) setToggled({ ...toggled, [section.key]: now }) }}>
+          {/* Space is the canvas's pan key and would be swallowed there; here it opens the section */}
+          <summary onKeyDown={(e) => { if (e.key === ' ') e.stopPropagation() }}>{section.title}</summary>
+          {items(section)}
+        </details>
+      ))}
+      {query.trim() && !sections.length && !found.length && <p className="empty" role="status">Nothing matches “{query}”.</p>}
+      {found.length > 0 && (
         <section aria-labelledby="recipes-heading">
           <h3 id="recipes-heading">Recipes</h3>
           <ul>
-            {found.recipes.map((recipe) => (
+            {found.map((recipe) => (
               <Entry key={recipe.name} title={recipe.name} data-testid={`recipe-${recipe.name}`} onClick={() => onAddRecipe(recipe)}
                 hint={`${recipe.holes.length} steps · ${Object.keys(recipe.apps).map(appLabel).join(', ') || 'not applied yet'}`} />
             ))}
           </ul>
         </section>
       )}
-      {others.length > 0 && (
-        <details open={query ? true : undefined}>
-          <summary><h3>Other boxes</h3></summary>
-          <ul>{others.map((n) => system(n, n.hint))}</ul>
-        </details>
-      )}
+      <button type="button" className="teach" aria-expanded={teaching} onClick={() => setTeaching(!teaching)}>
+        <Icon name="chat" /> It is not here: teach it
+      </button>
+      {teaching && <ChatMessage message={message} />}
     </aside>
   )
 }

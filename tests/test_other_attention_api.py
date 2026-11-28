@@ -1,5 +1,5 @@
 """Other things that need the person (editor rethink, ticket 10): actions to learn again by app, a rejected action that
-blocks a chore, and a missing piece of setup. API side: the attention list."""
+blocks a flow, and a missing piece of setup. API side: the attention list."""
 
 import json
 
@@ -7,12 +7,12 @@ import pytest
 from fake_scheduler import FakeScheduler
 from test_api import call
 
-from workflow_factory import Flow, Node, reject_step, run_flow, save_flow, save_step
+from workflow_factory import Flow, Node, reject_step, run_flow, save_step
 from workflow_factory.api import ApiServer
 from workflow_factory.steps import revalidate_changed_versions
 from workflow_factory.tutor import mark_private
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 MISSING = {"id": "agent-desktop", "title": "Desktop control (agent-desktop)", "why": "It is how the apprentice sees and acts on apps.",
            "ok": False, "fix": "Install it with npm: npm install -g agent-desktop", "optional": False}
@@ -26,8 +26,8 @@ class Setup:
         self.app = app
         save_step(self.db, step("open-menu", "Alpha", app=app))
         save_step(self.db, step("save-file", "Beta", app=app))
-        save_flow(self.db, Flow(id="morning", nodes=[Node("a", "open-menu"), Node("b", "save-file")]), "Morning report", app)
-        save_flow(self.db, Flow(id="evening", nodes=[Node("a", "open-menu")]), "Evening report", app)
+        save_flow_on(self.db, Flow(id="morning", nodes=[Node("a", "open-menu"), Node("b", "save-file")]), "Morning report", app)
+        save_flow_on(self.db, Flow(id="evening", nodes=[Node("a", "open-menu")]), "Evening report", app)
         self.server = ApiServer(self.db, None, lambda name: FakeDesktop(controls=[button("Alpha")], app=app), token="secret-token",
                                 schedule_runner=FakeScheduler())
         self.server.start()
@@ -49,7 +49,7 @@ def test_an_updated_app_is_one_item_naming_the_app_and_every_flow_it_blocks(setu
     [item] = setup.items()
 
     assert item["kind"] == "relearn" and item["app"] == "paint.exe" and item["private"] is False
-    assert item["actions"] == ["open-menu", "save-file"]
+    assert item["steps"] == ["open-menu", "save-file"]
     assert item["flows"] == [{"id": "evening", "title": "Evening report"}, {"id": "morning", "title": "Morning report"}]
 
 
@@ -69,7 +69,7 @@ def test_a_private_apps_actions_are_not_named(tmp_path):
 
         [item] = made.items()
 
-        assert item["private"] is True and item["actions"] == []
+        assert item["private"] is True and item["steps"] == []
         assert "open-menu" not in json.dumps(item) and "save-file" not in json.dumps(item) and "Alpha" not in json.dumps(item)
     finally:
         made.server.stop()

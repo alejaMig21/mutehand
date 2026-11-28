@@ -8,7 +8,9 @@ import re
 import pytest
 from test_canvas_e2e import editor, node, open_flow, three_actions
 
-from workflow_factory import Flow, Node, load_flow, save_flow
+from workflow_factory import Flow, Node, load_flow
+
+from fake_desktop import save_flow_paint
 
 pytestmark = pytest.mark.web
 
@@ -17,7 +19,7 @@ SAVED = re.compile("^Saved$")
 
 def seed(tmp_path):
     db = three_actions(tmp_path)
-    save_flow(db, Flow(id="morning", nodes=[Node("n1", "open-menu"), Node("n2", "save-file")]))
+    save_flow_paint(db, Flow(id="morning", nodes=[Node("n1", "open-menu"), Node("n2", "save-file")]))
     return db
 
 
@@ -52,12 +54,12 @@ def test_a_change_is_stored_without_a_button_and_a_reload_shows_it(tmp_path):
         status(page, "Saved")
         assert stored(db) == ["open-menu", "save-file", "wait"]
 
-        page.reload()  # the flow screen comes back with the chore
+        page.reload()  # the flow screen comes back with the flow
         node(page, "n1").wait_for()
         assert count(page) == 3
 
 
-def test_moving_a_box_and_naming_the_chore_are_kept_too(tmp_path):
+def test_moving_a_node_and_naming_the_flow_are_kept_too(tmp_path):
     seed(tmp_path)
     with editor(tmp_path) as page:
         open_flow(page, "morning", "n2")
@@ -70,18 +72,18 @@ def test_moving_a_box_and_naming_the_chore_are_kept_too(tmp_path):
         page.mouse.up()
         page.wait_for_timeout(1200)
         status(page, "Saved")
-        page.reload()  # the flow screen comes back with the chore
+        page.reload()  # the flow screen comes back with the flow
         node(page, "n2").wait_for()
         assert page.get_by_test_id("flow-title").input_value() == "Early start"
         after = node(page, "n2").bounding_box()
         assert abs(after["x"] - a["x"]) > 20 or abs(after["y"] - a["y"]) > 20
 
 
-def test_a_new_chore_is_stored_when_it_has_a_box_and_not_before(tmp_path):
+def test_a_new_flow_is_stored_when_it_has_a_node_and_not_before(tmp_path):
     db = three_actions(tmp_path)
     with editor(tmp_path) as page:
         page.get_by_test_id("tab-home").click()
-        page.get_by_test_id("new-chore").click()
+        page.get_by_test_id("new-flow").click()
         page.get_by_test_id("flow-title").fill("Fresh one")
         page.wait_for_timeout(1000)
         assert not db.exists() or load_flow(db, None, "fresh-one") is None
@@ -94,12 +96,12 @@ def test_a_change_made_elsewhere_is_shown_and_the_person_chooses(tmp_path):
     db = seed(tmp_path)
     with editor(tmp_path) as page:
         open_flow(page, "morning", "n2")
-        save_flow(db, Flow(id="morning", nodes=[Node("n1", "close-box")]))  # another window
+        save_flow_paint(db, Flow(id="morning", nodes=[Node("n1", "close-node")]))  # another window
         add(page, "wait", "system-wait")
         notice = page.get_by_test_id("changed-elsewhere")
         notice.wait_for()
         page.wait_for_timeout(800)
-        assert stored(db) == ["close-box"]  # nothing was replaced
+        assert stored(db) == ["close-node"]  # nothing was replaced
         assert page.get_by_test_id("run-status").inner_text() != "Saved"
 
         notice.get_by_role("button", name="Keep what I see").click()
@@ -112,17 +114,17 @@ def test_the_person_can_take_the_other_version_instead(tmp_path):
     db = seed(tmp_path)
     with editor(tmp_path) as page:
         open_flow(page, "morning", "n2")
-        save_flow(db, Flow(id="morning", nodes=[Node("n1", "close-box")]))
+        save_flow_paint(db, Flow(id="morning", nodes=[Node("n1", "close-node")]))
         add(page, "wait", "system-wait")
         page.get_by_test_id("changed-elsewhere").get_by_role("button", name="Show the other version").click()
         page.wait_for_function("document.querySelectorAll('.react-flow__node').length === 1")
         status(page, "Saved")
-        assert stored(db) == ["close-box"]
+        assert stored(db) == ["close-node"]
         page.wait_for_timeout(800)
-        assert stored(db) == ["close-box"]
+        assert stored(db) == ["close-node"]
 
 
-def test_a_value_a_field_cannot_hold_is_not_stored_and_the_box_says_so(tmp_path):
+def test_a_value_a_field_cannot_hold_is_not_stored_and_the_node_says_so(tmp_path):
     db = seed(tmp_path)
     with editor(tmp_path) as page:
         open_flow(page, "morning", "n2")
@@ -147,7 +149,7 @@ def test_a_value_a_field_cannot_hold_is_not_stored_and_the_box_says_so(tmp_path)
         assert wait.fields["seconds"]["value"] == 7
 
 
-def test_a_box_that_is_not_finished_is_held_back_and_says_what_it_needs(tmp_path):
+def test_a_node_that_is_not_finished_is_held_back_and_says_what_it_needs(tmp_path):
     db = seed(tmp_path)
     with editor(tmp_path) as page:
         open_flow(page, "morning", "n2")
@@ -155,7 +157,7 @@ def test_a_box_that_is_not_finished_is_held_back_and_says_what_it_needs(tmp_path
         status(page, "Not saved")
         assert "yes" in page.get_by_test_id("not-saved").inner_text().lower()
         assert stored(db) == ["open-menu", "save-file"]
-        add(page, "wait", "system-wait")  # the new box joins after the last one: the yes path
+        add(page, "wait", "system-wait")  # the new node joins after the last one: the yes path
         status(page, "Saved")
         assert "if" in stored(db)
 
@@ -193,12 +195,12 @@ def test_undo_from_the_keyboard_and_a_settings_change_is_one_step(tmp_path):
         status(page, "Saved")
         wait = [n for n in load_flow(db, None, "morning").nodes if n.kind == "wait"][0]
         assert wait.fields["seconds"]["value"] == 5
-        page.locator(".canvas").click(position={"x": 5, "y": 5})  # away from any field: the shortcut takes the box back
+        page.locator(".canvas").click(position={"x": 5, "y": 5})  # away from any field: the shortcut takes the node back
         page.keyboard.press("Control+z")
         page.wait_for_function("document.querySelectorAll('.react-flow__node').length === 2")
 
 
-def test_removing_a_box_offers_undo_and_undo_brings_it_back(tmp_path):
+def test_removing_a_node_offers_undo_and_undo_brings_it_back(tmp_path):
     db = seed(tmp_path)
     with editor(tmp_path) as page:
         open_flow(page, "morning", "n2")
@@ -214,7 +216,7 @@ def test_removing_a_box_offers_undo_and_undo_brings_it_back(tmp_path):
         assert stored(db) == ["open-menu", "save-file"] and notice.count() == 0
 
 
-def test_a_box_removed_with_the_key_offers_undo_too(tmp_path):
+def test_a_node_removed_with_the_key_offers_undo_too(tmp_path):
     seed(tmp_path)
     with editor(tmp_path) as page:
         open_flow(page, "morning", "n2")
@@ -228,7 +230,6 @@ def test_run_uses_exactly_what_is_on_screen(tmp_path):
     db = seed(tmp_path)
     with editor(tmp_path) as page:
         open_flow(page, "morning", "n2")
-        page.get_by_test_id("app-name").select_option("paint.exe")
         node(page, "n2").click()
         page.get_by_test_id("delete-node").click()
         page.get_by_test_id("run").click()  # at once, before the change has had time to be stored by itself
@@ -243,8 +244,8 @@ def test_the_new_controls_fit_and_work_from_the_keyboard(tmp_path, width, height
         open_flow(page, "morning", "n2")
         add(page, "wait", "system-wait")
         for test_id in ("undo", "run-status"):
-            box = page.get_by_test_id(test_id).bounding_box()
-            assert box["x"] >= 0 and box["x"] + box["width"] <= width, test_id
+            rect = page.get_by_test_id(test_id).bounding_box()
+            assert rect["x"] >= 0 and rect["x"] + rect["width"] <= width, test_id
         assert page.evaluate(f"() => document.documentElement.scrollWidth <= {width}")
         shown = page.get_by_test_id("undo").bounding_box()
         assert shown["height"] >= 40
@@ -254,6 +255,6 @@ def test_the_new_controls_fit_and_work_from_the_keyboard(tmp_path, width, height
         node(page, "n2").click()
         page.get_by_test_id("delete-node").click()
         notice = page.get_by_test_id("removed-notice").get_by_role("button", name="Undo")
-        box = notice.bounding_box()
-        assert box["x"] >= 0 and box["x"] + box["width"] <= width and box["height"] >= 40
+        rect = notice.bounding_box()
+        assert rect["x"] >= 0 and rect["x"] + rect["width"] <= width and rect["height"] >= 40
         assert notice.inner_text().strip() == "Undo"

@@ -5,7 +5,7 @@
 // is owned by its for each, so that wire is not stored as an edge). A wire keeps its meaning in `data.branch`, so deleting
 // another wire or node never changes it.
 
-// The canvas reads top to bottom: one row per box in a chain, columns for what runs side by side.
+// The canvas reads top to bottom: one row per node in a chain, columns for what runs side by side.
 const CARD_WIDTH = 260 // as in styles.css
 const X_STEP = 330
 const Y_STEP = 160
@@ -13,7 +13,7 @@ const START = 60
 const mean = (numbers) => numbers.reduce((sum, n) => sum + n, 0) / numbers.length
 
 // A stored flow may have no positions: lay the nodes out in rows by how far they are from the start, so the wires run
-// top to bottom. A box sits under what leads to it; those that would share a place spread around it, in wire order.
+// top to bottom. A node sits under what leads to it; those that would share a place spread around it, in wire order.
 export function autoLayout(ids, edges) {
   const depth = Object.fromEntries(ids.map((id) => [id, 0]))
   for (let pass = 0; pass < ids.length; pass++) { // bounded: a wire drawn in a loop cannot spin forever
@@ -33,9 +33,9 @@ export function autoLayout(ids, edges) {
     }).sort((a, b) => a.want - b.want || a.order - b.order)
     if (!row.length) continue
     let last = -Infinity
-    const places = row.map((box) => { last = Math.max(box.want, last + X_STEP); return last })
-    const shift = mean(row.map((box) => box.want)) - mean(places)
-    row.forEach((box, i) => { at[box.id] = { x: Math.round(places[i] + shift), y: START + level * Y_STEP } })
+    const places = row.map((node) => { last = Math.max(node.want, last + X_STEP); return last })
+    const shift = mean(row.map((node) => node.want)) - mean(places)
+    row.forEach((node, i) => { at[node.id] = { x: Math.round(places[i] + shift), y: START + level * Y_STEP } })
   }
   return at
 }
@@ -52,12 +52,12 @@ const LABELS = { then: 'yes', otherwise: 'no', body: 'each item' }
 const marked = (edge, branch) => ({ ...edge, data: { ...edge.data, branch }, ...(LABELS[branch] ? { label: LABELS[branch] } : {}) })
 
 const kindOf = (node) => node?.data.node.kind ?? 'step'
-// repeated box -> the repeat that owns it
+// repeated node -> the repeat that owns it
 const bodiesOf = (edges) => new Map(edges.filter((e) => e.data?.branch === 'body').map((e) => [e.target, e.source]))
 
-// A new wire takes the first meaning its source still has free: yes then no for a decision, and for a repeat the action
+// A new wire takes the first meaning its source still has free: yes then no for a decision, and for a repeat the step
 // it repeats (one with no wires of its own), then 'next', an ordinary wire. null when the wire cannot be drawn: a third
-// path out of a decision would never run, and a repeated box has no wires of its own.
+// path out of a decision would never run, and a repeated node has no wires of its own.
 export function withBranch(nodes, edges, connection) {
   const { source, target } = connection
   const bodies = bodiesOf(edges)
@@ -76,11 +76,11 @@ export function withBranch(nodes, edges, connection) {
 // Nodes with no wire at all, when there is more than one node and something to run: they would all run at the same time.
 export function looseNodes(nodes, edges) {
   const wired = new Set(edges.flatMap((e) => [e.source, e.target]))
-  const some = nodes.length > 1 && nodes.some((n) => kindOf(n) !== 'trigger') // start boxes alone have nothing to join
+  const some = nodes.length > 1 && nodes.some((n) => kindOf(n) !== 'trigger') // start nodes alone have nothing to join
   return some ? nodes.filter((n) => !wired.has(n.id)) : []
 }
 
-// Wire each loose node after the nearest one added before it that can take a wire. A start box counts as added first:
+// Wire each loose node after the nearest one added before it that can take a wire. A start node counts as added first:
 // it is wired from, never into.
 export function chainLoose(nodes, edges) {
   const loose = new Set(looseNodes(nodes, edges).map((n) => n.id))
@@ -103,22 +103,22 @@ export function chainLoose(nodes, edges) {
   return wired
 }
 
-// The box a new one goes after when none is chosen: the lowest that nothing follows, the newest on a tie.
-function lastBox(nodes, edges) {
+// The node a new one goes after when none is chosen: the lowest that nothing follows, the newest on a tie.
+function lastNode(nodes, edges) {
   const bodies = bodiesOf(edges)
   const followed = new Set(edges.filter((e) => e.data?.branch !== 'body').map((e) => e.source))
   return nodes.filter((n) => !bodies.has(n.id) && !followed.has(n.id))
     .reduce((lowest, n) => (!lowest || n.position.y >= lowest.position.y ? n : lowest), undefined)
 }
 
-// The place asked for, moved to the right while a box is already there.
+// The place asked for, moved to the right while a node is already there.
 function freeSpot(nodes, { x, y }) {
   let right = x
   while (nodes.some((n) => Math.abs(n.position.x - right) < CARD_WIDTH && Math.abs(n.position.y - y) < Y_STEP / 2)) right += X_STEP
   return { x: right, y }
 }
 
-// A flow starts at a start box: it goes above, and leads to every box that nothing but a start leads to.
+// A flow starts at a start node: it goes above, and leads to every node that nothing but a start leads to.
 function joinStart(nodes, edges, start, at) {
   const bodies = bodiesOf(edges)
   const starts = (id) => kindOf(nodes.find((n) => n.id === id)) === 'trigger'
@@ -131,12 +131,12 @@ function joinStart(nodes, edges, start, at) {
   }
 }
 
-// New boxes (one, or a chain) join after the chosen box, or after the last one: what followed it now follows them and
-// moves down to make room. `at` is where the person dropped the first of them; a dropped box moves nothing.
-export function joinBoxes(nodes, edges, added, { after, at } = {}) {
+// New nodes (one, or a chain) join after the chosen node, or after the last one: what followed it now follows them and
+// moves down to make room. `at` is where the person dropped the first of them; a dropped node moves nothing.
+export function joinNodes(nodes, edges, added, { after, at } = {}) {
   if (kindOf(added[0]) === 'trigger') return joinStart(nodes, edges, added[0], at)
   const byId = (id) => nodes.find((n) => n.id === id)
-  let anchor = byId(after) ?? lastBox(nodes, edges)
+  let anchor = byId(after) ?? lastNode(nodes, edges)
   const owner = bodiesOf(edges)
   if (anchor && owner.has(anchor.id)) anchor = byId(owner.get(anchor.id))
   const all = [...nodes, ...added]
@@ -148,7 +148,7 @@ export function joinBoxes(nodes, edges, added, { after, at } = {}) {
   if (anchor) {
     const [head, end] = [added[0].id, added[added.length - 1]]
     let first = withBranch(all, wired, { source: anchor.id, target: head })
-    if (!first) { // a decision with both paths taken: the new boxes go into its yes path
+    if (!first) { // a decision with both paths taken: the new nodes go into its yes path
       followers = [wired.find((e) => e.source === anchor.id && e.data?.branch === 'then').target]
       first = marked({ id: `${anchor.id}-${head}`, source: anchor.id, target: head }, 'then')
     } else if (kindOf(anchor) !== 'if' && first.data?.branch !== 'body') {
@@ -158,10 +158,10 @@ export function joinBoxes(nodes, edges, added, { after, at } = {}) {
     wired = [...wired.filter((e) => !moved.includes(e)), first]
     for (const old of moved) {
       const link = { id: `${end.id}-${old.target}`, source: end.id, target: old.target }
-      // what followed a box is never what a repeat repeats; a decision with no path left leaves the wire where it was
+      // what followed a node is never what a repeat repeats; a decision with no path left leaves the wire where it was
       wired = [...wired, (kindOf(end) === 'foreach' ? marked(link, 'next') : withBranch(all, wired, link)) ?? old]
     }
-    if (kindOf(anchor) === 'trigger') { // other start boxes that lead nowhere yet lead here too
+    if (kindOf(anchor) === 'trigger') { // other start nodes that lead nowhere yet lead here too
       const idle = nodes.filter((n) => kindOf(n) === 'trigger' && !wired.some((e) => e.source === n.id))
       wired = [...wired, ...idle.map((n) => ({ id: `${n.id}-${head}`, source: n.id, target: head }))]
     }
@@ -177,24 +177,24 @@ export function joinBoxes(nodes, edges, added, { after, at } = {}) {
   }
   const aside = anchor && BRANCHES[kindOf(anchor)] ? X_STEP / 2 : 0
   const start = at ?? (anchor ? { x: anchor.position.x - aside, y: anchor.position.y + Y_STEP } : { x: START, y: START })
-  added.forEach((box, i) => {
+  added.forEach((node, i) => {
     const spot = { x: start.x, y: start.y + i * Y_STEP }
-    placed = [...placed, { ...box, position: at && i === 0 ? at : freeSpot(placed, spot) }]
+    placed = [...placed, { ...node, position: at && i === 0 ? at : freeSpot(placed, spot) }]
   })
   return { nodes: placed, edges: wired }
 }
 
-// The number each box carries, in the order the canvas is read: after what leads to it, higher and further left first.
-// Start boxes are not counted.
-export function boxNumbers(nodes, edges) {
+// The number each node carries, in the order the canvas is read: after what leads to it, higher and further left first.
+// Start nodes are not counted.
+export function nodeNumbers(nodes, edges) {
   const left = [...nodes]
   const numbers = {}
   let next = 1
   while (left.length) {
     const ready = left.filter((n) => !edges.some((e) => e.target === n.id && left.some((other) => other.id === e.source)))
-    const [box] = [...(ready.length ? ready : left)].sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x)
-    left.splice(left.indexOf(box), 1)
-    if (kindOf(box) !== 'trigger') numbers[box.id] = next++
+    const [node] = [...(ready.length ? ready : left)].sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x)
+    left.splice(left.indexOf(node), 1)
+    if (kindOf(node) !== 'trigger') numbers[node.id] = next++
   }
   return numbers
 }
@@ -228,13 +228,13 @@ export function toFlowJson(nodes, edges) {
 }
 
 // What keeps stored nodes (as toFlowJson gives them) from being kept yet, in words; '' when nothing does. The server refuses a
-// choice with no yes path and a repeat with nothing to repeat, and a box added a moment ago is exactly that. `numbers` is
-// what boxNumbers gives: the box is named by the number the person sees on it.
+// choice with no yes path and a repeat with nothing to repeat, and a node added a moment ago is exactly that. `numbers` is
+// what nodeNumbers gives: the node is named by the number the person sees on it.
 export function unfinished(stored, numbers = {}) {
   for (const node of stored) {
-    const which = numbers[node.id] ? `Box ${numbers[node.id]}: ` : ''
-    if (node.kind === 'if' && !node.then) return `${which}A two-paths box needs a line to its yes path.`
-    if (node.kind === 'foreach' && !node.body) return `${which}A repeat box needs the action it repeats: connect it to one.`
+    const which = numbers[node.id] ? `Node ${numbers[node.id]}: ` : ''
+    if (node.kind === 'if' && !node.then) return `${which}A two-paths node needs a line to its yes path.`
+    if (node.kind === 'foreach' && !node.body) return `${which}A repeat node needs the step it repeats: connect it to one.`
   }
   return ''
 }

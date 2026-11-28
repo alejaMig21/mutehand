@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { fieldsOf, showValue } from './bindings.js'
 import { appLabel, chipFor, systemEntryFor, titleOf } from './catalog.js'
+import AppSelect from './AppSelect.jsx'
 import FieldEditor from './FieldEditor.jsx'
 import { Icon } from './icons.jsx'
 
@@ -8,12 +9,13 @@ const INPUT_TYPES = ['str', 'int', 'float', 'bool']
 const POLICIES = [['stop', 'Stop and ask the tutor'], ['retry', 'Retry'], ['continue', 'Carry on without it']]
 
 // The window over the dimmed canvas: what went in (Data in), the settings, what came out (Data out).
-export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, showValues, onShowValues, onChange, onClose }) {
+export default function NodeDetail({ node, meta, technologies, drafts, onDraft, refs, data, showValues, onShowValues, onChange, onClose }) {
   const system = node.kind && node.kind !== 'step'
   const entry = system && systemEntryFor(node)
-  const chip = !system && meta?.app ? chipFor(meta.app) : null
+  const app = node.technology || meta?.app
+  const chip = !system && app ? chipFor(app) : null
   const title = titleOf(node)
-  const subtitle = system ? entry?.hint ?? '' : meta?.app ? appLabel(meta.app) : ''
+  const subtitle = system ? entry?.hint ?? '' : app ? appLabel(app) : ''
   const dialog = useRef(null)
 
   useEffect(() => { dialog.current?.focus() }, [])
@@ -64,6 +66,11 @@ export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, sh
 
             {!system && (
               <>
+                <div className="field">
+                  <label htmlFor="node-technology" className="field-label">Runs on</label>
+                  <AppSelect id="node-technology" data-testid="node-technology" apps={technologies ?? []} value={node.technology ?? ''}
+                    onChange={(technology) => onChange({ technology })} />
+                </div>
                 <label className="check">
                   <input type="checkbox" data-testid="exclusive" checked={Boolean(node.exclusive_input)}
                     onChange={(e) => onChange({ exclusive_input: e.target.checked })} />
@@ -121,7 +128,7 @@ export default function NodeDetail({ node, meta, drafts, onDraft, refs, data, sh
 
 function DataRows({ rows, showValues }) {
   const entries = Object.entries(rows ?? {})
-  if (entries.length === 0) return <p className="empty">No data yet. Run the chore or test this box.</p>
+  if (entries.length === 0) return <p className="empty">No data yet. Run the flow or test this node.</p>
   return (
     <dl className="data-rows">
       {entries.map(([name, value]) => (

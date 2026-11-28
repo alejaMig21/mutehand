@@ -8,10 +8,10 @@ import time
 import pytest
 from test_api import call, make_server
 
-from workflow_factory import Flow, Node, list_runs, run_flow, save_flow, save_step, schedule
+from workflow_factory import Flow, Node, list_runs, run_flow, save_step, schedule
 from workflow_factory.api import MAX_FLOW_NAME_CHARS
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 ONE = {"nodes": [{"id": "n1", "step": "open-menu"}], "edges": []}
 TWO = {"nodes": [{"id": "n1", "step": "open-menu"}, {"id": "n2", "step": "save-file"}], "edges": [["n1", "n2"]]}
@@ -67,7 +67,7 @@ def test_the_runs_in_progress_are_listed_so_a_reloaded_editor_can_stop_them(tmp_
     desktop.click_seconds = 1.0
     server = make_server(tmp_path, desktop)
     try:
-        call(server, "/api/flows/slow", "PUT", ONE)
+        call(server, "/api/flows/slow", "PUT", {"nodes": [{"id": "n1", "step": "open-menu", "technology": "paint.exe"}], "edges": []})
         _, started, _ = call(server, "/api/flows/slow/run", "POST", {"app": "paint.exe"})
         _, during, _ = call(server, "/api/runs")
         for _ in range(100):
@@ -86,13 +86,11 @@ def test_a_refused_request_says_what_is_wrong_without_showing_the_inside(tmp_pat
     server = make_server(tmp_path)
     try:
         call(server, "/api/flows/report", "PUT", ONE)
-        no_body = call(server, "/api/flows/report/run", "POST", {})
         strange = call(server, "/api/flows/odd", "PUT", {"nodes": [{"id": "n1", "step": "x", "surprise": 1}]})
         too_long = call(server, f"/api/flows/{'a' * 101}", "PUT", ONE)
     finally:
         server.stop()
 
-    assert no_body[:2] == (400, {"error": "the request is missing 'app'"})
     assert strange[:2] == (400, {"error": "that is not a valid flow"})
     assert too_long[0] == 400 and "100 characters" in too_long[1]["error"]
 
@@ -121,7 +119,7 @@ def test_a_browser_that_leaves_before_the_answer_is_not_an_error(tmp_path, monke
 def test_no_more_schedules_are_made_than_a_person_could_manage(tmp_path):
     from fake_scheduler import FakeScheduler
 
-    save_flow(tmp_path / "user.db", Flow(id="report", nodes=[Node("n1", "open-menu")]))
+    save_flow_on(tmp_path / "user.db", Flow(id="report", nodes=[Node("n1", "open-menu")]), app="paint.exe")
     scheduler = FakeScheduler()
     server = make_server(tmp_path, schedule_runner=scheduler)
     try:
@@ -146,7 +144,7 @@ def test_listing_many_steps_does_not_open_the_database_once_per_step(tmp_path, m
         for path in ("/api/steps", "/api/apps/paint.exe"):
             opened.clear()
             status, listed, _ = call(server, path)
-            counts.append((status, len(listed if isinstance(listed, list) else listed["actions"]), len(opened) < 12))
+            counts.append((status, len(listed if isinstance(listed, list) else listed["steps"]), len(opened) < 12))
     finally:
         server.stop()
 

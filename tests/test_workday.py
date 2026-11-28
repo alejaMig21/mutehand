@@ -22,13 +22,13 @@ from workflow_factory.workday import (
     write_report,
 )
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 
 def setup(tmp_path, nodes=None, steps=(("open-menu", "Alpha"), ("save-file", "Beta"))):
     for name, control in steps:
         save_step(tmp_path / "user.db", step(name, control))
-    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=nodes or [Node("a", "open-menu"), Node("b", "save-file")]))
+    save_flow_on(tmp_path / "user.db", Flow(id="morning", nodes=nodes or [Node("a", "open-menu"), Node("b", "save-file")]), app="paint.exe")
     return tmp_path
 
 
@@ -53,6 +53,22 @@ def test_a_finished_workday_exits_zero_and_writes_a_report_of_what_ran(tmp_path,
     assert report["flow"] == "morning" and report["status"] == "finished" and report["stopped_node"] is None
     assert [(n["node_id"], n["status"]) for n in report["nodes"]] == [("a", "done"), ("b", "done")]
     assert capsys.readouterr().out.strip() == f"status=finished report={path}"
+
+
+def test_a_workday_needs_no_program_and_runs_each_node_on_its_own(tmp_path):
+    db = tmp_path / "user.db"
+    save_step(db, step("save", "Save workbook", app="excel.exe"))
+    save_step(db, step("save", "Save picture", app="paint.exe"))
+    save_flow(db, Flow(id="both", nodes=[Node("a", "save", technology="excel.exe"), Node("b", "save", technology="paint.exe")]))
+    desktops = {"excel.exe": FakeDesktop(controls=[button("Save workbook")], app="excel.exe"),
+                "paint.exe": FakeDesktop(controls=[button("Save picture")], app="paint.exe")}
+
+    code = main(["--flow", "both", "--user-db", str(db), "--report-dir", str(tmp_path / "reports"), "--no-hotkey"],
+                desktop_for=desktops.__getitem__)
+
+    assert code == EXIT_FINISHED
+    assert [d.clicks[0].name for d in desktops.values()] == ["Save workbook", "Save picture"]
+    assert "app" not in json.loads(reports(tmp_path)[0].read_text(encoding="utf-8"))
 
 
 def test_a_workday_that_stops_exits_one_and_says_what_stopped_and_why(tmp_path):
@@ -233,7 +249,7 @@ def two_trigger_nodes():
 @pytest.mark.parametrize("extra, clicked", [((), ["Alpha"]), (("--fired", "daily"), ["Beta"])], ids=["by hand", "scheduled"])
 def test_a_workday_fires_the_trigger_it_was_started_by(tmp_path, extra, clicked):
     setup(tmp_path)
-    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=two_trigger_nodes(), edges=[("m", "a"), ("d", "b")]))
+    save_flow_on(tmp_path / "user.db", Flow(id="morning", nodes=two_trigger_nodes(), edges=[("m", "a"), ("d", "b")]), app="paint.exe")
     desktop = FakeDesktop(controls=[button("Alpha"), button("Beta")])
 
     code = run(tmp_path, desktop, *extra)
@@ -244,7 +260,7 @@ def test_a_workday_fires_the_trigger_it_was_started_by(tmp_path, extra, clicked)
 def test_the_report_never_holds_the_data_a_data_node_gave_out(tmp_path):
     setup(tmp_path)
     nodes = [Node("d", kind="data", op="fixed", fields={"value": {"value": "secret-page-text-1234"}})]
-    save_flow(tmp_path / "user.db", Flow(id="morning", nodes=nodes))
+    save_flow_on(tmp_path / "user.db", Flow(id="morning", nodes=nodes), app="paint.exe")
 
     code = run(tmp_path, FakeDesktop(controls=[]), "--with-values")  # even with values enabled: those are the run's input
 

@@ -5,9 +5,9 @@ import time
 import pytest
 from test_api import call, make_server
 
-from workflow_factory import Flow, Node, save_flow, save_step
+from workflow_factory import Flow, Node, save_step
 
-from fake_desktop import FakeDesktop, button, step
+from fake_desktop import FakeDesktop, button, save_flow_on, step
 
 
 def fixed(value):
@@ -47,7 +47,7 @@ def finish(server, run_id):
 
 
 def run_chain(server, tmp_path):
-    save_flow(tmp_path / "user.db", chain())
+    save_flow_on(tmp_path / "user.db", chain(), app="paint.exe")
     _, started, _ = call(server, "/api/flows/f/run", "POST", {"app": "paint.exe"})
     return finish(server, started["run_id"])
 
@@ -72,7 +72,7 @@ def test_the_values_come_only_when_they_are_asked_for(server, tmp_path):
 
 
 def test_a_flow_that_never_ran_has_no_data_yet(server, tmp_path):
-    save_flow(tmp_path / "user.db", chain())
+    save_flow_on(tmp_path / "user.db", chain(), app="paint.exe")
 
     assert call(server, "/api/flows/f/data")[1] == {}
     assert call(server, "/api/flows/ghost/data")[0] == 404
@@ -84,7 +84,7 @@ def test_test_this_node_runs_only_that_node_and_updates_its_data(server, tmp_pat
     flow = Flow(id="f", nodes=[flow.nodes[0], Node("c", kind="data", op="convert",
                                                    fields={"value": ref("d", "value"), "to": fixed("text")}),
                                Node("m", kind="data", op="math", fields={"a": fixed(1), "b": fixed(2), "operation": fixed("add")})])
-    save_flow(tmp_path / "user.db", flow)
+    save_flow_on(tmp_path / "user.db", flow, app="paint.exe")
     server.desktop.clicks.clear()  # what the first run did is not what the test does
 
     code, started, _ = call(server, "/api/flows/f/nodes/m/test", "POST", {"app": "paint.exe"})
@@ -105,7 +105,7 @@ def test_testing_a_step_acts_on_that_step_alone(server, tmp_path):
 
 
 def test_a_node_test_that_stopped_does_not_block_the_next_test(server, tmp_path):
-    save_flow(tmp_path / "user.db", chain())
+    save_flow_on(tmp_path / "user.db", chain(), app="paint.exe")
     server.desktop.screen_changes()  # the button is gone: the first test stops with a doubt
     _, started, _ = call(server, "/api/flows/f/nodes/p/test", "POST", {"app": "paint.exe"})
     assert finish(server, started["run_id"])["status"] == "stopped"
@@ -118,7 +118,7 @@ def test_a_node_test_that_stopped_does_not_block_the_next_test(server, tmp_path)
 
 
 def test_a_node_that_needs_data_from_a_run_that_never_happened_says_so(server, tmp_path):
-    save_flow(tmp_path / "user.db", chain())
+    save_flow_on(tmp_path / "user.db", chain(), app="paint.exe")
 
     code, body, _ = call(server, "/api/flows/f/nodes/c/test", "POST", {"app": "paint.exe"})
 
@@ -126,7 +126,7 @@ def test_a_node_that_needs_data_from_a_run_that_never_happened_says_so(server, t
 
 
 def test_only_steps_and_data_nodes_can_be_tested_and_the_node_must_exist(server, tmp_path):
-    save_flow(tmp_path / "user.db", Flow(id="g", nodes=[Node("w", kind="wait", fields={"seconds": fixed(1)})]))
+    save_flow_on(tmp_path / "user.db", Flow(id="g", nodes=[Node("w", kind="wait", fields={"seconds": fixed(1)})]), app="paint.exe")
 
     assert "cannot be tested alone" in call(server, "/api/flows/g/nodes/w/test", "POST", {"app": "paint.exe"})[1]["error"]
     assert call(server, "/api/flows/g/nodes/zzz/test", "POST", {"app": "paint.exe"})[0] == 400
@@ -136,7 +136,7 @@ def test_only_steps_and_data_nodes_can_be_tested_and_the_node_must_exist(server,
 def test_a_secret_typed_by_a_step_is_in_no_response(server, tmp_path):
     save_step(tmp_path / "user.db", step("login", "Notes", action="type_secret", secret_ref="vault/token",
                                          sensitive="password_field"))
-    save_flow(tmp_path / "user.db", Flow(id="s", nodes=[Node("l", "login")]))
+    save_flow_on(tmp_path / "user.db", Flow(id="s", nodes=[Node("l", "login")]), app="paint.exe")
     from workflow_factory import grant_consent
     grant_consent(tmp_path / "user.db", "paint.exe", "Notes", "type_secret")
 
