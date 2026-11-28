@@ -48,7 +48,7 @@ summary { cursor: pointer; }
   box-sizing: border-box; padding: 10px 16px; background: var(--surface); border: 1px solid var(--ok); border-radius: var(--radius);
   box-shadow: 0 12px 32px rgba(0, 0, 0, .45); color: var(--ok); font-weight: 600; }
 .announce:empty { display: none; }
-.empty-state { padding: 32px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
+.empty-state { overflow-wrap: anywhere; padding: 32px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); }
 
 /* Home: the list of flows, with the larger type and targets of the mockup */
 .home .page { max-width: 1160px; font-size: 16px; }

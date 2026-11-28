@@ -222,6 +222,7 @@ function Permission({ permission, hidden, onChanged }) {
   const [problem, setProblem] = useState('')
   const [busy, setBusy] = useState(false)
   const keep = useRef(null)
+  const toggle = useRef(null)
   const phrase = permissionWords(permission, hidden)
   const id = `${permission.control}-${permission.action}`
   useEffect(() => { if (asking) keep.current?.focus() }, [asking]) // the safe answer has the focus
@@ -241,9 +242,10 @@ function Permission({ permission, hidden, onChanged }) {
   }
 
   return (
-    <li data-testid={`app-permission-${id}`}>
+    <li data-testid={`app-permission-${id}`}
+      onKeyDown={(e) => { if (e.key === 'Escape' && asking) { e.stopPropagation(); setAsking(false); toggle.current?.focus() } }}>
       <span>{phrase}</span>
-      <button data-testid={`app-take-back-${id}`} aria-expanded={asking} aria-label={`Take back: ${phrase}`} onClick={() => setAsking(!asking)}>Take back</button>
+      <button data-testid={`app-take-back-${id}`} ref={toggle} aria-expanded={asking} aria-label={`Take back: ${phrase}`} onClick={() => setAsking(!asking)}>Take back</button>
       {problem && <p className="stopped-problem" role="alert">{problem}</p>}
       {asking && (
         <div className="take-back-ask" data-testid="take-back-ask" role="group" aria-label={`Take back: ${phrase}`}>

@@ -2,11 +2,13 @@
 Driven in the built editor. Opt-in: `pytest -m web`."""
 
 import pytest
+from test_apps_e2e import app_row, apps_screen
 from test_canvas_e2e import editor
 from test_flow_more_e2e import more, served
-from test_home_e2e import put_flow, put_flows, says
+from test_home_e2e import home, put_flow, put_flows, says
 
-from workflow_factory import save_step
+from workflow_factory import grant_consent, save_step
+from workflow_factory.consent import consents
 
 from fake_desktop import step
 
@@ -80,6 +82,37 @@ def test_run_now_in_a_new_empty_flow_says_it_has_nothing_to_run_and_looks_unavai
         assert run.is_disabled() and "Nothing to run yet" in run.inner_text()
         assert run.evaluate("(b) => getComputedStyle(b).borderStyle") == "dashed"  # not the filled look of a button that can be pressed
         assert "Add your first node" in page.locator(".empty-canvas").inner_text()  # what to do is on the screen, not in a tooltip
+
+
+# --- 5: Escape backs out of the take-back question, and a pasted wall of text stays on the screen ---------------------------
+
+def test_escape_leaves_the_take_back_question_without_taking_anything_back(tmp_path):
+    db = tmp_path / "user.db"
+    save_step(db, step("Send it", "Send", app="mail.exe"))
+    grant_consent(db, "mail.exe", "Send", "click")
+    with home(tmp_path) as (page, _):
+        apps_screen(page)
+        app_row(page, "mail.exe").click()
+        card = page.get_by_test_id("app-card-mail.exe")
+        card.get_by_role("button", name="Take back").click()
+        card.get_by_test_id("take-back-ask").wait_for()
+        page.keyboard.press("Escape")
+        card.get_by_test_id("take-back-ask").wait_for(state="detached")
+        assert len(consents(db)) == 1
+        assert page.evaluate("document.activeElement.dataset.testid") == "app-take-back-Send-click"  # the focus is where it was
+
+
+def test_a_pasted_wall_of_text_echoed_in_no_results_stays_inside_the_screen(tmp_path):
+    save_step(tmp_path / "user.db", step("open", "Alpha", app="excel.exe"))
+    with home(tmp_path) as (page, _):
+        page.set_viewport_size({"width": 390, "height": 740})
+        apps_screen(page)
+        page.get_by_test_id("apps-search").fill("x" * 100_000)
+        page.get_by_test_id("apps-search-go").click()
+        page.get_by_test_id("apps-none").wait_for()
+        assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+        assert page.get_by_test_id("apps-none").evaluate("(e) => e.scrollWidth <= e.clientWidth")  # the text wraps inside its box
+        assert page.locator("main").evaluate("(e) => e.scrollWidth <= e.clientWidth")  # and the screen does not scroll sideways
 
 
 # --- 1: a step learned for many programs stays short on its card, and asking which one stays on the screen -------------------
